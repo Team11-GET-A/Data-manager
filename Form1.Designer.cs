@@ -28,18 +28,33 @@
         /// </summary>
         private void InitializeComponent()
         {
+            textBox1 = new TextBox();
             SuspendLayout();
+            // 
+            // textBox1
+            // 
+            textBox1.Font = new Font("맑은 고딕", 72F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            textBox1.Location = new Point(129, 146);
+            textBox1.Multiline = true;
+            textBox1.Name = "textBox1";
+            textBox1.Size = new Size(502, 177);
+            textBox1.TabIndex = 0;
+            textBox1.Text = "풀 테스트";
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(textBox1);
             Name = "Form1";
             Text = "Form1ㅁㄴㅇㅁㄴㅇ";
             ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
+
+        private TextBox textBox1;
     }
 }
