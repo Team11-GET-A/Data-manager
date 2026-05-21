@@ -16,5 +16,10 @@ namespace Data_Manager
         {
             InitializeComponent();
         }
+
+        private void materialLabel1_Click(object sender, EventArgs e)
+        {
+
+        }
     }
 }
