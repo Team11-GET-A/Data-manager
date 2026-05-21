@@ -113,24 +113,30 @@ namespace AD_AI_LearningData_Editor
         /// </summary>
         private void lstviewMain_MouseDoubleClick(object sender, MouseEventArgs e)
         {
-            // 선택된 아이템이 있는지 확인합니다.
             if (lstviewMain.SelectedItems.Count > 0)
             {
-                string selectedText = lstviewMain.SelectedItems[0].Text;
+                // 텍스트가 아니라 '태그'에 적힌 글자를 가져옵니다.
+                string itemTag = lstviewMain.SelectedItems[0].Tag?.ToString();
 
-                if (selectedText == "파일목록")
+                // 이제 태그를 비교하므로, 화면에 보이는 텍스트가 바뀌어도 이 조건문은 항상 참이 됩니다.
+                if (itemTag == "파일목록")
                 {
                     lstviewMain.Visible = false;
                     lstviewFileList.Visible = true;
                     lstviewTrash.Visible = false;
                 }
-                else if (selectedText == "휴지통")
+                else if (itemTag == "휴지통")
                 {
                     lstviewMain.Visible = false;
                     lstviewFileList.Visible = false;
                     lstviewTrash.Visible = true;
                 }
             }
+        }
+
+        private void lstviewFileList_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
         }
     }
 }

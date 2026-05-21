@@ -28,8 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            ListViewItem listViewItem1 = new ListViewItem(new string[] { "파일목록" }, -1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem2 = new ListViewItem(new string[] { "휴지통" }, -1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일목록]" }, -1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[휴지통]" }, -1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[파일추가]" }, -1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
             sdrSeekBar = new MaterialSkin.Controls.MaterialSlider();
             pnlVideo = new Panel();
             btnContrastProperty = new MaterialSkin.Controls.MaterialButton();
@@ -45,9 +46,10 @@
             btnPre5F = new MaterialSkin.Controls.MaterialButton();
             btnOpnFolderList = new Button();
             pnlFolderList = new Panel();
+            lblFolderList = new Label();
+            lstviewMain = new ListView();
             lstviewTrash = new ListView();
             lstviewFileList = new ListView();
-            lstviewMain = new ListView();
             pnlCtrl = new Panel();
             btnPre1F = new MaterialSkin.Controls.MaterialButton();
             btnPlayStop = new MaterialSkin.Controls.MaterialButton();
@@ -64,7 +66,7 @@
             // 
             sdrSeekBar.Depth = 0;
             sdrSeekBar.ForeColor = Color.FromArgb(222, 0, 0, 0);
-            sdrSeekBar.Location = new Point(21, 598);
+            sdrSeekBar.Location = new Point(21, 589);
             sdrSeekBar.MouseState = MaterialSkin.MouseState.HOVER;
             sdrSeekBar.Name = "sdrSeekBar";
             sdrSeekBar.ShowValue = false;
@@ -77,7 +79,7 @@
             // 
             pnlVideo.BackColor = Color.Black;
             pnlVideo.ForeColor = Color.Coral;
-            pnlVideo.Location = new Point(21, 20);
+            pnlVideo.Location = new Point(21, 11);
             pnlVideo.Name = "pnlVideo";
             pnlVideo.Size = new Size(1085, 552);
             pnlVideo.TabIndex = 1;
@@ -212,7 +214,7 @@
             pnlProperty.BackColor = SystemColors.ControlDark;
             pnlProperty.BorderStyle = BorderStyle.Fixed3D;
             pnlProperty.Controls.Add(crdProperty);
-            pnlProperty.Location = new Point(1111, 581);
+            pnlProperty.Location = new Point(1111, 572);
             pnlProperty.Name = "pnlProperty";
             pnlProperty.Size = new Size(483, 245);
             pnlProperty.TabIndex = 6;
@@ -238,7 +240,7 @@
             // 
             // textBox1
             // 
-            textBox1.Location = new Point(6, 704);
+            textBox1.Location = new Point(6, 695);
             textBox1.Multiline = true;
             textBox1.Name = "textBox1";
             textBox1.Size = new Size(424, 122);
@@ -285,7 +287,7 @@
             // 
             // btnOpnFolderList
             // 
-            btnOpnFolderList.Location = new Point(441, 3);
+            btnOpnFolderList.Location = new Point(440, 5);
             btnOpnFolderList.Name = "btnOpnFolderList";
             btnOpnFolderList.Size = new Size(35, 35);
             btnOpnFolderList.TabIndex = 11;
@@ -295,14 +297,39 @@
             // pnlFolderList
             // 
             pnlFolderList.BorderStyle = BorderStyle.Fixed3D;
+            pnlFolderList.Controls.Add(lblFolderList);
             pnlFolderList.Controls.Add(btnOpnFolderList);
+            pnlFolderList.Controls.Add(lstviewFileList);
             pnlFolderList.Controls.Add(lstviewMain);
             pnlFolderList.Controls.Add(lstviewTrash);
-            pnlFolderList.Controls.Add(lstviewFileList);
-            pnlFolderList.Location = new Point(1111, 20);
+            pnlFolderList.Location = new Point(1111, 11);
             pnlFolderList.Name = "pnlFolderList";
             pnlFolderList.Size = new Size(483, 554);
             pnlFolderList.TabIndex = 12;
+            // 
+            // lblFolderList
+            // 
+            lblFolderList.AutoSize = true;
+            lblFolderList.Font = new Font("맑은 고딕", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            lblFolderList.Location = new Point(3, 1);
+            lblFolderList.Name = "lblFolderList";
+            lblFolderList.Padding = new Padding(0, 0, 0, 3);
+            lblFolderList.Size = new Size(0, 40);
+            lblFolderList.TabIndex = 15;
+            // 
+            // lstviewMain
+            // 
+            lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            listViewItem2.Tag = "파일목록";
+            listViewItem3.Tag = "휴지통";
+            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem2, listViewItem3 });
+            lstviewMain.Location = new Point(-1, 44);
+            lstviewMain.Name = "lstviewMain";
+            lstviewMain.Size = new Size(483, 509);
+            lstviewMain.TabIndex = 12;
+            lstviewMain.UseCompatibleStateImageBehavior = false;
+            lstviewMain.View = View.List;
+            lstviewMain.SelectedIndexChanged += listView1_SelectedIndexChanged;
             // 
             // lstviewTrash
             // 
@@ -318,6 +345,8 @@
             // lstviewFileList
             // 
             lstviewFileList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            listViewItem1.Tag = "파일추가";
+            lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem1 });
             lstviewFileList.Location = new Point(-1, 44);
             lstviewFileList.Name = "lstviewFileList";
             lstviewFileList.Size = new Size(483, 509);
@@ -325,18 +354,7 @@
             lstviewFileList.UseCompatibleStateImageBehavior = false;
             lstviewFileList.View = View.List;
             lstviewFileList.Visible = false;
-            // 
-            // lstviewMain
-            // 
-            lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem1, listViewItem2 });
-            lstviewMain.Location = new Point(-1, 44);
-            lstviewMain.Name = "lstviewMain";
-            lstviewMain.Size = new Size(483, 509);
-            lstviewMain.TabIndex = 12;
-            lstviewMain.UseCompatibleStateImageBehavior = false;
-            lstviewMain.View = View.List;
-            lstviewMain.SelectedIndexChanged += listView1_SelectedIndexChanged;
+            lstviewFileList.SelectedIndexChanged += lstviewFileList_SelectedIndexChanged;
             // 
             // pnlCtrl
             // 
@@ -347,7 +365,7 @@
             pnlCtrl.Controls.Add(btnPre5F);
             pnlCtrl.Controls.Add(btnSave);
             pnlCtrl.Controls.Add(btnDel);
-            pnlCtrl.Location = new Point(436, 694);
+            pnlCtrl.Location = new Point(436, 685);
             pnlCtrl.Name = "pnlCtrl";
             pnlCtrl.Size = new Size(670, 132);
             pnlCtrl.TabIndex = 13;
@@ -454,6 +472,7 @@
             pnlProperty.ResumeLayout(false);
             crdProperty.ResumeLayout(false);
             pnlFolderList.ResumeLayout(false);
+            pnlFolderList.PerformLayout();
             pnlCtrl.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
@@ -485,5 +504,6 @@
         private Button btnOpnFolderList2;
         private ListView lstviewTrash;
         private ListView lstviewFileList;
+        private Label lblFolderList;
     }
 }
