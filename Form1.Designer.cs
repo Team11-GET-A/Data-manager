@@ -28,9 +28,11 @@
         /// </summary>
         private void InitializeComponent()
         {
-            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일목록]" }, -1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[휴지통]" }, -1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[파일추가]" }, -1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
+            components = new System.ComponentModel.Container();
+            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[파일추가]" }, 1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
+            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일목록]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
             sdrSeekBar = new MaterialSkin.Controls.MaterialSlider();
             pnlVideo = new Panel();
             btnContrastProperty = new MaterialSkin.Controls.MaterialButton();
@@ -47,15 +49,16 @@
             btnOpnFolderList = new Button();
             pnlFolderList = new Panel();
             lblFolderList = new Label();
+            lstviewFileList = new ListView();
             lstviewMain = new ListView();
             lstviewTrash = new ListView();
-            lstviewFileList = new ListView();
             pnlCtrl = new Panel();
             btnPre1F = new MaterialSkin.Controls.MaterialButton();
             btnPlayStop = new MaterialSkin.Controls.MaterialButton();
             btnNxt5F = new MaterialSkin.Controls.MaterialButton();
             btnNxt1F = new MaterialSkin.Controls.MaterialButton();
             btnOpnFolderList2 = new Button();
+            imglst1 = new ImageList(components);
             pnlProperty.SuspendLayout();
             crdProperty.SuspendLayout();
             pnlFolderList.SuspendLayout();
@@ -317,6 +320,21 @@
             lblFolderList.Size = new Size(0, 40);
             lblFolderList.TabIndex = 15;
             // 
+            // lstviewFileList
+            // 
+            lstviewFileList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            listViewItem1.Tag = "파일추가";
+            lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem1 });
+            lstviewFileList.Location = new Point(-1, 44);
+            lstviewFileList.Name = "lstviewFileList";
+            lstviewFileList.Size = new Size(483, 509);
+            lstviewFileList.SmallImageList = imglst1;
+            lstviewFileList.TabIndex = 13;
+            lstviewFileList.UseCompatibleStateImageBehavior = false;
+            lstviewFileList.View = View.List;
+            lstviewFileList.Visible = false;
+            lstviewFileList.SelectedIndexChanged += lstviewFileList_SelectedIndexChanged;
+            // 
             // lstviewMain
             // 
             lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
@@ -326,6 +344,7 @@
             lstviewMain.Location = new Point(-1, 44);
             lstviewMain.Name = "lstviewMain";
             lstviewMain.Size = new Size(483, 509);
+            lstviewMain.SmallImageList = imglst1;
             lstviewMain.TabIndex = 12;
             lstviewMain.UseCompatibleStateImageBehavior = false;
             lstviewMain.View = View.List;
@@ -341,20 +360,6 @@
             lstviewTrash.UseCompatibleStateImageBehavior = false;
             lstviewTrash.View = View.List;
             lstviewTrash.Visible = false;
-            // 
-            // lstviewFileList
-            // 
-            lstviewFileList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem1.Tag = "파일추가";
-            lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem1 });
-            lstviewFileList.Location = new Point(-1, 44);
-            lstviewFileList.Name = "lstviewFileList";
-            lstviewFileList.Size = new Size(483, 509);
-            lstviewFileList.TabIndex = 13;
-            lstviewFileList.UseCompatibleStateImageBehavior = false;
-            lstviewFileList.View = View.List;
-            lstviewFileList.Visible = false;
-            lstviewFileList.SelectedIndexChanged += lstviewFileList_SelectedIndexChanged;
             // 
             // pnlCtrl
             // 
@@ -454,6 +459,15 @@
             btnOpnFolderList2.TabIndex = 11;
             btnOpnFolderList2.UseVisualStyleBackColor = true;
             // 
+            // imglst1
+            // 
+            imglst1.ColorDepth = ColorDepth.Depth32Bit;
+            imglst1.ImageStream = (ImageListStreamer)resources.GetObject("imglst1.ImageStream");
+            imglst1.TransparentColor = Color.Transparent;
+            imglst1.Images.SetKeyName(0, "노란 폴더2.png");
+            imglst1.Images.SetKeyName(1, "파란 폴더2.png");
+            imglst1.Images.SetKeyName(2, "휴지통2.png");
+            // 
             // frmMain
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -505,5 +519,6 @@
         private ListView lstviewTrash;
         private ListView lstviewFileList;
         private Label lblFolderList;
+        private ImageList imglst1;
     }
 }
