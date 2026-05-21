@@ -157,7 +157,7 @@
             Margin = new Padding(2);
             Name = "Form2";
             Padding = new Padding(2, 85, 2, 2);
-            Text = "주행 비교";
+            Text = "파일럿";
             panel1.ResumeLayout(false);
             panel1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trackBar1).EndInit();
