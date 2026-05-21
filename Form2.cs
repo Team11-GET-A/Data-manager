@@ -1,0 +1,20 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Text;
+using System.Windows.Forms;
+using MaterialSkin;
+using MaterialSkin.Controls;
+
+namespace Data_Manager
+{
+    public partial class Form2 : MaterialForm
+    {
+        public Form2()
+        {
+            InitializeComponent();
+        }
+    }
+}
