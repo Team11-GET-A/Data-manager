@@ -1,4 +1,4 @@
-namespace Data_Manager
+﻿namespace Data_Manager
 {
     internal static class Program
     {
@@ -11,7 +11,7 @@ namespace Data_Manager
             // To customize application configuration such as set high DPI settings or default font,
             // see https://aka.ms/applicationconfiguration.
             ApplicationConfiguration.Initialize();
-            Application.Run(new Form1());
+            Application.Run(new AD_AI_LearningData_Editor.frmMain());
         }
     }
 }
