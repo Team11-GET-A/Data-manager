@@ -9,13 +9,15 @@ namespace AD_AI_LearningData_Editor
 {
     public partial class frmMain : MaterialForm
     {
+        // 디자이너 변수를 코드 영역에서 쉽게 제어할 수 있도록 한정자 수정을 유도하거나 노출함
+        // (디자이너.cs 파일에 정의된 lstviewFileList 필드의 private 지시자를 public으로 변경하면 매끄럽게 연동됩니다)
+
         public frmMain()
         {
             InitializeComponent();
 
             var materialSkinManager = MaterialSkinManager.Instance;
             materialSkinManager.AddFormToManage(this);
-            //materialSkinManager.Theme = MaterialSkinManager.Themes.DARK;
 
             materialSkinManager.ColorScheme = new ColorScheme(
                 Primary.BlueGrey800, Primary.BlueGrey900,
@@ -25,9 +27,9 @@ namespace AD_AI_LearningData_Editor
 
             SetupTabs();
 
-            // 리스트뷰들의 더블클릭 이벤트를 코드로 명시적 연결합니다.
+            // 리스트뷰들의 더블클릭 이벤트를 코드로 연결합니다.
             this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
-            this.lstviewFileList.MouseDoubleClick += lstviewFileList_MouseDoubleClick; // 💡 이벤트 연결 추가
+            this.lstviewFileList.MouseDoubleClick += lstviewFileList_MouseDoubleClick;
         }
 
         private void SetupTabs()
@@ -43,7 +45,6 @@ namespace AD_AI_LearningData_Editor
             tabControl.Controls.Add(tabTrainer);
             tabControl.Controls.Add(tabPilot);
 
-            // 기존 Form1의 컨트롤들을 '매니저' 탭으로 이동시킵니다.
             var controlsToMove = new System.Collections.Generic.List<Control>();
             foreach (Control c in this.Controls)
             {
@@ -59,7 +60,6 @@ namespace AD_AI_LearningData_Editor
 
             this.Controls.Add(tabControl);
 
-            // Form3을 '트레이너' 탭에 추가
             Data_Manager.Form3 form3 = new Data_Manager.Form3();
             form3.TopLevel = false;
             form3.FormBorderStyle = FormBorderStyle.None;
@@ -67,7 +67,6 @@ namespace AD_AI_LearningData_Editor
             tabTrainer.Controls.Add(form3);
             form3.Show();
 
-            // Form2를 '파일럿' 탭에 추가
             Data_Manager.Form2 form2 = new Data_Manager.Form2();
             form2.TopLevel = false;
             form2.FormBorderStyle = FormBorderStyle.None;
@@ -75,34 +74,14 @@ namespace AD_AI_LearningData_Editor
             tabPilot.Controls.Add(form2);
             form2.Show();
 
-            // MaterialSkin의 Form 상단 탭이나 사이드메뉴에 연결하려면 아래 속성을 설정합니다.
             this.DrawerTabControl = tabControl;
         }
 
-        private void materialSlider1_Click(object sender, EventArgs e)
-        {
+        private void materialSlider1_Click(object sender, EventArgs e) { }
+        private void materialButton2_Click(object sender, EventArgs e) { }
+        private void listView1_SelectedIndexChanged(object sender, EventArgs e) { }
+        private void listView1_SelectedIndexChanged_1(object sender, EventArgs e) { }
 
-        }
-
-        private void materialButton2_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void listView1_SelectedIndexChanged(object sender, EventArgs e)
-        {
-
-        }
-
-        private void listView1_SelectedIndexChanged_1(object sender, EventArgs e)
-        {
-
-        }
-
-        /// <summary>
-        /// btnOpnFolderList 버튼 클릭 시 실행되는 메서드입니다.
-        /// 패널 내의 모든 리스트뷰를 숨긴 후 lstviewMain만 노출합니다.
-        /// </summary>
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
             lstviewFileList.Visible = false;
@@ -110,17 +89,12 @@ namespace AD_AI_LearningData_Editor
             lstviewMain.Visible = true;
         }
 
-        /// <summary>
-        /// lstviewMain의 아이템을 더블클릭했을 때 실행되는 메서드입니다.
-        /// </summary>
         private void lstviewMain_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             if (lstviewMain.SelectedItems.Count > 0)
             {
-                // 텍스트가 아니라 '태그'에 적힌 글자를 가져옵니다.
                 string itemTag = lstviewMain.SelectedItems[0].Tag?.ToString();
 
-                // 이제 태그를 비교하므로, 화면에 보이는 텍스트가 바뀌어도 이 조건문은 항상 참이 됩니다.
                 if (itemTag == "파일목록")
                 {
                     lstviewMain.Visible = false;
@@ -136,30 +110,21 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        private void lstviewFileList_SelectedIndexChanged(object sender, EventArgs e)
-        {
-
-        }
+        private void lstviewFileList_SelectedIndexChanged(object sender, EventArgs e) { }
 
         /// <summary>
         /// lstviewFileList의 아이템을 더블클릭했을 때 실행되는 메서드입니다.
         /// </summary>
         private void lstviewFileList_MouseDoubleClick(object sender, MouseEventArgs e)
         {
-            // 선택된 아이템이 있는지 확인합니다.
             if (lstviewFileList.SelectedItems.Count > 0)
             {
-                // 선택된 아이템의 태그 값을 가져옵니다.
                 string itemTag = lstviewFileList.SelectedItems[0].Tag?.ToString();
 
-                // 태그가 '파일추가'인지 확인합니다.
                 if (itemTag == "파일추가")
                 {
-                    // formAddFile 인스턴스를 생성합니다.
-                    frmAddFile addFileForm = new frmAddFile();
-
-                    // 💡 ShowDialog()로 실행하면 새 창이 꺼지기 전까지 
-                    // 메인 화면 뒤로 숨지 않고 항상 화면 맨 위에 고정되어 나타납니다.
+                    // 💡 자기 자신(this)의 인스턴스를 서브 폼 생성자로 넘겨 연결해 줍니다.
+                    frmAddFile addFileForm = new frmAddFile(this);
                     addFileForm.ShowDialog();
                 }
             }

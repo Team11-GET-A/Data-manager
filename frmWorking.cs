@@ -8,9 +8,9 @@ using System.Windows.Forms;
 
 namespace Data_Manager
 {
-    public partial class frmAddFile : Form
+    public partial class frmWoking : Form
     {
-        public frmAddFile()
+        public frmWoking()
         {
             InitializeComponent();
         }

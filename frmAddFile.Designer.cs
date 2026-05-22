@@ -103,7 +103,7 @@
             // 
             // btnSelctFile
             // 
-            btnSelctFile.Location = new Point(466, 14);
+            btnSelctFile.Location = new Point(468, 14);
             btnSelctFile.Name = "btnSelctFile";
             btnSelctFile.Size = new Size(87, 47);
             btnSelctFile.TabIndex = 6;
