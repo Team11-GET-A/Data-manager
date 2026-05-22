@@ -3,15 +3,14 @@ using MaterialSkin;
 using MaterialSkin.Controls;
 using System;
 using System.Drawing;
+using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace AD_AI_LearningData_Editor
 {
     public partial class frmMain : MaterialForm
     {
-        // 디자이너 변수를 코드 영역에서 쉽게 제어할 수 있도록 한정자 수정을 유도하거나 노출함
-        // (디자이너.cs 파일에 정의된 lstviewFileList 필드의 private 지시자를 public으로 변경하면 매끄럽게 연동됩니다)
-
         public frmMain()
         {
             InitializeComponent();
@@ -26,10 +25,41 @@ namespace AD_AI_LearningData_Editor
             );
 
             SetupTabs();
+            LoadUploadedFilesToD();
 
-            // 리스트뷰들의 더블클릭 이벤트를 코드로 연결합니다.
             this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
             this.lstviewFileList.MouseDoubleClick += lstviewFileList_MouseDoubleClick;
+        }
+
+        public void LoadUploadedFilesToD()
+        {
+            lstviewFileListD.Items.Clear();
+
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string targetFolder = Path.Combine(baseDir, @"..\..\UploadedFile");
+
+            if (!Directory.Exists(targetFolder))
+            {
+                Directory.CreateDirectory(targetFolder);
+            }
+
+            DirectoryInfo di = new DirectoryInfo(targetFolder);
+
+            var folders = di.GetDirectories().OrderBy(d => d.CreationTime).ToList();
+            foreach (var folder in folders)
+            {
+                ListViewItem item = new ListViewItem("[폴더] " + folder.Name);
+                item.Tag = "추가된파일";
+                lstviewFileListD.Items.Add(item);
+            }
+
+            var files = di.GetFiles().OrderBy(f => f.CreationTime).ToList();
+            foreach (var file in files)
+            {
+                ListViewItem item = new ListViewItem(file.Name);
+                item.Tag = "추가된파일";
+                lstviewFileListD.Items.Add(item);
+            }
         }
 
         private void SetupTabs()
@@ -85,6 +115,7 @@ namespace AD_AI_LearningData_Editor
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
             lstviewFileList.Visible = false;
+            lstviewFileListD.Visible = false;
             lstviewTrash.Visible = false;
             lstviewMain.Visible = true;
         }
@@ -99,12 +130,14 @@ namespace AD_AI_LearningData_Editor
                 {
                     lstviewMain.Visible = false;
                     lstviewFileList.Visible = true;
+                    lstviewFileListD.Visible = true;
                     lstviewTrash.Visible = false;
                 }
                 else if (itemTag == "휴지통")
                 {
                     lstviewMain.Visible = false;
                     lstviewFileList.Visible = false;
+                    lstviewFileListD.Visible = false;
                     lstviewTrash.Visible = true;
                 }
             }
@@ -112,9 +145,6 @@ namespace AD_AI_LearningData_Editor
 
         private void lstviewFileList_SelectedIndexChanged(object sender, EventArgs e) { }
 
-        /// <summary>
-        /// lstviewFileList의 아이템을 더블클릭했을 때 실행되는 메서드입니다.
-        /// </summary>
         private void lstviewFileList_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             if (lstviewFileList.SelectedItems.Count > 0)
@@ -123,7 +153,6 @@ namespace AD_AI_LearningData_Editor
 
                 if (itemTag == "파일추가")
                 {
-                    // 💡 자기 자신(this)의 인스턴스를 서브 폼 생성자로 넘겨 연결해 줍니다.
                     frmAddFile addFileForm = new frmAddFile(this);
                     addFileForm.ShowDialog();
                 }

@@ -49,10 +49,11 @@
             btnOpnFolderList = new Button();
             pnlFolderList = new Panel();
             lblFolderList = new Label();
+            lstviewFileListD = new ListView();
             lstviewFileList = new ListView();
             imglst1 = new ImageList(components);
-            lstviewMain = new ListView();
             lstviewTrash = new ListView();
+            lstviewMain = new ListView();
             pnlCtrl = new Panel();
             btnPre1F = new MaterialSkin.Controls.MaterialButton();
             btnPlayStop = new MaterialSkin.Controls.MaterialButton();
@@ -243,10 +244,10 @@
             // 
             // textBox1
             // 
-            textBox1.Location = new Point(6, 695);
+            textBox1.Location = new Point(6, 664);
             textBox1.Multiline = true;
             textBox1.Name = "textBox1";
-            textBox1.Size = new Size(424, 122);
+            textBox1.Size = new Size(424, 153);
             textBox1.TabIndex = 7;
             // 
             // btnSave
@@ -302,9 +303,10 @@
             pnlFolderList.BorderStyle = BorderStyle.Fixed3D;
             pnlFolderList.Controls.Add(lblFolderList);
             pnlFolderList.Controls.Add(btnOpnFolderList);
+            pnlFolderList.Controls.Add(lstviewFileListD);
             pnlFolderList.Controls.Add(lstviewFileList);
-            pnlFolderList.Controls.Add(lstviewMain);
             pnlFolderList.Controls.Add(lstviewTrash);
+            pnlFolderList.Controls.Add(lstviewMain);
             pnlFolderList.Location = new Point(1111, 11);
             pnlFolderList.Name = "pnlFolderList";
             pnlFolderList.Size = new Size(483, 554);
@@ -320,14 +322,24 @@
             lblFolderList.Size = new Size(0, 40);
             lblFolderList.TabIndex = 15;
             // 
+            // lstviewFileListD
+            // 
+            lstviewFileListD.Location = new Point(0, 69);
+            lstviewFileListD.Name = "lstviewFileListD";
+            lstviewFileListD.Size = new Size(483, 489);
+            lstviewFileListD.TabIndex = 16;
+            lstviewFileListD.UseCompatibleStateImageBehavior = false;
+            lstviewFileListD.View = View.List;
+            lstviewFileListD.Visible = false;
+            // 
             // lstviewFileList
             // 
             lstviewFileList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             listViewItem1.Tag = "파일추가";
             lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem1 });
-            lstviewFileList.Location = new Point(-1, 44);
+            lstviewFileList.Location = new Point(0, 44);
             lstviewFileList.Name = "lstviewFileList";
-            lstviewFileList.Size = new Size(483, 509);
+            lstviewFileList.Size = new Size(483, 25);
             lstviewFileList.SmallImageList = imglst1;
             lstviewFileList.TabIndex = 13;
             lstviewFileList.UseCompatibleStateImageBehavior = false;
@@ -344,6 +356,17 @@
             imglst1.Images.SetKeyName(1, "파란 폴더2.png");
             imglst1.Images.SetKeyName(2, "휴지통2.png");
             // 
+            // lstviewTrash
+            // 
+            lstviewTrash.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            lstviewTrash.Location = new Point(-1, 44);
+            lstviewTrash.Name = "lstviewTrash";
+            lstviewTrash.Size = new Size(483, 509);
+            lstviewTrash.TabIndex = 14;
+            lstviewTrash.UseCompatibleStateImageBehavior = false;
+            lstviewTrash.View = View.List;
+            lstviewTrash.Visible = false;
+            // 
             // lstviewMain
             // 
             lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
@@ -358,17 +381,6 @@
             lstviewMain.UseCompatibleStateImageBehavior = false;
             lstviewMain.View = View.List;
             lstviewMain.SelectedIndexChanged += listView1_SelectedIndexChanged;
-            // 
-            // lstviewTrash
-            // 
-            lstviewTrash.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            lstviewTrash.Location = new Point(-1, 44);
-            lstviewTrash.Name = "lstviewTrash";
-            lstviewTrash.Size = new Size(483, 509);
-            lstviewTrash.TabIndex = 14;
-            lstviewTrash.UseCompatibleStateImageBehavior = false;
-            lstviewTrash.View = View.List;
-            lstviewTrash.Visible = false;
             // 
             // pnlCtrl
             // 
@@ -520,5 +532,6 @@
         public ListView lstviewFileList;
         private Label lblFolderList;
         private ImageList imglst1;
+        private ListView lstviewFileListD;
     }
 }

@@ -77,10 +77,11 @@
             // 
             // txtbSelctFile
             // 
-            txtbSelctFile.Location = new Point(13, 20);
+            txtbSelctFile.Font = new Font("맑은 고딕", 9F);
+            txtbSelctFile.Location = new Point(13, 23);
             txtbSelctFile.Multiline = true;
             txtbSelctFile.Name = "txtbSelctFile";
-            txtbSelctFile.Size = new Size(440, 40);
+            txtbSelctFile.Size = new Size(449, 31);
             txtbSelctFile.TabIndex = 2;
             // 
             // btnCopyFile
