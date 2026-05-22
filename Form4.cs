@@ -8,9 +8,9 @@ using System.Windows.Forms;
 
 namespace Data_Manager
 {
-    public partial class formAddFile : Form
+    public partial class frmAddFile : Form
     {
-        public formAddFile()
+        public frmAddFile()
         {
             InitializeComponent();
         }

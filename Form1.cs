@@ -1,8 +1,9 @@
-﻿using System;
-using System.Drawing;
-using System.Windows.Forms;
+﻿using Data_Manager;
 using MaterialSkin;
 using MaterialSkin.Controls;
+using System;
+using System.Drawing;
+using System.Windows.Forms;
 
 namespace AD_AI_LearningData_Editor
 {
@@ -24,8 +25,9 @@ namespace AD_AI_LearningData_Editor
 
             SetupTabs();
 
-            // lstviewMain의 더블클릭 이벤트를 코드로 명시적 연결합니다.
+            // 리스트뷰들의 더블클릭 이벤트를 코드로 명시적 연결합니다.
             this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
+            this.lstviewFileList.MouseDoubleClick += lstviewFileList_MouseDoubleClick; // 💡 이벤트 연결 추가
         }
 
         private void SetupTabs()
@@ -137,6 +139,30 @@ namespace AD_AI_LearningData_Editor
         private void lstviewFileList_SelectedIndexChanged(object sender, EventArgs e)
         {
 
+        }
+
+        /// <summary>
+        /// lstviewFileList의 아이템을 더블클릭했을 때 실행되는 메서드입니다.
+        /// </summary>
+        private void lstviewFileList_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            // 선택된 아이템이 있는지 확인합니다.
+            if (lstviewFileList.SelectedItems.Count > 0)
+            {
+                // 선택된 아이템의 태그 값을 가져옵니다.
+                string itemTag = lstviewFileList.SelectedItems[0].Tag?.ToString();
+
+                // 태그가 '파일추가'인지 확인합니다.
+                if (itemTag == "파일추가")
+                {
+                    // formAddFile 인스턴스를 생성합니다.
+                    frmAddFile addFileForm = new frmAddFile();
+
+                    // 💡 ShowDialog()로 실행하면 새 창이 꺼지기 전까지 
+                    // 메인 화면 뒤로 숨지 않고 항상 화면 맨 위에 고정되어 나타납니다.
+                    addFileForm.ShowDialog();
+                }
+            }
         }
     }
 }
