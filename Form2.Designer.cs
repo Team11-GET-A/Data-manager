@@ -59,11 +59,10 @@
             panel1.Controls.Add(btnPlay);
             panel1.Controls.Add(cbxFaster);
             panel1.Dock = DockStyle.Bottom;
-            panel1.Location = new Point(2, 666);
             panel1.Margin = new Padding(2);
             panel1.Name = "panel1";
             panel1.Padding = new Padding(10);
-            panel1.Size = new Size(1580, 193);
+            panel1.Size = new Size(1580, 189);
             panel1.TabIndex = 0;
             // 
             // btnSpeedSet1
@@ -163,7 +162,6 @@
             panel2.Controls.Add(btnCardAdder);
             panel2.Controls.Add(materialLabel1);
             panel2.Dock = DockStyle.Top;
-            panel2.Location = new Point(2, 2);
             panel2.Margin = new Padding(4);
             panel2.Name = "panel2";
             panel2.Size = new Size(1580, 106);
@@ -196,16 +194,14 @@
             // 
             // flowLayoutPanel1
             // 
-            flowLayoutPanel1.Dock = DockStyle.Fill;
-            flowLayoutPanel1.Location = new Point(2, 108);
-            flowLayoutPanel1.Name = "flowLayoutPanel1";
-            flowLayoutPanel1.Size = new Size(1580, 558);
-            flowLayoutPanel1.TabIndex = 2;
-            flowLayoutPanel1.FlowDirection = FlowDirection.LeftToRight;
-            flowLayoutPanel1.WrapContents = false;
             flowLayoutPanel1.AutoScroll = true;
-            flowLayoutPanel1.Padding = new Padding(10);
             flowLayoutPanel1.BackColor = Color.LightGray;
+            flowLayoutPanel1.Dock = DockStyle.Fill;
+            flowLayoutPanel1.Name = "flowLayoutPanel1";
+            flowLayoutPanel1.Padding = new Padding(10);
+            flowLayoutPanel1.Size = new Size(1580, 562);
+            flowLayoutPanel1.TabIndex = 2;
+            flowLayoutPanel1.WrapContents = false;
             // 
             // Form2
             // 
