@@ -1,4 +1,4 @@
-namespace Data_Manager
+﻿namespace Data_Manager
 {
     public partial class Form1 : Form
     {
