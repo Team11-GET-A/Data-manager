@@ -178,6 +178,7 @@
             btnCardAdder.TabIndex = 11;
             btnCardAdder.Text = "모델 추가하기";
             btnCardAdder.UseVisualStyleBackColor = true;
+            btnCardAdder.Click += BtnCardAdder_Click;
             // 
             // materialLabel1
             // 
@@ -200,6 +201,11 @@
             flowLayoutPanel1.Name = "flowLayoutPanel1";
             flowLayoutPanel1.Size = new Size(1580, 558);
             flowLayoutPanel1.TabIndex = 2;
+            flowLayoutPanel1.FlowDirection = FlowDirection.LeftToRight;
+            flowLayoutPanel1.WrapContents = false;
+            flowLayoutPanel1.AutoScroll = true;
+            flowLayoutPanel1.Padding = new Padding(10);
+            flowLayoutPanel1.BackColor = Color.LightGray;
             // 
             // Form2
             // 
