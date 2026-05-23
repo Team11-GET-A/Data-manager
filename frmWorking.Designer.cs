@@ -87,6 +87,7 @@
             Controls.Add(btnDone);
             Controls.Add(btnCancle);
             FormBorderStyle = FormBorderStyle.FixedSingle;
+            Location = new Point(500, 500);
             Name = "frmWoking";
             Text = "작업 중...";
             ResumeLayout(false);
