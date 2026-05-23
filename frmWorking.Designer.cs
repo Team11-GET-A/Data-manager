@@ -82,9 +82,9 @@
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(337, 150);
-            Controls.Add(btnDone);
             Controls.Add(pgbarWorking);
             Controls.Add(txtbWait);
+            Controls.Add(btnDone);
             Controls.Add(btnCancle);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             Name = "frmWoking";
