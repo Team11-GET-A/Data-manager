@@ -53,10 +53,10 @@
             panel1.Controls.Add(button1);
             panel1.Controls.Add(trackBar1);
             panel1.Dock = DockStyle.Bottom;
-            panel1.Location = new Point(2, 674);
+            panel1.Location = new Point(2, 635);
             panel1.Margin = new Padding(2);
             panel1.Name = "panel1";
-            panel1.Size = new Size(1596, 224);
+            panel1.Size = new Size(1580, 224);
             panel1.TabIndex = 0;
             // 
             // button5
@@ -134,7 +134,7 @@
             panel2.Location = new Point(2, 85);
             panel2.Margin = new Padding(4);
             panel2.Name = "panel2";
-            panel2.Size = new Size(1596, 102);
+            panel2.Size = new Size(1580, 102);
             panel2.TabIndex = 1;
             // 
             // flowLayoutPanel1
@@ -142,14 +142,14 @@
             flowLayoutPanel1.Dock = DockStyle.Fill;
             flowLayoutPanel1.Location = new Point(2, 187);
             flowLayoutPanel1.Name = "flowLayoutPanel1";
-            flowLayoutPanel1.Size = new Size(1596, 487);
+            flowLayoutPanel1.Size = new Size(1580, 448);
             flowLayoutPanel1.TabIndex = 2;
             // 
             // Form2
             // 
             AutoScaleDimensions = new SizeF(9F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1600, 900);
+            ClientSize = new Size(1584, 861);
             Controls.Add(flowLayoutPanel1);
             Controls.Add(panel2);
             Controls.Add(panel1);

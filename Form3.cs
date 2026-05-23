@@ -10,7 +10,7 @@ using MaterialSkin.Controls;
 
 namespace Data_Manager
 {
-    public partial class Form3 : MaterialForm
+    public partial class Form3 : Form
     {
         public Form3()
         {
