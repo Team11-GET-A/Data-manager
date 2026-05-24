@@ -303,8 +303,8 @@
             pnlFolderList.BorderStyle = BorderStyle.Fixed3D;
             pnlFolderList.Controls.Add(lblFolderList);
             pnlFolderList.Controls.Add(btnOpnFolderList);
-            pnlFolderList.Controls.Add(lstviewFileListD);
             pnlFolderList.Controls.Add(lstviewFileList);
+            pnlFolderList.Controls.Add(lstviewFileListD);
             pnlFolderList.Controls.Add(lstviewTrash);
             pnlFolderList.Controls.Add(lstviewMain);
             pnlFolderList.Location = new Point(1111, 11);
@@ -433,6 +433,7 @@
             btnPlayStop.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnPlayStop.UseAccentColor = false;
             btnPlayStop.UseVisualStyleBackColor = true;
+            btnPlayStop.Click += btnPlayStop_Click;
             // 
             // btnNxt5F
             // 
