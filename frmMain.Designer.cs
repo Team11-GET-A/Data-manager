@@ -494,7 +494,7 @@
             Controls.Add(sdrSeekBar);
             Name = "frmMain";
             Padding = new Padding(0);
-            Text = "11팀 UI 프로토타입";
+            Text = "11팀";
             pnlProperty.ResumeLayout(false);
             crdProperty.ResumeLayout(false);
             pnlFolderList.ResumeLayout(false);
