@@ -29,10 +29,10 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            ListViewItem listViewItem4 = new ListViewItem(new string[] { "[파일추가]" }, 1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
+            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[파일추가]" }, 1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
-            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[파일목록]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem5 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일목록]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
             sdrSeekBar = new MaterialSkin.Controls.MaterialSlider();
             pnlVideo = new Panel();
             btnContrastProperty = new MaterialSkin.Controls.MaterialButton();
@@ -58,16 +58,17 @@
             lstviewMain = new ListView();
             lstviewFileListD = new ListView();
             pnlCtrl = new Panel();
+            btnSpeedPopup = new MaterialSkin.Controls.MaterialButton();
             btnPre1F = new MaterialSkin.Controls.MaterialButton();
             btnPlayStop = new MaterialSkin.Controls.MaterialButton();
             btnNxt5F = new MaterialSkin.Controls.MaterialButton();
             btnNxt1F = new MaterialSkin.Controls.MaterialButton();
-            btnOpnFolderList2 = new Button();
             pnlSpeedPopup = new Panel();
-            sdrSpeed = new MaterialSkin.Controls.MaterialSlider();
-            btnSpeedPopup = new MaterialSkin.Controls.MaterialButton();
-            btnSpeedPlus = new MaterialSkin.Controls.MaterialButton();
             btnSpeedMinus = new MaterialSkin.Controls.MaterialButton();
+            btnSpeedPlus = new MaterialSkin.Controls.MaterialButton();
+            sdrSpeedController = new MaterialSkin.Controls.MaterialSlider();
+            lblSpeedText = new Label();
+            btnOpnFolderList2 = new Button();
             pnlProperty.SuspendLayout();
             crdProperty.SuspendLayout();
             pnlFolderList.SuspendLayout();
@@ -206,6 +207,7 @@
             // 
             btnDel.AutoSize = false;
             btnDel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnDel.BackColor = SystemColors.Control;
             btnDel.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnDel.Depth = 0;
             btnDel.HighEmphasis = true;
@@ -220,7 +222,7 @@
             btnDel.Text = "삭제";
             btnDel.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnDel.UseAccentColor = true;
-            btnDel.UseVisualStyleBackColor = true;
+            btnDel.UseVisualStyleBackColor = false;
             // 
             // pnlProperty
             // 
@@ -253,6 +255,7 @@
             // 
             // textBox1
             // 
+            textBox1.BackColor = Color.Lime;
             textBox1.Location = new Point(6, 664);
             textBox1.Multiline = true;
             textBox1.Name = "textBox1";
@@ -276,7 +279,7 @@
             btnSave.TabIndex = 8;
             btnSave.Text = "저장";
             btnSave.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
-            btnSave.UseAccentColor = true;
+            btnSave.UseAccentColor = false;
             btnSave.UseVisualStyleBackColor = true;
             // 
             // btnPre5F
@@ -287,7 +290,7 @@
             btnPre5F.Depth = 0;
             btnPre5F.HighEmphasis = true;
             btnPre5F.Icon = null;
-            btnPre5F.Location = new Point(4, 10);
+            btnPre5F.Location = new Point(4, 16);
             btnPre5F.Margin = new Padding(4, 6, 4, 6);
             btnPre5F.MouseState = MaterialSkin.MouseState.HOVER;
             btnPre5F.Name = "btnPre5F";
@@ -362,8 +365,8 @@
             // lstviewFileList
             // 
             lstviewFileList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem4.Tag = "파일추가";
-            lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem4 });
+            listViewItem1.Tag = "파일추가";
+            lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem1 });
             lstviewFileList.Location = new Point(0, 44);
             lstviewFileList.Name = "lstviewFileList";
             lstviewFileList.Size = new Size(483, 25);
@@ -397,9 +400,9 @@
             // lstviewMain
             // 
             lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem1.Tag = "파일목록";
-            listViewItem5.Tag = "휴지통";
-            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem1, listViewItem5 });
+            listViewItem2.Tag = "파일목록";
+            listViewItem3.Tag = "휴지통";
+            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem2, listViewItem3 });
             lstviewMain.Location = new Point(-1, 44);
             lstviewMain.Name = "lstviewMain";
             lstviewMain.Size = new Size(483, 509);
@@ -421,7 +424,6 @@
             // 
             // pnlCtrl
             // 
-            pnlCtrl.Controls.Add(pnlSpeedPopup);
             pnlCtrl.Controls.Add(btnSpeedPopup);
             pnlCtrl.Controls.Add(btnPre1F);
             pnlCtrl.Controls.Add(btnPlayStop);
@@ -435,6 +437,26 @@
             pnlCtrl.Size = new Size(670, 132);
             pnlCtrl.TabIndex = 13;
             // 
+            // btnSpeedPopup
+            // 
+            btnSpeedPopup.AutoSize = false;
+            btnSpeedPopup.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnSpeedPopup.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnSpeedPopup.Depth = 0;
+            btnSpeedPopup.HighEmphasis = true;
+            btnSpeedPopup.Icon = null;
+            btnSpeedPopup.Location = new Point(4, 78);
+            btnSpeedPopup.Margin = new Padding(4, 6, 4, 6);
+            btnSpeedPopup.MouseState = MaterialSkin.MouseState.HOVER;
+            btnSpeedPopup.Name = "btnSpeedPopup";
+            btnSpeedPopup.NoAccentTextColor = Color.Empty;
+            btnSpeedPopup.Size = new Size(418, 28);
+            btnSpeedPopup.TabIndex = 16;
+            btnSpeedPopup.Text = "배속";
+            btnSpeedPopup.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnSpeedPopup.UseAccentColor = false;
+            btnSpeedPopup.UseVisualStyleBackColor = true;
+            // 
             // btnPre1F
             // 
             btnPre1F.AutoSize = false;
@@ -443,7 +465,7 @@
             btnPre1F.Depth = 0;
             btnPre1F.HighEmphasis = true;
             btnPre1F.Icon = null;
-            btnPre1F.Location = new Point(72, 10);
+            btnPre1F.Location = new Point(72, 16);
             btnPre1F.Margin = new Padding(4, 6, 4, 6);
             btnPre1F.MouseState = MaterialSkin.MouseState.HOVER;
             btnPre1F.Name = "btnPre1F";
@@ -462,7 +484,7 @@
             btnPlayStop.Depth = 0;
             btnPlayStop.HighEmphasis = true;
             btnPlayStop.Icon = null;
-            btnPlayStop.Location = new Point(140, 10);
+            btnPlayStop.Location = new Point(140, 16);
             btnPlayStop.Margin = new Padding(4, 6, 4, 6);
             btnPlayStop.MouseState = MaterialSkin.MouseState.HOVER;
             btnPlayStop.Name = "btnPlayStop";
@@ -482,7 +504,7 @@
             btnNxt5F.Depth = 0;
             btnNxt5F.HighEmphasis = true;
             btnNxt5F.Icon = null;
-            btnNxt5F.Location = new Point(362, 10);
+            btnNxt5F.Location = new Point(362, 16);
             btnNxt5F.Margin = new Padding(4, 6, 4, 6);
             btnNxt5F.MouseState = MaterialSkin.MouseState.HOVER;
             btnNxt5F.Name = "btnNxt5F";
@@ -501,7 +523,7 @@
             btnNxt1F.Depth = 0;
             btnNxt1F.HighEmphasis = true;
             btnNxt1F.Icon = null;
-            btnNxt1F.Location = new Point(295, 10);
+            btnNxt1F.Location = new Point(295, 16);
             btnNxt1F.Margin = new Padding(4, 6, 4, 6);
             btnNxt1F.MouseState = MaterialSkin.MouseState.HOVER;
             btnNxt1F.Name = "btnNxt1F";
@@ -512,76 +534,18 @@
             btnNxt1F.UseAccentColor = false;
             btnNxt1F.UseVisualStyleBackColor = true;
             // 
-            // btnOpnFolderList2
-            // 
-            btnOpnFolderList2.Location = new Point(442, 5);
-            btnOpnFolderList2.Name = "btnOpnFolderList2";
-            btnOpnFolderList2.Size = new Size(35, 35);
-            btnOpnFolderList2.TabIndex = 11;
-            btnOpnFolderList2.UseVisualStyleBackColor = true;
-            // 
             // pnlSpeedPopup
             // 
             pnlSpeedPopup.BackColor = Color.Gray;
             pnlSpeedPopup.Controls.Add(btnSpeedMinus);
             pnlSpeedPopup.Controls.Add(btnSpeedPlus);
-            pnlSpeedPopup.Controls.Add(sdrSpeed);
-            pnlSpeedPopup.Location = new Point(4, 3);
+            pnlSpeedPopup.Controls.Add(sdrSpeedController);
+            pnlSpeedPopup.Controls.Add(lblSpeedText);
+            pnlSpeedPopup.Location = new Point(440, 679);
             pnlSpeedPopup.Name = "pnlSpeedPopup";
-            pnlSpeedPopup.Size = new Size(418, 94);
+            pnlSpeedPopup.Size = new Size(418, 84);
             pnlSpeedPopup.TabIndex = 15;
             pnlSpeedPopup.Visible = false;
-            // 
-            // sdrSpeed
-            // 
-            sdrSpeed.Depth = 0;
-            sdrSpeed.ForeColor = Color.FromArgb(222, 0, 0, 0);
-            sdrSpeed.Location = new Point(30, 26);
-            sdrSpeed.MouseState = MaterialSkin.MouseState.HOVER;
-            sdrSpeed.Name = "sdrSpeed";
-            sdrSpeed.ShowValue = false;
-            sdrSpeed.Size = new Size(353, 40);
-            sdrSpeed.TabIndex = 0;
-            sdrSpeed.Text = "";
-            // 
-            // btnSpeedPopup
-            // 
-            btnSpeedPopup.AutoSize = false;
-            btnSpeedPopup.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnSpeedPopup.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
-            btnSpeedPopup.Depth = 0;
-            btnSpeedPopup.HighEmphasis = true;
-            btnSpeedPopup.Icon = null;
-            btnSpeedPopup.Location = new Point(4, 97);
-            btnSpeedPopup.Margin = new Padding(4, 6, 4, 6);
-            btnSpeedPopup.MouseState = MaterialSkin.MouseState.HOVER;
-            btnSpeedPopup.Name = "btnSpeedPopup";
-            btnSpeedPopup.NoAccentTextColor = Color.Empty;
-            btnSpeedPopup.Size = new Size(418, 28);
-            btnSpeedPopup.TabIndex = 16;
-            btnSpeedPopup.Text = "배속";
-            btnSpeedPopup.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
-            btnSpeedPopup.UseAccentColor = false;
-            btnSpeedPopup.UseVisualStyleBackColor = true;
-            // 
-            // btnSpeedPlus
-            // 
-            btnSpeedPlus.AutoSize = false;
-            btnSpeedPlus.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnSpeedPlus.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
-            btnSpeedPlus.Depth = 0;
-            btnSpeedPlus.HighEmphasis = true;
-            btnSpeedPlus.Icon = null;
-            btnSpeedPlus.Location = new Point(381, 7);
-            btnSpeedPlus.Margin = new Padding(4, 6, 4, 6);
-            btnSpeedPlus.MouseState = MaterialSkin.MouseState.HOVER;
-            btnSpeedPlus.Name = "btnSpeedPlus";
-            btnSpeedPlus.NoAccentTextColor = Color.Empty;
-            btnSpeedPlus.Size = new Size(31, 82);
-            btnSpeedPlus.TabIndex = 1;
-            btnSpeedPlus.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
-            btnSpeedPlus.UseAccentColor = false;
-            btnSpeedPlus.UseVisualStyleBackColor = true;
             // 
             // btnSpeedMinus
             // 
@@ -591,7 +555,7 @@
             btnSpeedMinus.Depth = 0;
             btnSpeedMinus.HighEmphasis = true;
             btnSpeedMinus.Icon = null;
-            btnSpeedMinus.Location = new Point(5, 7);
+            btnSpeedMinus.Location = new Point(1, 1);
             btnSpeedMinus.Margin = new Padding(4, 6, 4, 6);
             btnSpeedMinus.MouseState = MaterialSkin.MouseState.HOVER;
             btnSpeedMinus.Name = "btnSpeedMinus";
@@ -602,12 +566,61 @@
             btnSpeedMinus.UseAccentColor = false;
             btnSpeedMinus.UseVisualStyleBackColor = true;
             // 
+            // btnSpeedPlus
+            // 
+            btnSpeedPlus.AutoSize = false;
+            btnSpeedPlus.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnSpeedPlus.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnSpeedPlus.Depth = 0;
+            btnSpeedPlus.HighEmphasis = true;
+            btnSpeedPlus.Icon = null;
+            btnSpeedPlus.Location = new Point(386, 1);
+            btnSpeedPlus.Margin = new Padding(4, 6, 4, 6);
+            btnSpeedPlus.MouseState = MaterialSkin.MouseState.HOVER;
+            btnSpeedPlus.Name = "btnSpeedPlus";
+            btnSpeedPlus.NoAccentTextColor = Color.Empty;
+            btnSpeedPlus.Size = new Size(31, 82);
+            btnSpeedPlus.TabIndex = 1;
+            btnSpeedPlus.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnSpeedPlus.UseAccentColor = false;
+            btnSpeedPlus.UseVisualStyleBackColor = true;
+            // 
+            // sdrSpeedController
+            // 
+            sdrSpeedController.Depth = 0;
+            sdrSpeedController.ForeColor = Color.Gray;
+            sdrSpeedController.Location = new Point(38, 6);
+            sdrSpeedController.MouseState = MaterialSkin.MouseState.HOVER;
+            sdrSpeedController.Name = "sdrSpeedController";
+            sdrSpeedController.ShowValue = false;
+            sdrSpeedController.Size = new Size(340, 40);
+            sdrSpeedController.TabIndex = 0;
+            sdrSpeedController.Text = "";
+            // 
+            // lblSpeedText
+            // 
+            lblSpeedText.ForeColor = Color.Black;
+            lblSpeedText.Location = new Point(180, 51);
+            lblSpeedText.Name = "lblSpeedText";
+            lblSpeedText.Size = new Size(58, 28);
+            lblSpeedText.TabIndex = 3;
+            lblSpeedText.TextAlign = ContentAlignment.MiddleCenter;
+            // 
+            // btnOpnFolderList2
+            // 
+            btnOpnFolderList2.Location = new Point(442, 5);
+            btnOpnFolderList2.Name = "btnOpnFolderList2";
+            btnOpnFolderList2.Size = new Size(35, 35);
+            btnOpnFolderList2.TabIndex = 11;
+            btnOpnFolderList2.UseVisualStyleBackColor = true;
+            // 
             // frmMain
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = SystemColors.Control;
             ClientSize = new Size(1600, 900);
+            Controls.Add(pnlSpeedPopup);
             Controls.Add(pnlCtrl);
             Controls.Add(pnlFolderList);
             Controls.Add(textBox1);
@@ -662,8 +675,9 @@
         private Button btnRestoration;
         private MaterialSkin.Controls.MaterialButton btnSpeedPopup;
         private Panel pnlSpeedPopup;
-        private MaterialSkin.Controls.MaterialSlider sdrSpeed;
+        private MaterialSkin.Controls.MaterialSlider sdrSpeedController;
         private MaterialSkin.Controls.MaterialButton btnSpeedMinus;
         private MaterialSkin.Controls.MaterialButton btnSpeedPlus;
+        private Label lblSpeedText;
     }
 }

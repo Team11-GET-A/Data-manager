@@ -18,8 +18,6 @@ namespace AD_AI_LearningData_Editor
         private int currentSlideIndex = 0;
         private ListViewItem lastHighlightedItem = null;
         private bool isUpdatingSlider = false;
-
-        // 실시간 감지를 위한 File(라틴어:실) 감시자
         private FileSystemWatcher trashWatcher;
 
         public frmMain()
@@ -56,6 +54,121 @@ namespace AD_AI_LearningData_Editor
 
             this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
             this.lstviewFileList.MouseDoubleClick += lstviewFileList_MouseDoubleClick;
+
+            InitializeSpeedController();
+        }
+
+        private void InitializeSpeedController()
+        {
+            pnlSpeedPopup.Visible = false;
+
+            sdrSpeedController.RangeMin = 1;
+            sdrSpeedController.RangeMax = 30;
+            sdrSpeedController.Value = 10;
+
+            btnSpeedPopup.Click += btnSpeedPopup_Click;
+            btnSpeedPlus.Click += btnSpeedPlus_Click;
+            btnSpeedMinus.Click += btnSpeedMinus_Click;
+            sdrSpeedController.onValueChanged += sdrSpeedController_onValueChanged;
+            sdrSpeedController.BackColor = Color.FromArgb(45, 45, 45);
+
+            lblSpeedText.Parent = pnlSpeedPopup;
+            lblSpeedText.BackColor = Color.Transparent;
+            lblSpeedText.ForeColor = Color.White;
+            lblSpeedText.BringToFront();
+
+            this.Deactivate += (s, e) => pnlSpeedPopup.Visible = false;
+
+            Application.AddMessageFilter(new ClickOutsideFilter(pnlSpeedPopup, btnSpeedPopup));
+
+            UpdateSpeedDisplay(sdrSpeedController.Value);
+        }
+
+        private void btnSpeedPopup_Click(object sender, EventArgs e)
+        {
+            pnlSpeedPopup.Visible = !pnlSpeedPopup.Visible;
+            if (pnlSpeedPopup.Visible)
+            {
+                pnlSpeedPopup.BringToFront();
+                UpdateSpeedDisplay(sdrSpeedController.Value);
+            }
+        }
+
+        private void btnSpeedPlus_Click(object sender, EventArgs e)
+        {
+            if (sdrSpeedController.Value < sdrSpeedController.RangeMax)
+            {
+                sdrSpeedController.Value += 1;
+                UpdateSpeedDisplay(sdrSpeedController.Value);
+            }
+        }
+
+        private void btnSpeedMinus_Click(object sender, EventArgs e)
+        {
+            if (sdrSpeedController.Value > sdrSpeedController.RangeMin)
+            {
+                sdrSpeedController.Value -= 1;
+                UpdateSpeedDisplay(sdrSpeedController.Value);
+            }
+        }
+
+        private void sdrSpeedController_onValueChanged(object sender, int newValue)
+        {
+            UpdateSpeedDisplay(newValue);
+        }
+
+        private void UpdateSpeedDisplay(int sliderValue)
+        {
+            double speed = sliderValue / 10.0;
+            lblSpeedText.Text = $"{speed:0.0}x";
+
+            if (speed > 0)
+            {
+                videoTimer.Interval = Math.Max(1, (int)(33 / speed));
+            }
+
+            if (pnlSpeedPopup.Visible)
+            {
+                int padding = 16;
+                int usableWidth = sdrSpeedController.Width - (padding * 2);
+
+                double ratio = (double)(sliderValue - sdrSpeedController.RangeMin) /
+                               (sdrSpeedController.RangeMax - sdrSpeedController.RangeMin);
+
+                int newX = sdrSpeedController.Location.X + padding + (int)(usableWidth * ratio) - (lblSpeedText.Width / 2);
+                int newY = sdrSpeedController.Location.Y + (sdrSpeedController.Height / 2) - (lblSpeedText.Height / 2);
+
+                lblSpeedText.Location = new Point(newX, newY);
+            }
+        }
+
+        private class ClickOutsideFilter : IMessageFilter
+        {
+            private Control _panel;
+            private Control _button;
+            private const int WM_LBUTTONDOWN = 0x0201;
+
+            public ClickOutsideFilter(Control panel, Control button)
+            {
+                _panel = panel;
+                _button = button;
+            }
+
+            public bool PreFilterMessage(ref Message m)
+            {
+                if (m.Msg == WM_LBUTTONDOWN && _panel.Visible)
+                {
+                    Point mousePos = Control.MousePosition;
+                    Rectangle panelRect = _panel.RectangleToScreen(_panel.ClientRectangle);
+                    Rectangle btnRect = _button.RectangleToScreen(_button.ClientRectangle);
+
+                    if (!panelRect.Contains(mousePos) && !btnRect.Contains(mousePos))
+                    {
+                        _panel.Invoke(new Action(() => _panel.Visible = false));
+                    }
+                }
+                return false;
+            }
         }
 
         private void InitializeVideoPlayer()
@@ -74,7 +187,6 @@ namespace AD_AI_LearningData_Editor
             videoTimer.Tick += VideoTimer_Tick;
         }
 
-        // 휴지통 실시간 감지 설정
         private void SetupTrashWatcher()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -82,14 +194,12 @@ namespace AD_AI_LearningData_Editor
 
             if (!Directory.Exists(trashFolder))
             {
-                // Directory(라틴어:바르게하다)
                 Directory.CreateDirectory(trashFolder);
             }
 
             trashWatcher = new FileSystemWatcher(trashFolder);
             trashWatcher.EnableRaisingEvents = true;
 
-            // Event(라틴어:나오다) 연결
             trashWatcher.Created += TrashWatcher_Changed;
             trashWatcher.Deleted += TrashWatcher_Changed;
             trashWatcher.Renamed += TrashWatcher_Changed;
@@ -97,7 +207,6 @@ namespace AD_AI_LearningData_Editor
 
         private void TrashWatcher_Changed(object sender, FileSystemEventArgs e)
         {
-            // UI 스레드 접근을 위한 Invoke(라틴어:부르다) 처리
             if (this.InvokeRequired)
             {
                 this.Invoke(new Action(LoadTrashCanFiles));
@@ -115,7 +224,6 @@ namespace AD_AI_LearningData_Editor
             currentSlideIndex = 0;
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            // 2단계 위 폴더 기준
             string targetFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
 
             if (!Directory.Exists(targetFolder))
@@ -160,7 +268,6 @@ namespace AD_AI_LearningData_Editor
             lstviewTrash.Items.Clear();
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            // 2단계 위 폴더(bin) 지정
             string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
 
             if (!Directory.Exists(trashFolder)) return;
@@ -281,7 +388,6 @@ namespace AD_AI_LearningData_Editor
         private void btnDel_Click(object sender, EventArgs e)
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            // 2단계 위 폴더(bin) 지정
             string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
 
             if (!Directory.Exists(trashFolder))
@@ -341,9 +447,7 @@ namespace AD_AI_LearningData_Editor
 
         private void btnOpnFileExplrr_Click(object sender, EventArgs e)
         {
-            // 경로 2단계 위(bin) 지정
             string binFolder = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\"));
-            // Process(라틴어:나아가다)
             System.Diagnostics.Process.Start("explorer.exe", binFolder);
         }
 
@@ -352,7 +456,6 @@ namespace AD_AI_LearningData_Editor
             if (lstviewTrash.SelectedItems.Count == 0) return;
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            // 2단계 위 폴더(bin) 지정
             string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
             string uploadFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
 
@@ -471,7 +574,6 @@ namespace AD_AI_LearningData_Editor
                     lblLstVwName.Text = "[휴지통]";
                     btnRestoration.Visible = true;
 
-                    // 폴더 진입 시 확실한 동기화를 위해 한 번 더 갱신
                     LoadTrashCanFiles();
                 }
             }
