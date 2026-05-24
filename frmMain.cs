@@ -19,6 +19,9 @@ namespace AD_AI_LearningData_Editor
         private ListViewItem lastHighlightedItem = null;
         private bool isUpdatingSlider = false;
 
+        // 실시간 감지를 위한 File(라틴어:실) 감시자
+        private FileSystemWatcher trashWatcher;
+
         public frmMain()
         {
             InitializeComponent();
@@ -41,16 +44,15 @@ namespace AD_AI_LearningData_Editor
             btnDel.Click += btnDel_Click;
             sdrSeekBar.onValueChanged += SdrSeekBar_onValueChanged;
 
-            // 1, 3. 새 기능 Event 연결
             btnOpnFileExplrr.Click += btnOpnFileExplrr_Click;
             btnRestoration.Click += btnRestoration_Click;
 
-            // 프로그램 시작 시 복구 버튼 숨김
             btnRestoration.Visible = false;
 
             SetupTabs();
             LoadUploadedFilesToD();
             LoadTrashCanFiles();
+            SetupTrashWatcher();
 
             this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
             this.lstviewFileList.MouseDoubleClick += lstviewFileList_MouseDoubleClick;
@@ -72,6 +74,40 @@ namespace AD_AI_LearningData_Editor
             videoTimer.Tick += VideoTimer_Tick;
         }
 
+        // 휴지통 실시간 감지 설정
+        private void SetupTrashWatcher()
+        {
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
+
+            if (!Directory.Exists(trashFolder))
+            {
+                // Directory(라틴어:바르게하다)
+                Directory.CreateDirectory(trashFolder);
+            }
+
+            trashWatcher = new FileSystemWatcher(trashFolder);
+            trashWatcher.EnableRaisingEvents = true;
+
+            // Event(라틴어:나오다) 연결
+            trashWatcher.Created += TrashWatcher_Changed;
+            trashWatcher.Deleted += TrashWatcher_Changed;
+            trashWatcher.Renamed += TrashWatcher_Changed;
+        }
+
+        private void TrashWatcher_Changed(object sender, FileSystemEventArgs e)
+        {
+            // UI 스레드 접근을 위한 Invoke(라틴어:부르다) 처리
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(LoadTrashCanFiles));
+            }
+            else
+            {
+                LoadTrashCanFiles();
+            }
+        }
+
         public void LoadUploadedFilesToD()
         {
             lstviewFileListD.Items.Clear();
@@ -79,7 +115,8 @@ namespace AD_AI_LearningData_Editor
             currentSlideIndex = 0;
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string targetFolder = Path.Combine(baseDir, @"..\..\UploadedFile");
+            // 2단계 위 폴더 기준
+            string targetFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
 
             if (!Directory.Exists(targetFolder))
             {
@@ -123,8 +160,8 @@ namespace AD_AI_LearningData_Editor
             lstviewTrash.Items.Clear();
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            // 4. 휴지통 경로를 bin 폴더 바로 아래(..\TrashCan)로 변경
-            string trashFolder = Path.Combine(baseDir, @"..\TrashCan");
+            // 2단계 위 폴더(bin) 지정
+            string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
 
             if (!Directory.Exists(trashFolder)) return;
 
@@ -244,7 +281,8 @@ namespace AD_AI_LearningData_Editor
         private void btnDel_Click(object sender, EventArgs e)
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string trashFolder = Path.Combine(baseDir, @"..\TrashCan");
+            // 2단계 위 폴더(bin) 지정
+            string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
 
             if (!Directory.Exists(trashFolder))
             {
@@ -255,7 +293,7 @@ namespace AD_AI_LearningData_Editor
 
             if (lstviewFileListD.SelectedItems.Count > 0)
             {
-                string uploadFolder = Path.Combine(baseDir, @"..\..\UploadedFile");
+                string uploadFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
                 foreach (ListViewItem item in lstviewFileListD.SelectedItems)
                 {
                     string name = item.Text.Replace("[폴더] ", "");
@@ -299,25 +337,24 @@ namespace AD_AI_LearningData_Editor
             }
 
             LoadUploadedFilesToD();
-            LoadTrashCanFiles();
         }
 
-        // 1. 파일 탐색기 열기 기능
         private void btnOpnFileExplrr_Click(object sender, EventArgs e)
         {
-            string binFolder = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\"));
-            // Process(라틴어:나아가다) 시작
+            // 경로 2단계 위(bin) 지정
+            string binFolder = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\"));
+            // Process(라틴어:나아가다)
             System.Diagnostics.Process.Start("explorer.exe", binFolder);
         }
 
-        // 3. 휴지통 복구 기능
         private void btnRestoration_Click(object sender, EventArgs e)
         {
             if (lstviewTrash.SelectedItems.Count == 0) return;
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string trashFolder = Path.Combine(baseDir, @"..\TrashCan");
-            string uploadFolder = Path.Combine(baseDir, @"..\..\UploadedFile");
+            // 2단계 위 폴더(bin) 지정
+            string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
+            string uploadFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
 
             if (!Directory.Exists(uploadFolder))
             {
@@ -338,7 +375,6 @@ namespace AD_AI_LearningData_Editor
                     }
                     else if (File.Exists(sourcePath))
                     {
-                        // Restore(라틴어:다시세우다)
                         File.Move(sourcePath, destPath);
                     }
                 }
@@ -346,7 +382,6 @@ namespace AD_AI_LearningData_Editor
             }
 
             LoadUploadedFilesToD();
-            LoadTrashCanFiles();
         }
 
         private void SetupTabs()
@@ -399,7 +434,6 @@ namespace AD_AI_LearningData_Editor
         private void listView1_SelectedIndexChanged(object sender, EventArgs e) { }
         private void listView1_SelectedIndexChanged_1(object sender, EventArgs e) { }
 
-        // 2, 3. 뒤로 가기 시 상태 텍스트 비우기 및 복구 버튼 숨김
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
             lstviewFileList.Visible = false;
@@ -411,7 +445,6 @@ namespace AD_AI_LearningData_Editor
             btnRestoration.Visible = false;
         }
 
-        // 2, 3. 텍스트 동기화 및 복구 버튼 노출
         private void lstviewMain_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             if (lstviewMain.SelectedItems.Count > 0)
@@ -437,6 +470,9 @@ namespace AD_AI_LearningData_Editor
 
                     lblLstVwName.Text = "[휴지통]";
                     btnRestoration.Visible = true;
+
+                    // 폴더 진입 시 확실한 동기화를 위해 한 번 더 갱신
+                    LoadTrashCanFiles();
                 }
             }
         }
