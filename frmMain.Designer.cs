@@ -48,12 +48,15 @@
             btnPre5F = new MaterialSkin.Controls.MaterialButton();
             btnOpnFolderList = new Button();
             pnlFolderList = new Panel();
+            btnRestoration = new Button();
+            lblLstVwName = new Label();
+            btnOpnFileExplrr = new Button();
             lblFolderList = new Label();
-            lstviewFileListD = new ListView();
             lstviewFileList = new ListView();
             imglst1 = new ImageList(components);
             lstviewTrash = new ListView();
             lstviewMain = new ListView();
+            lstviewFileListD = new ListView();
             pnlCtrl = new Panel();
             btnPre1F = new MaterialSkin.Controls.MaterialButton();
             btnPlayStop = new MaterialSkin.Controls.MaterialButton();
@@ -301,16 +304,45 @@
             // pnlFolderList
             // 
             pnlFolderList.BorderStyle = BorderStyle.Fixed3D;
+            pnlFolderList.Controls.Add(btnRestoration);
+            pnlFolderList.Controls.Add(lblLstVwName);
+            pnlFolderList.Controls.Add(btnOpnFileExplrr);
             pnlFolderList.Controls.Add(lblFolderList);
             pnlFolderList.Controls.Add(btnOpnFolderList);
             pnlFolderList.Controls.Add(lstviewFileList);
-            pnlFolderList.Controls.Add(lstviewFileListD);
             pnlFolderList.Controls.Add(lstviewTrash);
             pnlFolderList.Controls.Add(lstviewMain);
+            pnlFolderList.Controls.Add(lstviewFileListD);
             pnlFolderList.Location = new Point(1111, 11);
             pnlFolderList.Name = "pnlFolderList";
             pnlFolderList.Size = new Size(483, 554);
             pnlFolderList.TabIndex = 12;
+            // 
+            // btnRestoration
+            // 
+            btnRestoration.Location = new Point(397, 5);
+            btnRestoration.Name = "btnRestoration";
+            btnRestoration.Size = new Size(35, 35);
+            btnRestoration.TabIndex = 19;
+            btnRestoration.UseVisualStyleBackColor = true;
+            btnRestoration.Visible = false;
+            // 
+            // lblLstVwName
+            // 
+            lblLstVwName.Font = new Font("맑은 고딕", 18F);
+            lblLstVwName.Location = new Point(44, 8);
+            lblLstVwName.Name = "lblLstVwName";
+            lblLstVwName.Size = new Size(314, 32);
+            lblLstVwName.TabIndex = 18;
+            lblLstVwName.Text = "파";
+            // 
+            // btnOpnFileExplrr
+            // 
+            btnOpnFileExplrr.Location = new Point(438, 5);
+            btnOpnFileExplrr.Name = "btnOpnFileExplrr";
+            btnOpnFileExplrr.Size = new Size(35, 35);
+            btnOpnFileExplrr.TabIndex = 17;
+            btnOpnFileExplrr.UseVisualStyleBackColor = true;
             // 
             // lblFolderList
             // 
@@ -321,16 +353,6 @@
             lblFolderList.Padding = new Padding(0, 0, 0, 3);
             lblFolderList.Size = new Size(0, 40);
             lblFolderList.TabIndex = 15;
-            // 
-            // lstviewFileListD
-            // 
-            lstviewFileListD.Location = new Point(0, 69);
-            lstviewFileListD.Name = "lstviewFileListD";
-            lstviewFileListD.Size = new Size(483, 489);
-            lstviewFileListD.TabIndex = 16;
-            lstviewFileListD.UseCompatibleStateImageBehavior = false;
-            lstviewFileListD.View = View.List;
-            lstviewFileListD.Visible = false;
             // 
             // lstviewFileList
             // 
@@ -381,6 +403,16 @@
             lstviewMain.UseCompatibleStateImageBehavior = false;
             lstviewMain.View = View.List;
             lstviewMain.SelectedIndexChanged += listView1_SelectedIndexChanged;
+            // 
+            // lstviewFileListD
+            // 
+            lstviewFileListD.Location = new Point(0, 69);
+            lstviewFileListD.Name = "lstviewFileListD";
+            lstviewFileListD.Size = new Size(483, 489);
+            lstviewFileListD.TabIndex = 16;
+            lstviewFileListD.UseCompatibleStateImageBehavior = false;
+            lstviewFileListD.View = View.List;
+            lstviewFileListD.Visible = false;
             // 
             // pnlCtrl
             // 
@@ -534,5 +566,8 @@
         private Label lblFolderList;
         private ImageList imglst1;
         private ListView lstviewFileListD;
+        private Button btnOpnFileExplrr;
+        private Label lblLstVwName;
+        private Button btnRestoration;
     }
 }

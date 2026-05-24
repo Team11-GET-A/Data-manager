@@ -134,7 +134,7 @@
             Controls.Add(pnlCopyFile);
             Location = new Point(200, 200);
             Name = "frmAddFile";
-            Text = "로컬 파일을 프로그램에 추가";
+            Text = "로컬 파일을 프로그램에 업로드";
             pnlCopyFile.ResumeLayout(false);
             pnlAddFile.ResumeLayout(false);
             ResumeLayout(false);

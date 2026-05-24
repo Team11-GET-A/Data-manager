@@ -12,12 +12,12 @@ namespace AD_AI_LearningData_Editor
 {
     public partial class frmMain : MaterialForm
     {
-        // 슬라이드 기능 제어를 위한 전역 변수
         private System.Windows.Forms.Timer videoTimer;
         private PictureBox picVideoBox;
         private List<string> slideImages = new List<string>();
         private int currentSlideIndex = 0;
         private ListViewItem lastHighlightedItem = null;
+        private bool isUpdatingSlider = false;
 
         public frmMain()
         {
@@ -32,11 +32,25 @@ namespace AD_AI_LearningData_Editor
                 TextShade.WHITE
             );
 
-            // 비디오 플레이어(PictureBox 및 Timer) 초기화
             InitializeVideoPlayer();
+
+            btnNxt1F.Click += btnNxt1F_Click;
+            btnNxt5F.Click += btnNxt5F_Click;
+            btnPre1F.Click += btnPre1F_Click;
+            btnPre5F.Click += btnPre5F_Click;
+            btnDel.Click += btnDel_Click;
+            sdrSeekBar.onValueChanged += SdrSeekBar_onValueChanged;
+
+            // 1, 3. 새 기능 Event 연결
+            btnOpnFileExplrr.Click += btnOpnFileExplrr_Click;
+            btnRestoration.Click += btnRestoration_Click;
+
+            // 프로그램 시작 시 복구 버튼 숨김
+            btnRestoration.Visible = false;
 
             SetupTabs();
             LoadUploadedFilesToD();
+            LoadTrashCanFiles();
 
             this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
             this.lstviewFileList.MouseDoubleClick += lstviewFileList_MouseDoubleClick;
@@ -44,18 +58,15 @@ namespace AD_AI_LearningData_Editor
 
         private void InitializeVideoPlayer()
         {
-            // Image(라틴어:모방) 출력을 위한 PictureBox 동적 생성
             picVideoBox = new PictureBox();
             picVideoBox.Dock = DockStyle.Fill;
             picVideoBox.SizeMode = PictureBoxSizeMode.StretchImage;
 
-            // pnlVideo 컨트롤 안에 PictureBox 삽입
             if (this.Controls.Find("pnlVideo", true).FirstOrDefault() is Panel pnl)
             {
                 pnl.Controls.Add(picVideoBox);
             }
 
-            // 30 FPS를 위한 Timer 설정 (1000ms / 30 = 약 33ms)
             videoTimer = new System.Windows.Forms.Timer();
             videoTimer.Interval = 33;
             videoTimer.Tick += VideoTimer_Tick;
@@ -92,7 +103,6 @@ namespace AD_AI_LearningData_Editor
                 item.Tag = "추가된파일";
                 lstviewFileListD.Items.Add(item);
 
-                // 이미지 파일 추출 (.png, .jpg, .bmp, .bit 포함)
                 string ext = file.Extension.ToLower();
                 if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".bit")
                 {
@@ -100,12 +110,40 @@ namespace AD_AI_LearningData_Editor
                 }
             }
 
-            // 이미지가 한 장 이상 존재할 경우 첫 화면 로드 및 슬라이더 초기화
             if (slideImages.Count > 0)
             {
-                sdrSeekBar.RangeMax = slideImages.Count;
-                sdrSeekBar.RangeMin = 1;
+                sdrSeekBar.RangeMin = 0;
+                sdrSeekBar.RangeMax = slideImages.Count - 1;
                 UpdateSlideDisplay();
+            }
+        }
+
+        private void LoadTrashCanFiles()
+        {
+            lstviewTrash.Items.Clear();
+
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            // 4. 휴지통 경로를 bin 폴더 바로 아래(..\TrashCan)로 변경
+            string trashFolder = Path.Combine(baseDir, @"..\TrashCan");
+
+            if (!Directory.Exists(trashFolder)) return;
+
+            DirectoryInfo di = new DirectoryInfo(trashFolder);
+
+            var folders = di.GetDirectories().OrderBy(d => d.CreationTime).ToList();
+            foreach (var folder in folders)
+            {
+                ListViewItem item = new ListViewItem("[폴더] " + folder.Name);
+                item.Tag = "휴지통파일";
+                lstviewTrash.Items.Add(item);
+            }
+
+            var files = di.GetFiles().OrderBy(f => f.CreationTime).ToList();
+            foreach (var file in files)
+            {
+                ListViewItem item = new ListViewItem(file.Name);
+                item.Tag = "휴지통파일";
+                lstviewTrash.Items.Add(item);
             }
         }
 
@@ -115,7 +153,6 @@ namespace AD_AI_LearningData_Editor
 
             string currentImagePath = slideImages[currentSlideIndex];
 
-            // 이전 이미지 리소스 해제 (메모리 누수 및 파일 잠금 방지)
             if (picVideoBox.Image != null)
             {
                 Image oldImage = picVideoBox.Image;
@@ -128,17 +165,16 @@ namespace AD_AI_LearningData_Editor
                 picVideoBox.Image = Image.FromStream(fs);
             }
 
-            // Slider(게르만어:미끄러짐) UI 및 Text 업데이트
-            sdrSeekBar.Value = currentSlideIndex + 1;
+            isUpdatingSlider = true;
+            sdrSeekBar.Value = currentSlideIndex;
             sdrSeekBar.Text = $"{currentSlideIndex + 1}/{slideImages.Count}";
+            isUpdatingSlider = false;
 
-            // 리스트뷰 색상 초기화 (이전 항목 검은색 복구)
             if (lastHighlightedItem != null)
             {
                 lastHighlightedItem.ForeColor = Color.Black;
             }
 
-            // 현재 출력 중인 파일을 찾아 초록색으로 변경
             string currentFileName = Path.GetFileName(currentImagePath);
             foreach (ListViewItem item in lstviewFileListD.Items)
             {
@@ -146,37 +182,173 @@ namespace AD_AI_LearningData_Editor
                 {
                     item.ForeColor = Color.Green;
                     lastHighlightedItem = item;
+                    item.EnsureVisible();
                     break;
                 }
             }
         }
 
-        // 재생 및 정지 버튼 클릭 이벤트
         private void btnPlayStop_Click(object sender, EventArgs e)
         {
             if (slideImages.Count == 0) return;
 
             if (videoTimer.Enabled)
             {
-                videoTimer.Stop(); // 타이머 중단 시 현재 이미지에서 멈춤
+                videoTimer.Stop();
             }
             else
             {
+                if (currentSlideIndex >= slideImages.Count - 1)
+                {
+                    currentSlideIndex = 0;
+                }
                 videoTimer.Start();
             }
         }
 
         private void VideoTimer_Tick(object sender, EventArgs e)
         {
-            currentSlideIndex++;
-            if (currentSlideIndex >= slideImages.Count)
+            if (currentSlideIndex >= slideImages.Count - 1)
             {
-                currentSlideIndex = 0; // 끝까지 재생 시 처음으로 루프
+                videoTimer.Stop();
+                return;
             }
+            currentSlideIndex++;
             UpdateSlideDisplay();
         }
 
-        // 기존 탭 및 기타 이벤트 메서드 유지
+        private void SdrSeekBar_onValueChanged(object sender, int newValue)
+        {
+            if (isUpdatingSlider || slideImages.Count == 0) return;
+            currentSlideIndex = newValue;
+            UpdateSlideDisplay();
+        }
+
+        private void MoveSlide(int frames)
+        {
+            if (slideImages.Count == 0) return;
+
+            currentSlideIndex += frames;
+
+            if (currentSlideIndex < 0) currentSlideIndex = 0;
+            if (currentSlideIndex >= slideImages.Count) currentSlideIndex = slideImages.Count - 1;
+
+            UpdateSlideDisplay();
+        }
+
+        private void btnNxt1F_Click(object sender, EventArgs e) { MoveSlide(1); }
+        private void btnNxt5F_Click(object sender, EventArgs e) { MoveSlide(5); }
+        private void btnPre1F_Click(object sender, EventArgs e) { MoveSlide(-1); }
+        private void btnPre5F_Click(object sender, EventArgs e) { MoveSlide(-5); }
+
+        private void btnDel_Click(object sender, EventArgs e)
+        {
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string trashFolder = Path.Combine(baseDir, @"..\TrashCan");
+
+            if (!Directory.Exists(trashFolder))
+            {
+                Directory.CreateDirectory(trashFolder);
+            }
+
+            List<string> targets = new List<string>();
+
+            if (lstviewFileListD.SelectedItems.Count > 0)
+            {
+                string uploadFolder = Path.Combine(baseDir, @"..\..\UploadedFile");
+                foreach (ListViewItem item in lstviewFileListD.SelectedItems)
+                {
+                    string name = item.Text.Replace("[폴더] ", "");
+                    targets.Add(Path.Combine(uploadFolder, name));
+                }
+            }
+            else
+            {
+                if (slideImages.Count > 0 && currentSlideIndex >= 0 && currentSlideIndex < slideImages.Count)
+                {
+                    targets.Add(slideImages[currentSlideIndex]);
+                }
+            }
+
+            if (targets.Count == 0) return;
+
+            if (videoTimer.Enabled) videoTimer.Stop();
+
+            foreach (string target in targets)
+            {
+                if (picVideoBox.Image != null && slideImages.Count > 0 && target == slideImages[currentSlideIndex])
+                {
+                    Image old = picVideoBox.Image;
+                    picVideoBox.Image = null;
+                    old.Dispose();
+                }
+
+                try
+                {
+                    string dest = Path.Combine(trashFolder, Path.GetFileName(target));
+                    if (Directory.Exists(target))
+                    {
+                        Directory.Move(target, dest);
+                    }
+                    else if (File.Exists(target))
+                    {
+                        File.Move(target, dest);
+                    }
+                }
+                catch { }
+            }
+
+            LoadUploadedFilesToD();
+            LoadTrashCanFiles();
+        }
+
+        // 1. 파일 탐색기 열기 기능
+        private void btnOpnFileExplrr_Click(object sender, EventArgs e)
+        {
+            string binFolder = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\"));
+            // Process(라틴어:나아가다) 시작
+            System.Diagnostics.Process.Start("explorer.exe", binFolder);
+        }
+
+        // 3. 휴지통 복구 기능
+        private void btnRestoration_Click(object sender, EventArgs e)
+        {
+            if (lstviewTrash.SelectedItems.Count == 0) return;
+
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string trashFolder = Path.Combine(baseDir, @"..\TrashCan");
+            string uploadFolder = Path.Combine(baseDir, @"..\..\UploadedFile");
+
+            if (!Directory.Exists(uploadFolder))
+            {
+                Directory.CreateDirectory(uploadFolder);
+            }
+
+            foreach (ListViewItem item in lstviewTrash.SelectedItems)
+            {
+                string fileName = item.Text.Replace("[폴더] ", "");
+                string sourcePath = Path.Combine(trashFolder, fileName);
+                string destPath = Path.Combine(uploadFolder, fileName);
+
+                try
+                {
+                    if (Directory.Exists(sourcePath))
+                    {
+                        Directory.Move(sourcePath, destPath);
+                    }
+                    else if (File.Exists(sourcePath))
+                    {
+                        // Restore(라틴어:다시세우다)
+                        File.Move(sourcePath, destPath);
+                    }
+                }
+                catch { }
+            }
+
+            LoadUploadedFilesToD();
+            LoadTrashCanFiles();
+        }
+
         private void SetupTabs()
         {
             MaterialTabControl tabControl = new MaterialTabControl();
@@ -227,14 +399,19 @@ namespace AD_AI_LearningData_Editor
         private void listView1_SelectedIndexChanged(object sender, EventArgs e) { }
         private void listView1_SelectedIndexChanged_1(object sender, EventArgs e) { }
 
+        // 2, 3. 뒤로 가기 시 상태 텍스트 비우기 및 복구 버튼 숨김
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
             lstviewFileList.Visible = false;
             lstviewFileListD.Visible = false;
             lstviewTrash.Visible = false;
             lstviewMain.Visible = true;
+
+            lblLstVwName.Text = "";
+            btnRestoration.Visible = false;
         }
 
+        // 2, 3. 텍스트 동기화 및 복구 버튼 노출
         private void lstviewMain_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             if (lstviewMain.SelectedItems.Count > 0)
@@ -247,6 +424,9 @@ namespace AD_AI_LearningData_Editor
                     lstviewFileList.Visible = true;
                     lstviewFileListD.Visible = true;
                     lstviewTrash.Visible = false;
+
+                    lblLstVwName.Text = "[파일 목록]";
+                    btnRestoration.Visible = false;
                 }
                 else if (itemTag == "휴지통")
                 {
@@ -254,6 +434,9 @@ namespace AD_AI_LearningData_Editor
                     lstviewFileList.Visible = false;
                     lstviewFileListD.Visible = false;
                     lstviewTrash.Visible = true;
+
+                    lblLstVwName.Text = "[휴지통]";
+                    btnRestoration.Visible = true;
                 }
             }
         }
