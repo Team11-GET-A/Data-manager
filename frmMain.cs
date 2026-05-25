@@ -20,6 +20,12 @@ namespace AD_AI_LearningData_Editor
         private bool isUpdatingSlider = false;
         private FileSystemWatcher trashWatcher;
 
+        // [추가 변수] 감마 및 색 필터 관리를 위한 백업 경로 및 상태 변수
+        private string gammaBackupPath = null;
+        private string colorFilterBackupPath = null;
+        private Button activePaletteButton = null;
+        private List<Button> paletteButtons = new List<Button>();
+
         public frmMain()
         {
             InitializeComponent();
@@ -56,6 +62,7 @@ namespace AD_AI_LearningData_Editor
             this.lstviewFileList.MouseDoubleClick += lstviewFileList_MouseDoubleClick;
 
             InitializeSpeedController();
+            InitializeImageEditor();
         }
 
         private void InitializeSpeedController()
@@ -70,7 +77,9 @@ namespace AD_AI_LearningData_Editor
             btnSpeedPlus.Click += btnSpeedPlus_Click;
             btnSpeedMinus.Click += btnSpeedMinus_Click;
             sdrSpeedController.onValueChanged += sdrSpeedController_onValueChanged;
-            sdrSpeedController.BackColor = Color.FromArgb(45, 45, 45);
+
+            sdrSpeedController.BackColor = Color.FromArgb(255, 45, 45, 45);
+            pnlSpeedPopup.BackColor = Color.FromArgb(255, 35, 35, 35);
 
             lblSpeedText.Parent = pnlSpeedPopup;
             lblSpeedText.BackColor = Color.Transparent;
@@ -126,19 +135,433 @@ namespace AD_AI_LearningData_Editor
             {
                 videoTimer.Interval = Math.Max(1, (int)(33 / speed));
             }
+        }
 
-            if (pnlSpeedPopup.Visible)
+        private void InitializeImageEditor()
+        {
+            lstviewFileListD.HideSelection = false;
+
+            // [수정] 각 버튼 클릭 시 해당 패널을 열고 crdProperty을 숨김
+            btnColorProperty.Click += (s, e) => { ShowPropertyPanel(pnlColorProperty); crdProperty.Visible = false; };
+            btnContrastProperty.Click += (s, e) => { ShowPropertyPanel(pnlContrastProperty); crdProperty.Visible = false; };
+            btnROI.Click += (s, e) => { ShowPropertyPanel(pnlROI); crdProperty.Visible = false; };
+
+            btnNoise.Click += btnNoise_Click;
+            btnMirror.Click += btnMirror_Click;
+
+            btnROILU.Click += (s, e) => ApplyROIBlackout(0, 0);
+            btnROIU.Click += (s, e) => ApplyROIBlackout(0, 1);
+            btnROIRU.Click += (s, e) => ApplyROIBlackout(0, 2);
+            btnROIL.Click += (s, e) => ApplyROIBlackout(1, 0);
+            btnROICenter.Click += (s, e) => ApplyROIBlackout(1, 1);
+            btnROIR.Click += (s, e) => ApplyROIBlackout(1, 2);
+            btnROILD.Click += (s, e) => ApplyROIBlackout(2, 0);
+            btnROID.Click += (s, e) => ApplyROIBlackout(2, 1);
+            btnROIRD.Click += (s, e) => ApplyROIBlackout(2, 2);
+
+            trcbrContrastProperty.Minimum = -10;
+            trcbrContrastProperty.Maximum = 10;
+            trcbrContrastProperty.Value = 0;
+            trcbrContrastProperty.Scroll += trcbrContrastProperty_Scroll;
+
+            // [추가] 색 필터 관련 컨트롤 이벤트 및 리스트 초기화
+            paletteButtons = new List<Button> { btnPalette1, btnPalette2, btnPalette3, btnPalette4, btnPalette5};
+            foreach (var btn in paletteButtons)
             {
-                int padding = 16;
-                int usableWidth = sdrSpeedController.Width - (padding * 2);
+                btn.Click += PaletteButton_Click;
+            }
 
-                double ratio = (double)(sliderValue - sdrSpeedController.RangeMin) /
-                               (sdrSpeedController.RangeMax - sdrSpeedController.RangeMin);
+            trcbrRed.Scroll += ColorTrackBar_Scroll;
+            trcbrGreen.Scroll += ColorTrackBar_Scroll;
+            trcbrBlue.Scroll += ColorTrackBar_Scroll;
 
-                int newX = sdrSpeedController.Location.X + padding + (int)(usableWidth * ratio) - (lblSpeedText.Width / 2);
-                int newY = sdrSpeedController.Location.Y + (sdrSpeedController.Height / 2) - (lblSpeedText.Height / 2);
+            btnColorCfm.Click += btnColorCfm_Click;
+            btnColorCancle.Click += btnColorCancle_Click;
 
-                lblSpeedText.Location = new Point(newX, newY);
+            // [추가] 외부 영역 클릭 감지를 위한 메시지 필터 등록 (추가 기능 2번)
+            Application.AddMessageFilter(new PropertyPanelFilter(this));
+        }
+
+        // [수정] 패널 제어 전용 메서드 변경
+        private void ShowPropertyPanel(Control activeControl)
+        {
+            pnlContrastProperty.Visible = (activeControl == pnlContrastProperty);
+            pnlROI.Visible = (activeControl == pnlROI);
+            pnlColorProperty.Visible = (activeControl == pnlColorProperty);
+        }
+
+        private string GetTargetImagePath()
+        {
+            if (lstviewFileListD.SelectedItems.Count > 0)
+            {
+                string selectedText = lstviewFileListD.SelectedItems[0].Text;
+                if (selectedText.StartsWith("[폴더]")) return null;
+
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string uploadFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
+                return Path.Combine(uploadFolder, selectedText);
+            }
+
+            if (slideImages.Count > 0 && currentSlideIndex >= 0 && currentSlideIndex < slideImages.Count)
+            {
+                return slideImages[currentSlideIndex];
+            }
+            return null;
+        }
+
+        private void ModifyTargetImage(Action<Bitmap> modifyAction)
+        {
+            string targetPath = GetTargetImagePath();
+            if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) return;
+
+            if (picVideoBox.Image != null)
+            {
+                picVideoBox.Image.Dispose();
+                picVideoBox.Image = null;
+            }
+
+            Bitmap targetBitmap = null;
+            try
+            {
+                using (FileStream fs = new FileStream(targetPath, FileMode.Open, FileAccess.Read))
+                {
+                    using (Image originalImg = Image.FromStream(fs))
+                    {
+                        targetBitmap = new Bitmap(originalImg);
+                    }
+                }
+
+                modifyAction(targetBitmap);
+
+                targetBitmap.Save(targetPath, System.Drawing.Imaging.ImageFormat.Jpeg);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"이미지 편집 중 오류가 발생했습니다: {ex.Message}");
+            }
+            finally
+            {
+                if (targetBitmap != null) targetBitmap.Dispose();
+            }
+
+            UpdateSlideDisplay();
+        }
+
+        private void btnNoise_Click(object sender, EventArgs e)
+        {
+            ModifyTargetImage(bmp =>
+            {
+                int degradedWidth = Math.Max(1, bmp.Width / 4);
+                int degradedHeight = Math.Max(1, bmp.Height / 4);
+
+                using (Bitmap lowResBmp = new Bitmap(bmp, degradedWidth, degradedHeight))
+                {
+                    using (Graphics g = Graphics.FromImage(bmp))
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                        g.DrawImage(lowResBmp, 0, 0, bmp.Width, bmp.Height);
+                    }
+                }
+            });
+        }
+
+        private void btnMirror_Click(object sender, EventArgs e)
+        {
+            ModifyTargetImage(bmp =>
+            {
+                bmp.RotateFlip(RotateFlipType.RotateNoneFlipX);
+            });
+        }
+
+        private void ApplyROIBlackout(int row, int col)
+        {
+            ModifyTargetImage(bmp =>
+            {
+                int w = bmp.Width / 3;
+                int h = bmp.Height / 3;
+                int x = col * w;
+                int y = row * h;
+
+                int rectWidth = (col == 2) ? bmp.Width - x : w;
+                int rectHeight = (row == 2) ? bmp.Height - y : h;
+
+                using (Graphics g = Graphics.FromImage(bmp))
+                {
+                    g.FillRectangle(Brushes.Black, new Rectangle(x, y, rectWidth, rectHeight));
+                }
+            });
+        }
+
+        // [수정] 감마 조절 트랙바 스크롤 로직 변경 (중앙값 복구 기능 반영)
+        private void trcbrContrastProperty_Scroll(object sender, EventArgs e)
+        {
+            string targetPath = GetTargetImagePath();
+            if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) return;
+
+            // 백업 파일 생성 처리
+            if (string.IsNullOrEmpty(gammaBackupPath) || !File.Exists(gammaBackupPath))
+            {
+                gammaBackupPath = targetPath + ".gback";
+                if (File.Exists(gammaBackupPath)) File.Delete(gammaBackupPath);
+                File.Copy(targetPath, gammaBackupPath);
+            }
+
+            int trackValue = trcbrContrastProperty.Value;
+
+            // 트랙바를 중앙(0)으로 옮기면 원래 백업 상태 파일로 복원 후 종료
+            if (trackValue == 0)
+            {
+                if (picVideoBox.Image != null)
+                {
+                    picVideoBox.Image.Dispose();
+                    picVideoBox.Image = null;
+                }
+                File.Delete(targetPath);
+                File.Copy(gammaBackupPath, targetPath);
+                UpdateSlideDisplay();
+                return;
+            }
+
+            double gammaCalculationValue = 1.0;
+            if (trackValue > 0)
+            {
+                gammaCalculationValue = 1.0 - (trackValue * 0.08);
+            }
+            else if (trackValue < 0)
+            {
+                gammaCalculationValue = 1.0 + (-trackValue * 0.2);
+            }
+
+            // 실시간 감마 연산 시 항상 백업본(원본)을 기준으로 계산하여 원본 타겟 파일에 덮어씀
+            if (picVideoBox.Image != null)
+            {
+                picVideoBox.Image.Dispose();
+                picVideoBox.Image = null;
+            }
+
+            Bitmap targetBitmap = null;
+            try
+            {
+                using (FileStream fs = new FileStream(gammaBackupPath, FileMode.Open, FileAccess.Read))
+                {
+                    using (Image originalImg = Image.FromStream(fs))
+                    {
+                        targetBitmap = new Bitmap(originalImg);
+                    }
+                }
+
+                using (Bitmap tempCopy = (Bitmap)targetBitmap.Clone())
+                {
+                    using (Graphics g = Graphics.FromImage(targetBitmap))
+                    {
+                        using (System.Drawing.Imaging.ImageAttributes attributes = new System.Drawing.Imaging.ImageAttributes())
+                        {
+                            attributes.SetGamma((float)gammaCalculationValue, System.Drawing.Imaging.ColorAdjustType.Bitmap);
+                            g.DrawImage(tempCopy, new Rectangle(0, 0, targetBitmap.Width, targetBitmap.Height),
+                                0, 0, tempCopy.Width, tempCopy.Height, GraphicsUnit.Pixel, attributes);
+                        }
+                    }
+                }
+                targetBitmap.Save(targetPath, System.Drawing.Imaging.ImageFormat.Jpeg);
+            }
+            catch { }
+            finally
+            {
+                if (targetBitmap != null) targetBitmap.Dispose();
+            }
+
+            UpdateSlideDisplay();
+        }
+
+        // [추가] 3번 기능: 팔레트 버튼 클릭 이벤트 처리
+        private void PaletteButton_Click(object sender, EventArgs e)
+        {
+            Button clickedButton = sender as Button;
+            if (clickedButton == null) return;
+
+            activePaletteButton = clickedButton;
+
+            // 클릭 버튼 활성화, 나머지 5개 버튼 비활성화
+            foreach (var btn in paletteButtons)
+            {
+                btn.Enabled = (btn == clickedButton);
+            }
+
+            // 트랙바 값을 왼쪽 끝값(=0)으로 초기화
+            trcbrRed.Value = 0;
+            trcbrGreen.Value = 0;
+            trcbrBlue.Value = 0;
+
+            // pnlColorPalette 노출
+            pnlColorPalette.Visible = true;
+
+            // 색 필터 적용 전 원본 파일 임시 백업 복사본 생성
+            string targetPath = GetTargetImagePath();
+            if (!string.IsNullOrEmpty(targetPath) && File.Exists(targetPath))
+            {
+                colorFilterBackupPath = targetPath + ".cback";
+                if (File.Exists(colorFilterBackupPath)) File.Delete(colorFilterBackupPath);
+                File.Copy(targetPath, colorFilterBackupPath);
+            }
+        }
+
+        // [추가] 3번 기능: RGB 트랙바 실시간 스크롤 연동 기능
+        private void ColorTrackBar_Scroll(object sender, EventArgs e)
+        {
+            if (activePaletteButton == null || string.IsNullOrEmpty(colorFilterBackupPath) || !File.Exists(colorFilterBackupPath)) return;
+
+            int r = trcbrRed.Value;
+            int g = trcbrGreen.Value;
+            int b = trcbrBlue.Value;
+
+            // 활성화된 버튼의 BackColor 변경
+            activePaletteButton.BackColor = Color.FromArgb(r, g, b);
+
+            string targetPath = GetTargetImagePath();
+            if (string.IsNullOrEmpty(targetPath)) return;
+
+            if (picVideoBox.Image != null)
+            {
+                picVideoBox.Image.Dispose();
+                picVideoBox.Image = null;
+            }
+
+            Bitmap filterBitmap = null;
+            try
+            {
+                // 항상 백업 파일(원본)로부터 이미지를 오픈
+                using (FileStream fs = new FileStream(colorFilterBackupPath, FileMode.Open, FileAccess.Read))
+                {
+                    using (Image originalImg = Image.FromStream(fs))
+                    {
+                        filterBitmap = new Bitmap(originalImg);
+                    }
+                }
+
+                // 이미지에 색상 필터(Tint) 오버레이 처리
+                using (Graphics gr = Graphics.FromImage(filterBitmap))
+                {
+                    using (System.Drawing.Imaging.ImageAttributes attributes = new System.Drawing.Imaging.ImageAttributes())
+                    {
+                        // 색상 오프셋 가산 행렬 (RGB 강도를 적절한 비율로 이미지 크기에 맞춤 오버레이)
+                        float[][] colorMatrixElements = {
+                            new float[] {1, 0, 0, 0, 0},
+                            new float[] {0, 1, 0, 0, 0},
+                            new float[] {0, 0, 1, 0, 0},
+                            new float[] {0, 0, 0, 1, 0},
+                            new float[] {r / 255f * 0.4f, g / 255f * 0.4f, b / 255f * 0.4f, 0, 1}
+                        };
+                        System.Drawing.Imaging.ColorMatrix colorMatrix = new System.Drawing.Imaging.ColorMatrix(colorMatrixElements);
+                        attributes.SetColorMatrix(colorMatrix);
+
+                        gr.DrawImage(filterBitmap, new Rectangle(0, 0, filterBitmap.Width, filterBitmap.Height),
+                            0, 0, filterBitmap.Width, filterBitmap.Height, GraphicsUnit.Pixel, attributes);
+                    }
+                }
+
+                filterBitmap.Save(targetPath, System.Drawing.Imaging.ImageFormat.Jpeg);
+            }
+            catch { }
+            finally
+            {
+                if (filterBitmap != null) filterBitmap.Dispose();
+            }
+
+            UpdateSlideDisplay();
+        }
+
+        // [추가] 3번 기능: 색 필터 확인 버튼 클릭 처리
+        private void btnColorCfm_Click(object sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(colorFilterBackupPath) && File.Exists(colorFilterBackupPath))
+            {
+                try { File.Delete(colorFilterBackupPath); } catch { }
+            }
+            colorFilterBackupPath = null;
+            ResetPaletteStatus();
+        }
+
+        // [추가] 3번 기능: 색 필터 취소 버튼 클릭 처리 (삭제 및 이름 대체 복구)
+        private void btnColorCancle_Click(object sender, EventArgs e)
+        {
+            string targetPath = GetTargetImagePath();
+
+            if (!string.IsNullOrEmpty(colorFilterBackupPath) && File.Exists(colorFilterBackupPath) && !string.IsNullOrEmpty(targetPath))
+            {
+                if (picVideoBox.Image != null)
+                {
+                    picVideoBox.Image.Dispose();
+                    picVideoBox.Image = null;
+                }
+
+                try
+                {
+                    if (File.Exists(targetPath)) File.Delete(targetPath);
+                    File.Move(colorFilterBackupPath, targetPath); // 임시 파일명을 대상 원본 파일명으로 변경 대체
+                }
+                catch { }
+            }
+            colorFilterBackupPath = null;
+            ResetPaletteStatus();
+            UpdateSlideDisplay();
+        }
+
+        // [추가] 팔레트 상태 초기화 공용 헬퍼 메서드
+        private void ResetPaletteStatus()
+        {
+            activePaletteButton = null;
+            foreach (var btn in paletteButtons)
+            {
+                btn.Enabled = true;
+            }
+            pnlColorPalette.Visible = false;
+        }
+
+        // [추가 인터널 클래스] 속성 패널 외부 클릭 감지용 메시지 필터 (추가 기능 2번)
+        private class PropertyPanelFilter : IMessageFilter
+        {
+            private frmMain _form;
+            private const int WM_LBUTTONDOWN = 0x0201;
+
+            public PropertyPanelFilter(frmMain form)
+            {
+                _form = form;
+            }
+
+            public bool PreFilterMessage(ref Message m)
+            {
+                if (m.Msg == WM_LBUTTONDOWN)
+                {
+                    if (_form.pnlContrastProperty.Visible || _form.pnlROI.Visible || _form.pnlColorProperty.Visible || _form.pnlColorPalette.Visible)
+                    {
+                        Point mousePos = Control.MousePosition;
+
+                        if (IsOutside(_form.pnlContrastProperty, mousePos) && IsOutside(_form.btnContrastProperty, mousePos) &&
+                            IsOutside(_form.pnlROI, mousePos) && IsOutside(_form.btnROI, mousePos) &&
+                            IsOutside(_form.pnlColorProperty, mousePos) && IsOutside(_form.btnColorProperty, mousePos) &&
+                            IsOutside(_form.pnlColorPalette, mousePos) &&
+                            IsOutside(_form.btnPalette1, mousePos) && IsOutside(_form.btnPalette2, mousePos) &&
+                            IsOutside(_form.btnPalette3, mousePos) && IsOutside(_form.btnPalette4, mousePos))
+                        {
+                            _form.Invoke(new Action(() =>
+                            {
+                                _form.pnlContrastProperty.Visible = false;
+                                _form.pnlROI.Visible = false;
+                                _form.pnlColorProperty.Visible = false;
+                                _form.pnlColorPalette.Visible = false;
+                                _form.crdProperty.Visible = true; // 숨겨진 crdProperty 노출
+                            }));
+                        }
+                    }
+                }
+                return false;
+            }
+
+            private bool IsOutside(Control c, Point p)
+            {
+                if (c == null || !c.Visible) return true;
+                Rectangle r = c.RectangleToScreen(c.ClientRectangle);
+                return !r.Contains(p);
             }
         }
 
@@ -594,5 +1017,9 @@ namespace AD_AI_LearningData_Editor
                 }
             }
         }
+
+        private void trackBar1_Scroll(object sender, EventArgs e) { }
+        private void pnlContrastProperty_Paint(object sender, PaintEventArgs e) { }
+        private void pnlCloseProperty_Paint(object sender, PaintEventArgs e) { }
     }
 }
