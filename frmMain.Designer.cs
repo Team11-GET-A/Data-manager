@@ -29,10 +29,10 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[파일추가]" }, 1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
+            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일추가]" }, 1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
-            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일목록]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[파일목록]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem4 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
             sdrSeekBar = new MaterialSkin.Controls.MaterialSlider();
             pnlVideo = new Panel();
             pnlROI = new Panel();
@@ -90,7 +90,6 @@
             sdrSpeedController = new MaterialSkin.Controls.MaterialSlider();
             lblSpeedText = new Label();
             btnOpnFolderList2 = new Button();
-            pnlVideo.SuspendLayout();
             pnlROI.SuspendLayout();
             pnlContrastProperty.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trcbrContrastProperty).BeginInit();
@@ -119,8 +118,6 @@
             // pnlVideo
             // 
             pnlVideo.BackColor = Color.Black;
-            pnlVideo.Controls.Add(pnlROI);
-            pnlVideo.Controls.Add(pnlContrastProperty);
             pnlVideo.ForeColor = Color.Coral;
             pnlVideo.Location = new Point(21, 11);
             pnlVideo.Name = "pnlVideo";
@@ -139,7 +136,7 @@
             pnlROI.Controls.Add(btnROILD);
             pnlROI.Controls.Add(btnROILU);
             pnlROI.Controls.Add(btnROICenter);
-            pnlROI.Location = new Point(567, 135);
+            pnlROI.Location = new Point(1111, 572);
             pnlROI.Name = "pnlROI";
             pnlROI.Size = new Size(483, 245);
             pnlROI.TabIndex = 16;
@@ -224,7 +221,7 @@
             // 
             pnlContrastProperty.BackColor = SystemColors.ControlDark;
             pnlContrastProperty.Controls.Add(trcbrContrastProperty);
-            pnlContrastProperty.Location = new Point(567, 16);
+            pnlContrastProperty.Location = new Point(1111, 572);
             pnlContrastProperty.Name = "pnlContrastProperty";
             pnlContrastProperty.Size = new Size(483, 77);
             pnlContrastProperty.TabIndex = 17;
@@ -246,7 +243,7 @@
             pnlColorProperty.BackColor = SystemColors.ControlDark;
             pnlColorProperty.BorderStyle = BorderStyle.Fixed3D;
             pnlColorProperty.Controls.Add(GBPalete);
-            pnlColorProperty.Location = new Point(0, 349);
+            pnlColorProperty.Location = new Point(1111, 572);
             pnlColorProperty.Name = "pnlColorProperty";
             pnlColorProperty.Size = new Size(483, 98);
             pnlColorProperty.TabIndex = 17;
@@ -268,6 +265,7 @@
             GBPalete.TabIndex = 11;
             GBPalete.TabStop = false;
             GBPalete.Text = "필터";
+            GBPalete.Enter += GBPalete_Enter;
             // 
             // btnColorCancle
             // 
@@ -569,7 +567,6 @@
             // pnlFolderList
             // 
             pnlFolderList.BorderStyle = BorderStyle.Fixed3D;
-            pnlFolderList.Controls.Add(pnlColorProperty);
             pnlFolderList.Controls.Add(btnRestoration);
             pnlFolderList.Controls.Add(lblLstVwName);
             pnlFolderList.Controls.Add(btnOpnFileExplrr);
@@ -622,8 +619,8 @@
             // lstviewFileList
             // 
             lstviewFileList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem1.Tag = "파일추가";
-            lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem1 });
+            listViewItem2.Tag = "파일추가";
+            lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem2 });
             lstviewFileList.Location = new Point(0, 44);
             lstviewFileList.Name = "lstviewFileList";
             lstviewFileList.Size = new Size(483, 25);
@@ -667,9 +664,9 @@
             // lstviewMain
             // 
             lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem2.Tag = "파일목록";
-            listViewItem3.Tag = "휴지통";
-            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem2, listViewItem3 });
+            listViewItem3.Tag = "파일목록";
+            listViewItem4.Tag = "휴지통";
+            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem3, listViewItem4 });
             lstviewMain.Location = new Point(-1, 44);
             lstviewMain.Name = "lstviewMain";
             lstviewMain.Size = new Size(483, 509);
@@ -877,6 +874,9 @@
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = SystemColors.Control;
             ClientSize = new Size(1600, 900);
+            Controls.Add(pnlContrastProperty);
+            Controls.Add(pnlColorProperty);
+            Controls.Add(pnlROI);
             Controls.Add(pnlSpeedPopup);
             Controls.Add(pnlCtrl);
             Controls.Add(pnlFolderList);
@@ -888,7 +888,6 @@
             Padding = new Padding(0);
             StartPosition = FormStartPosition.CenterScreen;
             Text = "11팀";
-            pnlVideo.ResumeLayout(false);
             pnlROI.ResumeLayout(false);
             pnlContrastProperty.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)trcbrContrastProperty).EndInit();

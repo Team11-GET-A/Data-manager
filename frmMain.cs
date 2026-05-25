@@ -1131,6 +1131,11 @@ namespace AD_AI_LearningData_Editor
                 return !r.Contains(p);
             }
         }
+
+        private void GBPalete_Enter(object sender, EventArgs e)
+        {
+
+        }
     }
 
     public class ClickOutsideFilter : IMessageFilter
