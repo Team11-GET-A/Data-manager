@@ -29,21 +29,12 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            ListViewItem listViewItem4 = new ListViewItem(new string[] { "[파일추가]" }, 1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
+            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[파일추가]" }, 1, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
-            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[파일목록]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem5 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일목록]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
             sdrSeekBar = new MaterialSkin.Controls.MaterialSlider();
             pnlVideo = new Panel();
-            pnlColorProperty = new Panel();
-            GBPalete = new GroupBox();
-            btnColorCancle = new MaterialSkin.Controls.MaterialButton();
-            btnColorCfm = new MaterialSkin.Controls.MaterialButton();
-            btnPalette4 = new Button();
-            btnPalette5 = new Button();
-            btnPalette3 = new Button();
-            btnPalette1 = new Button();
-            btnPalette2 = new Button();
             pnlROI = new Panel();
             btnROIR = new Button();
             btnROIL = new Button();
@@ -56,6 +47,15 @@
             btnROICenter = new Button();
             pnlContrastProperty = new Panel();
             trcbrContrastProperty = new TrackBar();
+            pnlColorProperty = new Panel();
+            GBPalete = new GroupBox();
+            btnColorCancle = new MaterialSkin.Controls.MaterialButton();
+            btnColorCfm = new MaterialSkin.Controls.MaterialButton();
+            btnPalette4 = new Button();
+            btnPalette5 = new Button();
+            btnPalette3 = new Button();
+            btnPalette1 = new Button();
+            btnPalette2 = new Button();
             btnContrastProperty = new MaterialSkin.Controls.MaterialButton();
             btnROI = new MaterialSkin.Controls.MaterialButton();
             btnColorProperty = new MaterialSkin.Controls.MaterialButton();
@@ -91,11 +91,11 @@
             lblSpeedText = new Label();
             btnOpnFolderList2 = new Button();
             pnlVideo.SuspendLayout();
-            pnlColorProperty.SuspendLayout();
-            GBPalete.SuspendLayout();
             pnlROI.SuspendLayout();
             pnlContrastProperty.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trcbrContrastProperty).BeginInit();
+            pnlColorProperty.SuspendLayout();
+            GBPalete.SuspendLayout();
             pnlProperty.SuspendLayout();
             crdProperty.SuspendLayout();
             pnlFolderList.SuspendLayout();
@@ -126,119 +126,6 @@
             pnlVideo.Name = "pnlVideo";
             pnlVideo.Size = new Size(1085, 552);
             pnlVideo.TabIndex = 1;
-            // 
-            // pnlColorProperty
-            // 
-            pnlColorProperty.BackColor = SystemColors.ControlDark;
-            pnlColorProperty.BorderStyle = BorderStyle.Fixed3D;
-            pnlColorProperty.Controls.Add(GBPalete);
-            pnlColorProperty.Location = new Point(9, 369);
-            pnlColorProperty.Name = "pnlColorProperty";
-            pnlColorProperty.Size = new Size(483, 98);
-            pnlColorProperty.TabIndex = 17;
-            pnlColorProperty.Visible = false;
-            // 
-            // GBPalete
-            // 
-            GBPalete.Controls.Add(btnColorCancle);
-            GBPalete.Controls.Add(btnColorCfm);
-            GBPalete.Controls.Add(btnPalette4);
-            GBPalete.Controls.Add(btnPalette5);
-            GBPalete.Controls.Add(btnPalette3);
-            GBPalete.Controls.Add(btnPalette1);
-            GBPalete.Controls.Add(btnPalette2);
-            GBPalete.Font = new Font("새굴림", 11.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            GBPalete.Location = new Point(6, 2);
-            GBPalete.Name = "GBPalete";
-            GBPalete.Size = new Size(465, 88);
-            GBPalete.TabIndex = 11;
-            GBPalete.TabStop = false;
-            GBPalete.Text = "필터";
-            // 
-            // btnColorCancle
-            // 
-            btnColorCancle.AutoSize = false;
-            btnColorCancle.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnColorCancle.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
-            btnColorCancle.Depth = 0;
-            btnColorCancle.HighEmphasis = true;
-            btnColorCancle.Icon = null;
-            btnColorCancle.Location = new Point(327, 31);
-            btnColorCancle.Margin = new Padding(4, 6, 4, 6);
-            btnColorCancle.MouseState = MaterialSkin.MouseState.HOVER;
-            btnColorCancle.Name = "btnColorCancle";
-            btnColorCancle.NoAccentTextColor = Color.Empty;
-            btnColorCancle.Size = new Size(63, 42);
-            btnColorCancle.TabIndex = 12;
-            btnColorCancle.Text = "취소";
-            btnColorCancle.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
-            btnColorCancle.UseAccentColor = false;
-            btnColorCancle.UseVisualStyleBackColor = true;
-            // 
-            // btnColorCfm
-            // 
-            btnColorCfm.AutoSize = false;
-            btnColorCfm.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnColorCfm.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
-            btnColorCfm.Depth = 0;
-            btnColorCfm.HighEmphasis = true;
-            btnColorCfm.Icon = null;
-            btnColorCfm.Location = new Point(394, 31);
-            btnColorCfm.Margin = new Padding(4, 6, 4, 6);
-            btnColorCfm.MouseState = MaterialSkin.MouseState.HOVER;
-            btnColorCfm.Name = "btnColorCfm";
-            btnColorCfm.NoAccentTextColor = Color.Empty;
-            btnColorCfm.Size = new Size(63, 42);
-            btnColorCfm.TabIndex = 11;
-            btnColorCfm.Text = "적용";
-            btnColorCfm.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
-            btnColorCfm.UseAccentColor = false;
-            btnColorCfm.UseVisualStyleBackColor = true;
-            // 
-            // btnPalette4
-            // 
-            btnPalette4.BackColor = Color.White;
-            btnPalette4.Location = new Point(200, 22);
-            btnPalette4.Name = "btnPalette4";
-            btnPalette4.Size = new Size(60, 60);
-            btnPalette4.TabIndex = 9;
-            btnPalette4.UseVisualStyleBackColor = false;
-            // 
-            // btnPalette5
-            // 
-            btnPalette5.BackColor = Color.White;
-            btnPalette5.Location = new Point(263, 22);
-            btnPalette5.Name = "btnPalette5";
-            btnPalette5.Size = new Size(60, 60);
-            btnPalette5.TabIndex = 6;
-            btnPalette5.UseVisualStyleBackColor = false;
-            // 
-            // btnPalette3
-            // 
-            btnPalette3.BackColor = Color.White;
-            btnPalette3.Location = new Point(136, 22);
-            btnPalette3.Name = "btnPalette3";
-            btnPalette3.Size = new Size(60, 60);
-            btnPalette3.TabIndex = 10;
-            btnPalette3.UseVisualStyleBackColor = false;
-            // 
-            // btnPalette1
-            // 
-            btnPalette1.BackColor = Color.White;
-            btnPalette1.Location = new Point(8, 22);
-            btnPalette1.Name = "btnPalette1";
-            btnPalette1.Size = new Size(60, 60);
-            btnPalette1.TabIndex = 5;
-            btnPalette1.UseVisualStyleBackColor = false;
-            // 
-            // btnPalette2
-            // 
-            btnPalette2.BackColor = Color.White;
-            btnPalette2.Location = new Point(72, 22);
-            btnPalette2.Name = "btnPalette2";
-            btnPalette2.Size = new Size(60, 60);
-            btnPalette2.TabIndex = 8;
-            btnPalette2.UseVisualStyleBackColor = false;
             // 
             // pnlROI
             // 
@@ -353,6 +240,119 @@
             trcbrContrastProperty.Size = new Size(392, 30);
             trcbrContrastProperty.TabIndex = 3;
             trcbrContrastProperty.TickStyle = TickStyle.None;
+            // 
+            // pnlColorProperty
+            // 
+            pnlColorProperty.BackColor = SystemColors.ControlDark;
+            pnlColorProperty.BorderStyle = BorderStyle.Fixed3D;
+            pnlColorProperty.Controls.Add(GBPalete);
+            pnlColorProperty.Location = new Point(0, 349);
+            pnlColorProperty.Name = "pnlColorProperty";
+            pnlColorProperty.Size = new Size(483, 98);
+            pnlColorProperty.TabIndex = 17;
+            pnlColorProperty.Visible = false;
+            // 
+            // GBPalete
+            // 
+            GBPalete.Controls.Add(btnColorCancle);
+            GBPalete.Controls.Add(btnColorCfm);
+            GBPalete.Controls.Add(btnPalette4);
+            GBPalete.Controls.Add(btnPalette5);
+            GBPalete.Controls.Add(btnPalette3);
+            GBPalete.Controls.Add(btnPalette1);
+            GBPalete.Controls.Add(btnPalette2);
+            GBPalete.Font = new Font("새굴림", 11.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            GBPalete.Location = new Point(5, 2);
+            GBPalete.Name = "GBPalete";
+            GBPalete.Size = new Size(465, 88);
+            GBPalete.TabIndex = 11;
+            GBPalete.TabStop = false;
+            GBPalete.Text = "필터";
+            // 
+            // btnColorCancle
+            // 
+            btnColorCancle.AutoSize = false;
+            btnColorCancle.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnColorCancle.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnColorCancle.Depth = 0;
+            btnColorCancle.HighEmphasis = true;
+            btnColorCancle.Icon = null;
+            btnColorCancle.Location = new Point(327, 31);
+            btnColorCancle.Margin = new Padding(4, 6, 4, 6);
+            btnColorCancle.MouseState = MaterialSkin.MouseState.HOVER;
+            btnColorCancle.Name = "btnColorCancle";
+            btnColorCancle.NoAccentTextColor = Color.Empty;
+            btnColorCancle.Size = new Size(63, 42);
+            btnColorCancle.TabIndex = 12;
+            btnColorCancle.Text = "취소";
+            btnColorCancle.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnColorCancle.UseAccentColor = false;
+            btnColorCancle.UseVisualStyleBackColor = true;
+            // 
+            // btnColorCfm
+            // 
+            btnColorCfm.AutoSize = false;
+            btnColorCfm.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnColorCfm.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnColorCfm.Depth = 0;
+            btnColorCfm.HighEmphasis = true;
+            btnColorCfm.Icon = null;
+            btnColorCfm.Location = new Point(394, 31);
+            btnColorCfm.Margin = new Padding(4, 6, 4, 6);
+            btnColorCfm.MouseState = MaterialSkin.MouseState.HOVER;
+            btnColorCfm.Name = "btnColorCfm";
+            btnColorCfm.NoAccentTextColor = Color.Empty;
+            btnColorCfm.Size = new Size(63, 42);
+            btnColorCfm.TabIndex = 11;
+            btnColorCfm.Text = "적용";
+            btnColorCfm.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnColorCfm.UseAccentColor = false;
+            btnColorCfm.UseVisualStyleBackColor = true;
+            // 
+            // btnPalette4
+            // 
+            btnPalette4.BackColor = Color.White;
+            btnPalette4.Location = new Point(199, 22);
+            btnPalette4.Name = "btnPalette4";
+            btnPalette4.Size = new Size(60, 60);
+            btnPalette4.TabIndex = 9;
+            btnPalette4.UseVisualStyleBackColor = false;
+            // 
+            // btnPalette5
+            // 
+            btnPalette5.BackColor = Color.White;
+            btnPalette5.Location = new Point(262, 22);
+            btnPalette5.Name = "btnPalette5";
+            btnPalette5.Size = new Size(60, 60);
+            btnPalette5.TabIndex = 6;
+            btnPalette5.UseVisualStyleBackColor = false;
+            // 
+            // btnPalette3
+            // 
+            btnPalette3.BackColor = Color.White;
+            btnPalette3.Location = new Point(135, 22);
+            btnPalette3.Name = "btnPalette3";
+            btnPalette3.Size = new Size(60, 60);
+            btnPalette3.TabIndex = 10;
+            btnPalette3.UseVisualStyleBackColor = false;
+            // 
+            // btnPalette1
+            // 
+            btnPalette1.BackColor = Color.White;
+            btnPalette1.Location = new Point(7, 22);
+            btnPalette1.Name = "btnPalette1";
+            btnPalette1.Size = new Size(60, 60);
+            btnPalette1.TabIndex = 5;
+            btnPalette1.UseVisualStyleBackColor = false;
+            // 
+            // btnPalette2
+            // 
+            btnPalette2.BackColor = Color.White;
+            btnPalette2.Location = new Point(71, 22);
+            btnPalette2.Name = "btnPalette2";
+            btnPalette2.Size = new Size(60, 60);
+            btnPalette2.TabIndex = 8;
+            btnPalette2.UseVisualStyleBackColor = false;
             // 
             // btnContrastProperty
             // 
@@ -622,8 +622,8 @@
             // lstviewFileList
             // 
             lstviewFileList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem4.Tag = "파일추가";
-            lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem4 });
+            listViewItem1.Tag = "파일추가";
+            lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem1 });
             lstviewFileList.Location = new Point(0, 44);
             lstviewFileList.Name = "lstviewFileList";
             lstviewFileList.Size = new Size(483, 25);
@@ -667,9 +667,9 @@
             // lstviewMain
             // 
             lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem1.Tag = "파일목록";
-            listViewItem5.Tag = "휴지통";
-            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem1, listViewItem5 });
+            listViewItem2.Tag = "파일목록";
+            listViewItem3.Tag = "휴지통";
+            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem2, listViewItem3 });
             lstviewMain.Location = new Point(-1, 44);
             lstviewMain.Name = "lstviewMain";
             lstviewMain.Size = new Size(483, 509);
@@ -889,11 +889,11 @@
             StartPosition = FormStartPosition.CenterScreen;
             Text = "11팀";
             pnlVideo.ResumeLayout(false);
-            pnlColorProperty.ResumeLayout(false);
-            GBPalete.ResumeLayout(false);
             pnlROI.ResumeLayout(false);
             pnlContrastProperty.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)trcbrContrastProperty).EndInit();
+            pnlColorProperty.ResumeLayout(false);
+            GBPalete.ResumeLayout(false);
             pnlProperty.ResumeLayout(false);
             crdProperty.ResumeLayout(false);
             pnlFolderList.ResumeLayout(false);
