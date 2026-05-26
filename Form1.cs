@@ -1,6 +1,8 @@
-﻿using MaterialSkin;
+﻿using System;
+using System.Drawing;
+using System.Windows.Forms;
+using MaterialSkin;
 using MaterialSkin.Controls;
-
 
 namespace AD_AI_LearningData_Editor
 {
@@ -21,6 +23,9 @@ namespace AD_AI_LearningData_Editor
             );
 
             SetupTabs();
+
+            // lstviewMain의 더블클릭 이벤트를 코드로 명시적 연결합니다.
+            this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
         }
 
         private void SetupTabs()
@@ -90,6 +95,42 @@ namespace AD_AI_LearningData_Editor
         private void listView1_SelectedIndexChanged_1(object sender, EventArgs e)
         {
 
+        }
+
+        /// <summary>
+        /// btnOpnFolderList 버튼 클릭 시 실행되는 메서드입니다.
+        /// 패널 내의 모든 리스트뷰를 숨긴 후 lstviewMain만 노출합니다.
+        /// </summary>
+        private void btnOpnFolderList1_Click(object sender, EventArgs e)
+        {
+            lstviewFileList.Visible = false;
+            lstviewTrash.Visible = false;
+            lstviewMain.Visible = true;
+        }
+
+        /// <summary>
+        /// lstviewMain의 아이템을 더블클릭했을 때 실행되는 메서드입니다.
+        /// </summary>
+        private void lstviewMain_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            // 선택된 아이템이 있는지 확인합니다.
+            if (lstviewMain.SelectedItems.Count > 0)
+            {
+                string selectedText = lstviewMain.SelectedItems[0].Text;
+
+                if (selectedText == "파일목록")
+                {
+                    lstviewMain.Visible = false;
+                    lstviewFileList.Visible = true;
+                    lstviewTrash.Visible = false;
+                }
+                else if (selectedText == "휴지통")
+                {
+                    lstviewMain.Visible = false;
+                    lstviewFileList.Visible = false;
+                    lstviewTrash.Visible = true;
+                }
+            }
         }
     }
 }
