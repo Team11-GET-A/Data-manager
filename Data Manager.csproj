@@ -13,4 +13,10 @@
     <PackageReference Include="MaterialSkin.2" Version="2.3.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="External\MaterialSkin-master\MaterialSkin\**\*.cs" />
+    <EmbeddedResource Remove="External\MaterialSkin-master\MaterialSkin\**\*.resx" />
+    <None Remove="External\MaterialSkin-master\MaterialSkin\**\*" />
+  </ItemGroup>
+
 </Project>
