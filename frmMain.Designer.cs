@@ -226,7 +226,6 @@
             pnlContrastProperty.Size = new Size(483, 77);
             pnlContrastProperty.TabIndex = 17;
             pnlContrastProperty.Visible = false;
-            pnlContrastProperty.Paint += pnlContrastProperty_Paint;
             // 
             // trcbrContrastProperty
             // 
@@ -271,19 +270,19 @@
             // 
             btnColorCancle.AutoSize = false;
             btnColorCancle.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnColorCancle.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnColorCancle.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnColorCancle.Depth = 0;
             btnColorCancle.HighEmphasis = true;
             btnColorCancle.Icon = null;
             btnColorCancle.Location = new Point(327, 31);
             btnColorCancle.Margin = new Padding(4, 6, 4, 6);
-            btnColorCancle.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnColorCancle.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnColorCancle.Name = "btnColorCancle";
             btnColorCancle.NoAccentTextColor = Color.Empty;
             btnColorCancle.Size = new Size(63, 42);
             btnColorCancle.TabIndex = 12;
             btnColorCancle.Text = "취소";
-            btnColorCancle.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnColorCancle.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnColorCancle.UseAccentColor = false;
             btnColorCancle.UseVisualStyleBackColor = true;
             // 
@@ -291,19 +290,19 @@
             // 
             btnColorCfm.AutoSize = false;
             btnColorCfm.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnColorCfm.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnColorCfm.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnColorCfm.Depth = 0;
             btnColorCfm.HighEmphasis = true;
             btnColorCfm.Icon = null;
             btnColorCfm.Location = new Point(394, 31);
             btnColorCfm.Margin = new Padding(4, 6, 4, 6);
-            btnColorCfm.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnColorCfm.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnColorCfm.Name = "btnColorCfm";
             btnColorCfm.NoAccentTextColor = Color.Empty;
             btnColorCfm.Size = new Size(63, 42);
             btnColorCfm.TabIndex = 11;
             btnColorCfm.Text = "적용";
-            btnColorCfm.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnColorCfm.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnColorCfm.UseAccentColor = false;
             btnColorCfm.UseVisualStyleBackColor = true;
             // 
@@ -462,7 +461,7 @@
             btnDel.AutoSize = false;
             btnDel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             btnDel.BackColor = SystemColors.Control;
-            btnDel.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnDel.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnDel.Depth = 0;
             btnDel.HighEmphasis = true;
             btnDel.Icon = null;
@@ -520,19 +519,19 @@
             // 
             btnSave.AutoSize = false;
             btnSave.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnSave.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnSave.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnSave.Depth = 0;
             btnSave.HighEmphasis = true;
             btnSave.Icon = null;
             btnSave.Location = new Point(432, 10);
             btnSave.Margin = new Padding(4, 6, 4, 6);
-            btnSave.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnSave.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnSave.Name = "btnSave";
             btnSave.NoAccentTextColor = Color.Empty;
             btnSave.Size = new Size(110, 100);
             btnSave.TabIndex = 8;
             btnSave.Text = "저장";
-            btnSave.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnSave.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnSave.UseAccentColor = false;
             btnSave.UseVisualStyleBackColor = true;
             // 
@@ -540,18 +539,18 @@
             // 
             btnPre5F.AutoSize = false;
             btnPre5F.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnPre5F.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnPre5F.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnPre5F.Depth = 0;
             btnPre5F.HighEmphasis = true;
             btnPre5F.Icon = null;
             btnPre5F.Location = new Point(4, 16);
             btnPre5F.Margin = new Padding(4, 6, 4, 6);
-            btnPre5F.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnPre5F.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnPre5F.Name = "btnPre5F";
             btnPre5F.NoAccentTextColor = Color.Empty;
             btnPre5F.Size = new Size(60, 50);
             btnPre5F.TabIndex = 10;
-            btnPre5F.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnPre5F.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnPre5F.UseAccentColor = false;
             btnPre5F.UseVisualStyleBackColor = true;
             // 
@@ -695,19 +694,19 @@
             // 
             btnSpeedPopup.AutoSize = false;
             btnSpeedPopup.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnSpeedPopup.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnSpeedPopup.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnSpeedPopup.Depth = 0;
             btnSpeedPopup.HighEmphasis = true;
             btnSpeedPopup.Icon = null;
             btnSpeedPopup.Location = new Point(4, 78);
             btnSpeedPopup.Margin = new Padding(4, 6, 4, 6);
-            btnSpeedPopup.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnSpeedPopup.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnSpeedPopup.Name = "btnSpeedPopup";
             btnSpeedPopup.NoAccentTextColor = Color.Empty;
             btnSpeedPopup.Size = new Size(418, 28);
             btnSpeedPopup.TabIndex = 16;
             btnSpeedPopup.Text = "배속";
-            btnSpeedPopup.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnSpeedPopup.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnSpeedPopup.UseAccentColor = false;
             btnSpeedPopup.UseVisualStyleBackColor = true;
             // 
@@ -715,18 +714,18 @@
             // 
             btnPre1F.AutoSize = false;
             btnPre1F.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnPre1F.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnPre1F.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnPre1F.Depth = 0;
             btnPre1F.HighEmphasis = true;
             btnPre1F.Icon = null;
             btnPre1F.Location = new Point(72, 16);
             btnPre1F.Margin = new Padding(4, 6, 4, 6);
-            btnPre1F.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnPre1F.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnPre1F.Name = "btnPre1F";
             btnPre1F.NoAccentTextColor = Color.Empty;
             btnPre1F.Size = new Size(60, 50);
             btnPre1F.TabIndex = 14;
-            btnPre1F.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnPre1F.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnPre1F.UseAccentColor = false;
             btnPre1F.UseVisualStyleBackColor = true;
             // 
@@ -734,18 +733,18 @@
             // 
             btnPlayStop.AutoSize = false;
             btnPlayStop.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnPlayStop.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnPlayStop.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnPlayStop.Depth = 0;
             btnPlayStop.HighEmphasis = true;
             btnPlayStop.Icon = null;
             btnPlayStop.Location = new Point(140, 16);
             btnPlayStop.Margin = new Padding(4, 6, 4, 6);
-            btnPlayStop.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnPlayStop.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnPlayStop.Name = "btnPlayStop";
             btnPlayStop.NoAccentTextColor = Color.Empty;
             btnPlayStop.Size = new Size(147, 50);
             btnPlayStop.TabIndex = 13;
-            btnPlayStop.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnPlayStop.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnPlayStop.UseAccentColor = false;
             btnPlayStop.UseVisualStyleBackColor = true;
             btnPlayStop.Click += btnPlayStop_Click;
@@ -754,18 +753,18 @@
             // 
             btnNxt5F.AutoSize = false;
             btnNxt5F.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnNxt5F.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnNxt5F.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnNxt5F.Depth = 0;
             btnNxt5F.HighEmphasis = true;
             btnNxt5F.Icon = null;
             btnNxt5F.Location = new Point(362, 16);
             btnNxt5F.Margin = new Padding(4, 6, 4, 6);
-            btnNxt5F.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnNxt5F.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnNxt5F.Name = "btnNxt5F";
             btnNxt5F.NoAccentTextColor = Color.Empty;
             btnNxt5F.Size = new Size(60, 50);
             btnNxt5F.TabIndex = 12;
-            btnNxt5F.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnNxt5F.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnNxt5F.UseAccentColor = false;
             btnNxt5F.UseVisualStyleBackColor = true;
             // 
@@ -773,7 +772,7 @@
             // 
             btnNxt1F.AutoSize = false;
             btnNxt1F.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnNxt1F.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnNxt1F.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnNxt1F.Depth = 0;
             btnNxt1F.HighEmphasis = true;
             btnNxt1F.Icon = null;
