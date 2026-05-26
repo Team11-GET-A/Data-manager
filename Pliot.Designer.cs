@@ -1,6 +1,6 @@
 ﻿namespace Data_Manager
 {
-    partial class Form2
+    partial class Pliot
     {
         /// <summary>
         /// Required designer variable.

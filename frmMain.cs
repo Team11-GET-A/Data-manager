@@ -1002,14 +1002,14 @@ namespace AD_AI_LearningData_Editor
 
             this.Controls.Add(tabControl);
 
-            Data_Manager.Form3 form3 = new Data_Manager.Form3();
+            Data_Manager.trainer form3 = new Data_Manager.trainer();
             form3.TopLevel = false;
             form3.FormBorderStyle = FormBorderStyle.None;
             form3.Dock = DockStyle.Fill;
             tabTrainer.Controls.Add(form3);
             form3.Show();
 
-            Data_Manager.Form2 form2 = new Data_Manager.Form2();
+            Data_Manager.Pliot form2 = new Data_Manager.Pliot();
             form2.TopLevel = false;
             form2.FormBorderStyle = FormBorderStyle.None;
             form2.Dock = DockStyle.Fill;

@@ -1,6 +1,6 @@
 ﻿namespace Data_Manager
 {
-    partial class Form3
+    partial class trainer
     {
         /// <summary>
         /// Required designer variable.

@@ -10,7 +10,7 @@ using MaterialSkin.Controls;
 
 namespace Data_Manager
 {
-    public partial class Form2 : Form
+    public partial class Pliot : Form
     {
         private int pilotCardCount = 0;
         private const int CardGap = 5;
@@ -21,7 +21,7 @@ namespace Data_Manager
         private Size panel1BaseSize;
         private Size panel2BaseSize;
 
-        public Form2()
+        public Pliot()
         {
             InitializeComponent();
             flowLayoutPanel1.SizeChanged += (s, e) => UpdatePilotCardLayout();
