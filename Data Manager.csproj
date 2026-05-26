@@ -13,4 +13,13 @@
     <ProjectReference Include="External\MaterialSkin-master\MaterialSkin\MaterialSkinCore.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="External\MaterialSkin-master\MaterialSkin\**\*.cs" />
+    <Compile Remove="External\MaterialSkin-master\MaterialSkinExample\**\*.cs" />
+    <EmbeddedResource Remove="External\MaterialSkin-master\MaterialSkin\**\*.resx" />
+    <EmbeddedResource Remove="External\MaterialSkin-master\MaterialSkinExample\**\*.resx" />
+    <None Remove="External\MaterialSkin-master\MaterialSkin\**\*" />
+    <None Remove="External\MaterialSkin-master\MaterialSkinExample\**\*" />
+  </ItemGroup>
+
 </Project>

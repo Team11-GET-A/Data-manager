@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="Data Manager.csproj" />
-  <Project Path="External/MaterialSkin-master/MaterialSkin/MaterialSkinCore.csproj" />
+  <Project Path="External/MaterialSkin-master/MaterialSkin/MaterialSkinCore.csproj">
+    <Build Solution="Debug|*" Project="false" />
+  </Project>
 </Solution>
