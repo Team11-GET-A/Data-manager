@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MaterialSkin.2" Version="2.3.1" />
+    <ProjectReference Include="External\MaterialSkin-master\MaterialSkin\MaterialSkinCore.csproj" />
   </ItemGroup>
 
 </Project>
