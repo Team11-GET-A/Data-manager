@@ -42,6 +42,8 @@
             btnCardAdder = new Button();
             materialLabel1 = new MaterialSkin.Controls.MaterialLabel();
             flowLayoutPanel1 = new FlowLayoutPanel();
+            btnLoadData1 = new Button();
+            button2 = new Button();
             panel1.SuspendLayout();
             panel2.SuspendLayout();
             SuspendLayout();
@@ -59,7 +61,7 @@
             panel1.Controls.Add(btnPlay);
             panel1.Controls.Add(cbxFaster);
             panel1.Dock = DockStyle.Bottom;
-            panel1.Location = new Point(2, 674);
+            panel1.Location = new Point(2, 670);
             panel1.Margin = new Padding(2);
             panel1.Name = "panel1";
             panel1.Padding = new Padding(10);
@@ -155,15 +157,17 @@
             cbxFaster.Location = new Point(1392, 74);
             cbxFaster.Margin = new Padding(4);
             cbxFaster.Name = "cbxFaster";
-            cbxFaster.Size = new Size(168, 28);
+            cbxFaster.Size = new Size(168, 39);
             cbxFaster.TabIndex = 2;
             // 
             // panel2
             // 
+            panel2.Controls.Add(button2);
+            panel2.Controls.Add(btnLoadData1);
             panel2.Controls.Add(btnCardAdder);
             panel2.Controls.Add(materialLabel1);
             panel2.Dock = DockStyle.Top;
-            panel2.Location = new Point(2, 85);
+            panel2.Location = new Point(2, 2);
             panel2.Margin = new Padding(4);
             panel2.Name = "panel2";
             panel2.Size = new Size(1580, 106);
@@ -192,23 +196,42 @@
             materialLabel1.Size = new Size(124, 58);
             materialLabel1.TabIndex = 0;
             materialLabel1.Text = "파일럿";
-            materialLabel1.Click += materialLabel1_Click;
+            
             // 
             // flowLayoutPanel1
             // 
             flowLayoutPanel1.AutoScroll = true;
             flowLayoutPanel1.BackColor = Color.LightGray;
             flowLayoutPanel1.Dock = DockStyle.Fill;
-            flowLayoutPanel1.Location = new Point(2, 187);
+            flowLayoutPanel1.Location = new Point(2, 108);
             flowLayoutPanel1.Name = "flowLayoutPanel1";
             flowLayoutPanel1.Padding = new Padding(10);
             flowLayoutPanel1.Size = new Size(1580, 562);
             flowLayoutPanel1.TabIndex = 2;
             flowLayoutPanel1.WrapContents = false;
             // 
-            // Form2
+            // btnLoadData1
             // 
-            AutoScaleDimensions = new SizeF(9F, 20F);
+            btnLoadData1.Location = new Point(384, 20);
+            btnLoadData1.Name = "btnLoadData1";
+            btnLoadData1.Size = new Size(191, 61);
+            btnLoadData1.TabIndex = 0;
+            btnLoadData1.Text = "파일 가져오기";
+            btnLoadData1.UseVisualStyleBackColor = true;
+            
+            // 
+            // button2
+            // 
+            button2.Location = new Point(695, 23);
+            button2.Name = "button2";
+            button2.Size = new Size(191, 61);
+            button2.TabIndex = 12;
+            button2.Text = "button2";
+            button2.UseVisualStyleBackColor = true;
+            // 
+            // Pliot
+            // 
+            AutoScaleDimensions = new SizeF(13F, 31F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1584, 861);
             Controls.Add(flowLayoutPanel1);
@@ -216,7 +239,7 @@
             Controls.Add(panel1);
             Font = new Font("맑은 고딕", 11.25F);
             Margin = new Padding(2);
-            Name = "Form2";
+            Name = "Pliot";
             Padding = new Padding(2);
             Text = "파일럿";
             panel1.ResumeLayout(false);
@@ -242,5 +265,7 @@
         private Button btnSpeedSet1;
         private MaterialSkin.Controls.MaterialLabel materialLabel1;
         private Button btnCardAdder;
+        private Button btnLoadData1;
+        private Button button2;
     }
 }

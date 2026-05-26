@@ -1002,7 +1002,7 @@ namespace AD_AI_LearningData_Editor
 
             this.Controls.Add(tabControl);
 
-            Data_Manager.trainer form3 = new Data_Manager.trainer();
+            DonkeyDataManager.frmNewtrainer form3 = new DonkeyDataManager.frmNewtrainer();
             form3.TopLevel = false;
             form3.FormBorderStyle = FormBorderStyle.None;
             form3.Dock = DockStyle.Fill;
