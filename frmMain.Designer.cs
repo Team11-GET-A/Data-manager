@@ -1,4 +1,4 @@
-Ôªønamespace AD_AI_LearningData_Editor
+namespace AD_AI_LearningData_Editor
 {
     partial class frmMain
     {
@@ -29,10 +29,10 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[ÌååÏùºÏ∂îÍ∞Ä]" }, 1, Color.Empty, Color.Empty, new Font("ÎßëÏùÄ Í≥†Îîï", 12F));
+            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[∆ƒ¿œ√ﬂ∞°]" }, 1, Color.Empty, Color.Empty, new Font("∏º¿∫ ∞ÌµÒ", 12F));
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
-            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[ÌååÏùºÎ™©Î°ù]" }, 0, Color.Empty, Color.Empty, new Font("ÎßëÏùÄ Í≥†Îîï", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem4 = new ListViewItem(new string[] { "[Ìú¥ÏßÄÌÜµ]" }, 2, Color.Empty, Color.Empty, new Font("ÎßëÏùÄ Í≥†Îîï", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[∆ƒ¿œ∏Ò∑œ]" }, 0, Color.Empty, Color.Empty, new Font("∏º¿∫ ∞ÌµÒ", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem4 = new ListViewItem(new string[] { "[»ﬁ¡ˆ≈Î]" }, 2, Color.Empty, Color.Empty, new Font("∏º¿∫ ∞ÌµÒ", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
             sdrSeekBar = new global::MaterialSkin.Controls.MaterialSlider();
             pnlVideo = new Panel();
             pnlROI = new Panel();
@@ -258,52 +258,52 @@
             GBPalete.Controls.Add(btnPalette3);
             GBPalete.Controls.Add(btnPalette1);
             GBPalete.Controls.Add(btnPalette2);
-            GBPalete.Font = new Font("ÏÉàÍµ¥Î¶º", 11.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            GBPalete.Font = new Font("ªı±º∏≤", 11.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
             GBPalete.Location = new Point(5, 2);
             GBPalete.Name = "GBPalete";
             GBPalete.Size = new Size(465, 88);
             GBPalete.TabIndex = 11;
             GBPalete.TabStop = false;
-            GBPalete.Text = "ÌïÑÌÑ∞";
+            GBPalete.Text = "« ≈Õ";
             GBPalete.Enter += GBPalete_Enter;
             // 
             // btnColorCancle
             // 
             btnColorCancle.AutoSize = false;
-            btnColorCancle.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnColorCancle.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnColorCancle.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            btnColorCancle.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnColorCancle.Depth = 0;
             btnColorCancle.HighEmphasis = true;
             btnColorCancle.Icon = null;
             btnColorCancle.Location = new Point(327, 31);
             btnColorCancle.Margin = new Padding(4, 6, 4, 6);
-            btnColorCancle.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnColorCancle.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnColorCancle.Name = "btnColorCancle";
             btnColorCancle.NoAccentTextColor = Color.Empty;
             btnColorCancle.Size = new Size(63, 42);
             btnColorCancle.TabIndex = 12;
-            btnColorCancle.Text = "Ï∑®ÏÜå";
-            btnColorCancle.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnColorCancle.Text = "√Îº“";
+            btnColorCancle.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnColorCancle.UseAccentColor = false;
             btnColorCancle.UseVisualStyleBackColor = true;
             // 
             // btnColorCfm
             // 
             btnColorCfm.AutoSize = false;
-            btnColorCfm.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnColorCfm.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnColorCfm.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            btnColorCfm.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnColorCfm.Depth = 0;
             btnColorCfm.HighEmphasis = true;
             btnColorCfm.Icon = null;
             btnColorCfm.Location = new Point(394, 31);
             btnColorCfm.Margin = new Padding(4, 6, 4, 6);
-            btnColorCfm.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnColorCfm.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnColorCfm.Name = "btnColorCfm";
             btnColorCfm.NoAccentTextColor = Color.Empty;
             btnColorCfm.Size = new Size(63, 42);
             btnColorCfm.TabIndex = 11;
-            btnColorCfm.Text = "Ï†ÅÏö©";
-            btnColorCfm.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnColorCfm.Text = "¿˚øÎ";
+            btnColorCfm.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnColorCfm.UseAccentColor = false;
             btnColorCfm.UseVisualStyleBackColor = true;
             // 
@@ -367,7 +367,7 @@
             btnContrastProperty.NoAccentTextColor = Color.Empty;
             btnContrastProperty.Size = new Size(150, 100);
             btnContrastProperty.TabIndex = 5;
-            btnContrastProperty.Text = "Î™ÖÏïî";
+            btnContrastProperty.Text = "∏Ìæœ";
             btnContrastProperty.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnContrastProperty.UseAccentColor = false;
             btnContrastProperty.UseVisualStyleBackColor = true;
@@ -409,7 +409,7 @@
             btnColorProperty.NoAccentTextColor = Color.Empty;
             btnColorProperty.Size = new Size(150, 100);
             btnColorProperty.TabIndex = 3;
-            btnColorProperty.Text = "ÏÉâ ÌïÑÌÑ∞";
+            btnColorProperty.Text = "ªˆ « ≈Õ";
             btnColorProperty.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnColorProperty.UseAccentColor = false;
             btnColorProperty.UseVisualStyleBackColor = true;
@@ -430,7 +430,7 @@
             btnMirror.NoAccentTextColor = Color.Empty;
             btnMirror.Size = new Size(150, 100);
             btnMirror.TabIndex = 2;
-            btnMirror.Text = "Ï¢åÏö∞ Î∞òÏ†Ñ";
+            btnMirror.Text = "¡¬øÏ π›¿¸";
             btnMirror.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnMirror.UseAccentColor = false;
             btnMirror.UseVisualStyleBackColor = true;
@@ -452,7 +452,7 @@
             btnNoise.NoAccentTextColor = Color.Empty;
             btnNoise.Size = new Size(150, 100);
             btnNoise.TabIndex = 1;
-            btnNoise.Text = "ÌôîÏßà Ïó¥Ìôî";
+            btnNoise.Text = "»≠¡˙ ø≠»≠";
             btnNoise.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnNoise.UseAccentColor = false;
             btnNoise.UseVisualStyleBackColor = true;
@@ -460,9 +460,9 @@
             // btnDel
             // 
             btnDel.AutoSize = false;
-            btnDel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnDel.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
             btnDel.BackColor = SystemColors.Control;
-            btnDel.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnDel.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnDel.Depth = 0;
             btnDel.HighEmphasis = true;
             btnDel.Icon = null;
@@ -473,7 +473,7 @@
             btnDel.NoAccentTextColor = Color.Empty;
             btnDel.Size = new Size(110, 100);
             btnDel.TabIndex = 0;
-            btnDel.Text = "ÏÇ≠Ï†ú";
+            btnDel.Text = "ªË¡¶";
             btnDel.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnDel.UseAccentColor = true;
             btnDel.UseVisualStyleBackColor = false;
@@ -519,39 +519,39 @@
             // btnSave
             // 
             btnSave.AutoSize = false;
-            btnSave.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnSave.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnSave.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            btnSave.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnSave.Depth = 0;
             btnSave.HighEmphasis = true;
             btnSave.Icon = null;
             btnSave.Location = new Point(432, 10);
             btnSave.Margin = new Padding(4, 6, 4, 6);
-            btnSave.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnSave.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnSave.Name = "btnSave";
             btnSave.NoAccentTextColor = Color.Empty;
             btnSave.Size = new Size(110, 100);
             btnSave.TabIndex = 8;
-            btnSave.Text = "Ï†ÄÏû•";
-            btnSave.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnSave.Text = "¿˙¿Â";
+            btnSave.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnSave.UseAccentColor = false;
             btnSave.UseVisualStyleBackColor = true;
             // 
             // btnPre5F
             // 
             btnPre5F.AutoSize = false;
-            btnPre5F.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnPre5F.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnPre5F.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            btnPre5F.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnPre5F.Depth = 0;
             btnPre5F.HighEmphasis = true;
             btnPre5F.Icon = null;
             btnPre5F.Location = new Point(4, 16);
             btnPre5F.Margin = new Padding(4, 6, 4, 6);
-            btnPre5F.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnPre5F.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnPre5F.Name = "btnPre5F";
             btnPre5F.NoAccentTextColor = Color.Empty;
             btnPre5F.Size = new Size(60, 50);
             btnPre5F.TabIndex = 10;
-            btnPre5F.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnPre5F.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnPre5F.UseAccentColor = false;
             btnPre5F.UseVisualStyleBackColor = true;
             // 
@@ -592,7 +592,7 @@
             // 
             // lblLstVwName
             // 
-            lblLstVwName.Font = new Font("ÎßëÏùÄ Í≥†Îîï", 18F);
+            lblLstVwName.Font = new Font("∏º¿∫ ∞ÌµÒ", 18F);
             lblLstVwName.Location = new Point(44, 8);
             lblLstVwName.Name = "lblLstVwName";
             lblLstVwName.Size = new Size(314, 32);
@@ -609,7 +609,7 @@
             // lblFolderList
             // 
             lblFolderList.AutoSize = true;
-            lblFolderList.Font = new Font("ÎßëÏùÄ Í≥†Îîï", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
+            lblFolderList.Font = new Font("∏º¿∫ ∞ÌµÒ", 20.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
             lblFolderList.Location = new Point(3, 1);
             lblFolderList.Name = "lblFolderList";
             lblFolderList.Padding = new Padding(0, 0, 0, 3);
@@ -619,7 +619,7 @@
             // lstviewFileList
             // 
             lstviewFileList.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem2.Tag = "ÌååÏùºÏ∂îÍ∞Ä";
+            listViewItem2.Tag = "∆ƒ¿œ√ﬂ∞°";
             lstviewFileList.Items.AddRange(new ListViewItem[] { listViewItem2 });
             lstviewFileList.Location = new Point(0, 44);
             lstviewFileList.Name = "lstviewFileList";
@@ -636,9 +636,9 @@
             imglst1.ColorDepth = ColorDepth.Depth32Bit;
             imglst1.ImageStream = (ImageListStreamer)resources.GetObject("imglst1.ImageStream");
             imglst1.TransparentColor = Color.Transparent;
-            imglst1.Images.SetKeyName(0, "ÎÖ∏ÎûÄ Ìè¥Îçî2.png");
-            imglst1.Images.SetKeyName(1, "ÌååÎûÄ Ìè¥Îçî2.png");
-            imglst1.Images.SetKeyName(2, "Ìú¥ÏßÄÌÜµ2.png");
+            imglst1.Images.SetKeyName(0, "≥Î∂ı ∆˙¥ı2.png");
+            imglst1.Images.SetKeyName(1, "∆ƒ∂ı ∆˙¥ı2.png");
+            imglst1.Images.SetKeyName(2, "»ﬁ¡ˆ≈Î2.png");
             // 
             // lstviewFileListD
             // 
@@ -664,8 +664,8 @@
             // lstviewMain
             // 
             lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem3.Tag = "ÌååÏùºÎ™©Î°ù";
-            listViewItem4.Tag = "Ìú¥ÏßÄÌÜµ";
+            listViewItem3.Tag = "∆ƒ¿œ∏Ò∑œ";
+            listViewItem4.Tag = "»ﬁ¡ˆ≈Î";
             lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem3, listViewItem4 });
             lstviewMain.Location = new Point(-1, 44);
             lstviewMain.Name = "lstviewMain";
@@ -694,58 +694,58 @@
             // btnSpeedPopup
             // 
             btnSpeedPopup.AutoSize = false;
-            btnSpeedPopup.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnSpeedPopup.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnSpeedPopup.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            btnSpeedPopup.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnSpeedPopup.Depth = 0;
             btnSpeedPopup.HighEmphasis = true;
             btnSpeedPopup.Icon = null;
             btnSpeedPopup.Location = new Point(4, 78);
             btnSpeedPopup.Margin = new Padding(4, 6, 4, 6);
-            btnSpeedPopup.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnSpeedPopup.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnSpeedPopup.Name = "btnSpeedPopup";
             btnSpeedPopup.NoAccentTextColor = Color.Empty;
             btnSpeedPopup.Size = new Size(418, 28);
             btnSpeedPopup.TabIndex = 16;
-            btnSpeedPopup.Text = "Î∞∞ÏÜç";
-            btnSpeedPopup.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnSpeedPopup.Text = "πËº”";
+            btnSpeedPopup.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnSpeedPopup.UseAccentColor = false;
             btnSpeedPopup.UseVisualStyleBackColor = true;
             // 
             // btnPre1F
             // 
             btnPre1F.AutoSize = false;
-            btnPre1F.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnPre1F.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnPre1F.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            btnPre1F.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnPre1F.Depth = 0;
             btnPre1F.HighEmphasis = true;
             btnPre1F.Icon = null;
             btnPre1F.Location = new Point(72, 16);
             btnPre1F.Margin = new Padding(4, 6, 4, 6);
-            btnPre1F.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnPre1F.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnPre1F.Name = "btnPre1F";
             btnPre1F.NoAccentTextColor = Color.Empty;
             btnPre1F.Size = new Size(60, 50);
             btnPre1F.TabIndex = 14;
-            btnPre1F.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnPre1F.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnPre1F.UseAccentColor = false;
             btnPre1F.UseVisualStyleBackColor = true;
             // 
             // btnPlayStop
             // 
             btnPlayStop.AutoSize = false;
-            btnPlayStop.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnPlayStop.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnPlayStop.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            btnPlayStop.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnPlayStop.Depth = 0;
             btnPlayStop.HighEmphasis = true;
             btnPlayStop.Icon = null;
             btnPlayStop.Location = new Point(140, 16);
             btnPlayStop.Margin = new Padding(4, 6, 4, 6);
-            btnPlayStop.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnPlayStop.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnPlayStop.Name = "btnPlayStop";
             btnPlayStop.NoAccentTextColor = Color.Empty;
             btnPlayStop.Size = new Size(147, 50);
             btnPlayStop.TabIndex = 13;
-            btnPlayStop.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnPlayStop.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnPlayStop.UseAccentColor = false;
             btnPlayStop.UseVisualStyleBackColor = true;
             btnPlayStop.Click += btnPlayStop_Click;
@@ -753,27 +753,27 @@
             // btnNxt5F
             // 
             btnNxt5F.AutoSize = false;
-            btnNxt5F.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnNxt5F.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnNxt5F.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            btnNxt5F.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnNxt5F.Depth = 0;
             btnNxt5F.HighEmphasis = true;
             btnNxt5F.Icon = null;
             btnNxt5F.Location = new Point(362, 16);
             btnNxt5F.Margin = new Padding(4, 6, 4, 6);
-            btnNxt5F.MouseState = global::global::MaterialSkin.MouseState.HOVER;
+            btnNxt5F.MouseState = global::MaterialSkin.MouseState.HOVER;
             btnNxt5F.Name = "btnNxt5F";
             btnNxt5F.NoAccentTextColor = Color.Empty;
             btnNxt5F.Size = new Size(60, 50);
             btnNxt5F.TabIndex = 12;
-            btnNxt5F.Type = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnNxt5F.Type = global::MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnNxt5F.UseAccentColor = false;
             btnNxt5F.UseVisualStyleBackColor = true;
             // 
             // btnNxt1F
             // 
             btnNxt1F.AutoSize = false;
-            btnNxt1F.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnNxt1F.Density = global::global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnNxt1F.AutoSizeMode = global::System.Windows.Forms.AutoSizeMode.GrowAndShrink;
+            btnNxt1F.Density = global::MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnNxt1F.Depth = 0;
             btnNxt1F.HighEmphasis = true;
             btnNxt1F.Icon = null;
@@ -887,7 +887,7 @@
             Name = "frmMain";
             Padding = new Padding(0);
             StartPosition = FormStartPosition.CenterScreen;
-            Text = "11ÌåÄ";
+            Text = "11∆¿";
             pnlROI.ResumeLayout(false);
             pnlContrastProperty.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)trcbrContrastProperty).EndInit();
