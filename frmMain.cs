@@ -30,12 +30,6 @@ namespace AD_AI_LearningData_Editor
         private string roiBackupPath = null;
         private string lastRoiTargetPath = null;
 
-        // =====================================================
-        // [WSL 연동] 전역 변수 설정
-        // =====================================================
-        private WslFileManager _wslManager = new WslFileManager();
-        private string _currentWslPath = string.Empty;
-
         protected override CreateParams CreateParams
         {
             get
@@ -70,13 +64,6 @@ namespace AD_AI_LearningData_Editor
 
             btnOpnFileExplrr.Click += btnOpnFileExplrr_Click;
             btnRestoration.Click += btnRestoration_Click;
-
-            // =====================================================
-            // [WSL 연동] 버튼 클릭 이벤트 연결
-            // 버튼이 없다면 디자이너에서 만드신 후 주석을 해제하세요
-            // =====================================================
-            // btnLoad.Click += btnLoad_Click;
-            // btnSave.Click += btnSave_Click;
 
             btnRestoration.Visible = false;
 
@@ -1095,66 +1082,9 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        // =====================================================
-        // [WSL 연동] 이벤트 핸들러 (직접 로직 작성 금지, 호출만 수행)
-        // =====================================================
-        private void btnLoad_Click(object sender, EventArgs e) => ProcessLoadFiles();
-        private void btnSave_Click(object sender, EventArgs e) => ProcessSaveFiles();
-
-        // =====================================================
-        // [WSL 연동] 핵심 비즈니스 로직 함수
-        // =====================================================
-        private void ProcessLoadFiles()
-        {
-            string selectedPath = _wslManager.SelectLoadFolder();
-
-            if (!string.IsNullOrEmpty(selectedPath))
-            {
-                _currentWslPath = selectedPath;
-                MessageBox.Show($"불러오기 완료: {_currentWslPath}");
-
-                // 해당 폴더 내 이미지 로드 로직
-                string[] imageFiles = Directory.GetFiles(_currentWslPath, "*.*")
-                    .Where(s => s.ToLower().EndsWith(".png") || s.ToLower().EndsWith(".jpg") || s.ToLower().EndsWith(".jpeg"))
-                    .OrderBy(s => s)
-                    .ToArray();
-
-                if (imageFiles.Length > 0)
-                {
-                    slideImages.Clear();
-                    slideImages.AddRange(imageFiles);
-                    currentSlideIndex = 0;
-                    UpdateSlideDisplay();
-                }
-            }
-        }
-
-        private void ProcessSaveFiles()
-        {
-            if (string.IsNullOrEmpty(_currentWslPath))
-            {
-                return;
-            }
-
-            string tempNewFolderName = "Cleaned_Data_Temp";
-            List<string> filesToSave = new List<string>(slideImages);
-
-            if (filesToSave.Count == 0)
-            {
-                return;
-            }
-
-            bool isSuccess = _wslManager.SaveToNewFolder(_currentWslPath, tempNewFolderName, filesToSave);
-
-            if (isSuccess)
-            {
-                MessageBox.Show("리눅스 새 폴더에 저장 완료되었습니다.");
-            }
-            else
-            {
-                MessageBox.Show("저장 실패");
-            }
-        }
+        private void trackBar1_Scroll(object sender, EventArgs e) { }
+        private void pnlContrastProperty_Paint(object sender, PaintEventArgs e) { }
+        private void pnlCloseProperty_Paint(object sender, PaintEventArgs e) { }
 
         private class PropertyPanelFilter : IMessageFilter
         {
@@ -1202,7 +1132,10 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        private void GBPalete_Enter(object sender, EventArgs e) { }
+        private void GBPalete_Enter(object sender, EventArgs e)
+        {
+
+        }
     }
 
     public class ClickOutsideFilter : IMessageFilter
