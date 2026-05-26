@@ -1,15 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0-windows</TargetFramework>
-		<RuntimeIdentifier>win</RuntimeIdentifier>
       <OutputType>Library</OutputType>
-      <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
         <UseWindowsForms>true</UseWindowsForms>
-		<ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+        <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
+      <AssemblyName>MaterialSkin</AssemblyName>
+      <RootNamespace>MaterialSkin</RootNamespace>
       <Nullable>disable</Nullable>
         <ImplicitUsings>disable</ImplicitUsings>
-      <AssemblyName>MaterialSkin</AssemblyName>
-      <RootNamespace>$(AssemblyName)</RootNamespace>
+      <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
       <PackageId>MaterialSkin.2</PackageId>
       <Version>2.3.1</Version>
       <Product>MaterialSkin 2</Product>
@@ -23,7 +22,8 @@
       <Copyright>Copyright Leonardo C Bottaro © 2021</Copyright>
       <PackageTags>material design materialdesign google forms theme skin</PackageTags>
       <PackageReadmeFile>README.md</PackageReadmeFile>
-	  <NoWarn>$(NoWarn);WFO1000</NoWarn>
+      <NoWarn>$(NoWarn);WFO1000</NoWarn>
+      <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
     </PropertyGroup>
 	<ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
 		<Reference Include="System.Design" />
