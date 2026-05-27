@@ -4,6 +4,7 @@ using MaterialSkin.Controls;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
@@ -19,23 +20,19 @@ namespace AD_AI_LearningData_Editor
         private ListViewItem lastHighlightedItem = null;
         private bool isUpdatingSlider = false;
         private FileSystemWatcher trashWatcher;
-
-        private string gammaBackupPath = null;
-        private string colorFilterBackupPath = null;
         private Button activePaletteButton = null;
         private List<Button> paletteButtons = new List<Button>();
-
-        // [추가] ROI 상태값 및 복구를 위한 백업 필드 복합 레이어 설정
         private bool[,] roiState = new bool[3, 3];
-        private string roiBackupPath = null;
-        private string lastRoiTargetPath = null;
+        private Dictionary<string, string> gammaBackupPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private HashSet<string> imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".bit" };
+        private string mirrorYBackupFolderName = "MirrorYBackupFile";
 
         protected override CreateParams CreateParams
         {
             get
             {
                 CreateParams cp = base.CreateParams;
-                cp.ExStyle |= 0x02000000; // WS_EX_COMPOSITED (화면 깜빡임 완화)
+                cp.ExStyle |= 0x02000000;
                 return cp;
             }
         }
@@ -43,6 +40,8 @@ namespace AD_AI_LearningData_Editor
         public frmMain()
         {
             InitializeComponent();
+
+            this.AutoScaleMode = AutoScaleMode.None;
 
             var materialSkinManager = MaterialSkinManager.Instance;
             materialSkinManager.AddFormToManage(this);
@@ -64,9 +63,11 @@ namespace AD_AI_LearningData_Editor
 
             btnOpnFileExplrr.Click += btnOpnFileExplrr_Click;
             btnRestoration.Click += btnRestoration_Click;
+            btnSave.Click += btnSave_Click;
 
             btnRestoration.Visible = false;
 
+            ConfigureListViewNameLabel();
             SetupTabs();
             LoadUploadedFilesToD();
             LoadTrashCanFiles();
@@ -77,6 +78,63 @@ namespace AD_AI_LearningData_Editor
 
             InitializeSpeedController();
             InitializeImageEditor();
+        }
+
+        private string GetBinFolder()
+        {
+            DirectoryInfo dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            while (dir != null)
+            {
+                if (string.Equals(dir.Name, "bin", StringComparison.OrdinalIgnoreCase))
+                {
+                    return dir.FullName;
+                }
+                dir = dir.Parent;
+            }
+            return AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        private string GetUploadedFolder()
+        {
+            string folder = Path.Combine(GetBinFolder(), "UploadedFile");
+            if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+            return folder;
+        }
+
+        private string GetTrashFolder()
+        {
+            string folder = Path.Combine(GetBinFolder(), "TrashCan");
+            if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+            return folder;
+        }
+
+        private string GetColorTempFolder()
+        {
+            string folder = Path.Combine(GetBinFolder(), "ColorTempFile");
+            if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+            return folder;
+        }
+
+        private string GetMirrorYBackupFolder()
+        {
+            string folder = Path.Combine(GetBinFolder(), mirrorYBackupFolderName);
+            if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+            return folder;
+        }
+
+        private void ConfigureListViewNameLabel()
+        {
+            lblLstVwName.AutoSize = false;
+            lblLstVwName.UseCompatibleTextRendering = true;
+            lblLstVwName.Font = new Font("맑은 고딕", 14F, FontStyle.Bold, GraphicsUnit.Point);
+        }
+
+        private void SetListViewName(string text)
+        {
+            lblLstVwName.Text = text;
+            lblLstVwName.Font = new Font("맑은 고딕", 14F, FontStyle.Bold, GraphicsUnit.Point);
+            lblLstVwName.UseCompatibleTextRendering = true;
+            lblLstVwName.Refresh();
         }
 
         private void InitializeSpeedController()
@@ -145,7 +203,7 @@ namespace AD_AI_LearningData_Editor
             double speed = sliderValue / 10.0;
             lblSpeedText.Text = $"{speed:0.0}x";
 
-            if (speed > 0)
+            if (speed > 0 && videoTimer != null)
             {
                 videoTimer.Interval = Math.Max(1, (int)(33 / speed));
             }
@@ -155,110 +213,157 @@ namespace AD_AI_LearningData_Editor
         {
             lstviewFileListD.HideSelection = false;
 
-            btnColorProperty.Click += (s, e) => { ShowPropertyPanel(pnlColorProperty); crdProperty.Visible = false; };
-            btnContrastProperty.Click += (s, e) => { ShowPropertyPanel(pnlContrastProperty); crdProperty.Visible = false; };
-            btnROI.Click += (s, e) => { ShowPropertyPanel(pnlROI); crdProperty.Visible = false; };
+            pnlContrastProperty.Visible = false;
+            pnlColorProperty.Visible = false;
+            pnlROI.Visible = false;
+            crdProperty.Visible = true;
+
+            paletteButtons = new List<Button> { btnPalette1, btnPalette2, btnPalette3, btnPalette4, btnPalette5 };
+
+            btnColorProperty.Click += (s, e) => ShowPropertyPanel(pnlColorProperty);
+            btnContrastProperty.Click += (s, e) => ShowPropertyPanel(pnlContrastProperty);
+            btnROI.Click += (s, e) => ShowPropertyPanel(pnlROI);
 
             btnNoise.Click += btnNoise_Click;
             btnMirror.Click += btnMirror_Click;
+            btnMirrorY.Click += btnMirrorY_Click;
 
-            // ROI 3x3 개별 버튼 이벤트 연결 (토글 감지 구조 적용)
-            btnROILU.Click += (s, e) => ApplyROIBlackout(0, 0);
-            btnROIU.Click += (s, e) => ApplyROIBlackout(0, 1);
-            btnROIRU.Click += (s, e) => ApplyROIBlackout(0, 2);
-            btnROIL.Click += (s, e) => ApplyROIBlackout(1, 0);
-            btnROICenter.Click += (s, e) => ApplyROIBlackout(1, 1);
-            btnROIR.Click += (s, e) => ApplyROIBlackout(1, 2);
-            btnROILD.Click += (s, e) => ApplyROIBlackout(2, 0);
-            btnROID.Click += (s, e) => ApplyROIBlackout(2, 1);
-            btnROIRD.Click += (s, e) => ApplyROIBlackout(2, 2);
+            btnROILU.Click += (s, e) => ApplyROIBlackoutToAllImages(0, 0);
+            btnROIU.Click += (s, e) => ApplyROIBlackoutToAllImages(0, 1);
+            btnROIRU.Click += (s, e) => ApplyROIBlackoutToAllImages(0, 2);
+            btnROIL.Click += (s, e) => ApplyROIBlackoutToAllImages(1, 0);
+            btnROICenter.Click += (s, e) => ApplyROIBlackoutToAllImages(1, 1);
+            btnROIR.Click += (s, e) => ApplyROIBlackoutToAllImages(1, 2);
+            btnROILD.Click += (s, e) => ApplyROIBlackoutToAllImages(2, 0);
+            btnROID.Click += (s, e) => ApplyROIBlackoutToAllImages(2, 1);
+            btnROIRD.Click += (s, e) => ApplyROIBlackoutToAllImages(2, 2);
 
             trcbrContrastProperty.Minimum = -10;
             trcbrContrastProperty.Maximum = 10;
             trcbrContrastProperty.Value = 0;
             trcbrContrastProperty.Scroll += trcbrContrastProperty_Scroll;
 
-            // [수정] 5개 팔레트 버튼별 프리셋 필터 실행 핸들러 직접 연결
-            btnPalette1.Click += (s, e) => HandlePaletteClick(1, btnPalette1); // 흑백 필터
-            btnPalette2.Click += (s, e) => HandlePaletteClick(2, btnPalette2); // 색 반전 필터
-            btnPalette3.Click += (s, e) => HandlePaletteClick(3, btnPalette3); // 파란 빛 필터 (차가움)
-            btnPalette4.Click += (s, e) => HandlePaletteClick(4, btnPalette4); // 노란 빛 필터 (따뜻함)
-            btnPalette5.Click += (s, e) => HandlePaletteClick(5, btnPalette5); // 세피아 필터 (AI 추천 프리셋 구상)
-
+            btnPalette1.Click += (s, e) => HandlePaletteClick(1, btnPalette1);
+            btnPalette2.Click += (s, e) => HandlePaletteClick(2, btnPalette2);
+            btnPalette3.Click += (s, e) => HandlePaletteClick(3, btnPalette3);
+            btnPalette4.Click += (s, e) => HandlePaletteClick(4, btnPalette4);
+            btnPalette5.Click += (s, e) => HandlePaletteClick(5, btnPalette5);
 
             btnColorCfm.Click += btnColorCfm_Click;
             btnColorCancle.Click += btnColorCancle_Click;
 
+            this.Deactivate += (s, e) => HidePropertyPanels();
             Application.AddMessageFilter(new PropertyPanelFilter(this));
         }
 
         private void ShowPropertyPanel(Control activeControl)
         {
-            pnlContrastProperty.Visible = (activeControl == pnlContrastProperty);
-            pnlROI.Visible = (activeControl == pnlROI);
-            pnlColorProperty.Visible = (activeControl == pnlColorProperty);
+            pnlContrastProperty.Visible = activeControl == pnlContrastProperty;
+            pnlROI.Visible = activeControl == pnlROI;
+            pnlColorProperty.Visible = activeControl == pnlColorProperty;
+            crdProperty.Visible = false;
+            activeControl.BringToFront();
         }
 
-        private string GetTargetImagePath()
+        private void HidePropertyPanels()
         {
-            if (lstviewFileListD.SelectedItems.Count > 0)
-            {
-                string selectedText = lstviewFileListD.SelectedItems[0].Text;
-                if (selectedText.StartsWith("[폴더]")) return null;
-
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string uploadFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
-                return Path.Combine(uploadFolder, selectedText);
-            }
-
-            if (slideImages.Count > 0 && currentSlideIndex >= 0 && currentSlideIndex < slideImages.Count)
-            {
-                return slideImages[currentSlideIndex];
-            }
-            return null;
+            pnlContrastProperty.Visible = false;
+            pnlROI.Visible = false;
+            pnlColorProperty.Visible = false;
+            crdProperty.Visible = true;
         }
 
-        private void ModifyTargetImage(Action<Bitmap> modifyAction)
+        private List<string> GetUploadedImageFiles()
         {
-            string targetPath = GetTargetImagePath();
-            if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) return;
+            string uploadFolder = GetUploadedFolder();
+            if (!Directory.Exists(uploadFolder)) return new List<string>();
 
+            return Directory.GetFiles(uploadFolder)
+                .Where(path => imageExtensions.Contains(Path.GetExtension(path)))
+                .Where(path => !path.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
+                .Where(path => !path.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
+                .Where(path => !Path.GetFileNameWithoutExtension(path).EndsWith("-Temp", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(path => File.GetCreationTime(path))
+                .ToList();
+        }
+
+        private bool IsImageFile(string path)
+        {
+            return imageExtensions.Contains(Path.GetExtension(path));
+        }
+
+        private Bitmap LoadBitmapWithoutLock(string path)
+        {
+            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                using (Image img = Image.FromStream(fs))
+                {
+                    return new Bitmap(img);
+                }
+            }
+        }
+
+        private ImageFormat GetImageFormatByExtension(string path)
+        {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            if (ext == ".png") return ImageFormat.Png;
+            if (ext == ".bmp" || ext == ".bit") return ImageFormat.Bmp;
+            if (ext == ".gif") return ImageFormat.Gif;
+            if (ext == ".tif" || ext == ".tiff") return ImageFormat.Tiff;
+            return ImageFormat.Jpeg;
+        }
+
+        private void SaveBitmapToPath(Bitmap bitmap, string path)
+        {
+            string tempPath = path + ".editingtmp";
+            if (File.Exists(tempPath)) File.Delete(tempPath);
+            bitmap.Save(tempPath, GetImageFormatByExtension(path));
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(tempPath, path);
+        }
+
+        private void ReleaseCurrentImage()
+        {
             if (picVideoBox.Image != null)
             {
-                picVideoBox.Image.Dispose();
+                Image oldImage = picVideoBox.Image;
                 picVideoBox.Image = null;
+                oldImage.Dispose();
             }
+        }
 
-            Bitmap targetBitmap = null;
-            try
+        private void ModifyAllUploadedImages(Action<Bitmap, string> modifyAction)
+        {
+            List<string> targets = GetUploadedImageFiles();
+            if (targets.Count == 0) return;
+
+            ReleaseCurrentImage();
+
+            foreach (string targetPath in targets)
             {
-                using (FileStream fs = new FileStream(targetPath, FileMode.Open, FileAccess.Read))
+                Bitmap targetBitmap = null;
+                try
                 {
-                    using (Image originalImg = Image.FromStream(fs))
-                    {
-                        targetBitmap = new Bitmap(originalImg);
-                    }
+                    targetBitmap = LoadBitmapWithoutLock(targetPath);
+                    modifyAction(targetBitmap, targetPath);
+                    SaveBitmapToPath(targetBitmap, targetPath);
                 }
-
-                modifyAction(targetBitmap);
-
-                targetBitmap.Save(targetPath, System.Drawing.Imaging.ImageFormat.Jpeg);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"이미지 편집 중 오류가 발생했습니다: {ex.Message}");
-            }
-            finally
-            {
-                if (targetBitmap != null) targetBitmap.Dispose();
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"이미지 편집 중 오류가 발생했습니다.\n{Path.GetFileName(targetPath)}\n{ex.Message}");
+                }
+                finally
+                {
+                    if (targetBitmap != null) targetBitmap.Dispose();
+                }
             }
 
-            UpdateSlideDisplay();
+            LoadUploadedFilesToD();
         }
 
         private void btnNoise_Click(object sender, EventArgs e)
         {
-            ModifyTargetImage(bmp =>
+            ModifyAllUploadedImages((bmp, path) =>
             {
                 int degradedWidth = Math.Max(1, bmp.Width / 4);
                 int degradedHeight = Math.Max(1, bmp.Height / 4);
@@ -276,224 +381,221 @@ namespace AD_AI_LearningData_Editor
 
         private void btnMirror_Click(object sender, EventArgs e)
         {
-            ModifyTargetImage(bmp =>
+            ModifyAllUploadedImages((bmp, path) =>
             {
                 bmp.RotateFlip(RotateFlipType.RotateNoneFlipX);
             });
         }
 
-        // [수정] ROI 영역 동일 위치 한 번 더 누를 시 원상복구(토글) 처리 로직 구현
-        private void ApplyROIBlackout(int row, int col)
+        private void btnMirrorY_Click(object sender, EventArgs e)
         {
-            string targetPath = GetTargetImagePath();
-            if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) return;
+            List<string> targets = GetUploadedImageFiles();
+            if (targets.Count == 0) return;
 
-            // 현재 가공 대상 파일이 변경되었다면 이전 캐시 및 기록 초기화 처리
-            if (lastRoiTargetPath != targetPath)
-            {
-                if (!string.IsNullOrEmpty(roiBackupPath) && File.Exists(roiBackupPath))
-                {
-                    try { File.Delete(roiBackupPath); } catch { }
-                }
-                roiBackupPath = null;
-                Array.Clear(roiState, 0, roiState.Length);
-                lastRoiTargetPath = targetPath;
-            }
+            string backupFolder = GetMirrorYBackupFolder();
+            bool hasBackup = Directory.Exists(backupFolder) && Directory.GetFiles(backupFolder).Any();
 
-            // 최초 진입 시 무수정 상태의 원본 이미지 백업 생성 (.roiback)
-            if (string.IsNullOrEmpty(roiBackupPath) || !File.Exists(roiBackupPath))
-            {
-                roiBackupPath = targetPath + ".roiback";
-                if (File.Exists(roiBackupPath)) File.Delete(roiBackupPath);
-                File.Copy(targetPath, roiBackupPath);
-            }
+            ReleaseCurrentImage();
 
-            // 해당 좌표의 블랙아웃 유무 토글 변경
-            roiState[row, col] = !roiState[row, col];
-
-            if (picVideoBox.Image != null)
-            {
-                picVideoBox.Image.Dispose();
-                picVideoBox.Image = null;
-            }
-
-            Bitmap compositeBmp = null;
             try
             {
-                // 항상 무수정 원본 백업본 스트림으로부터 복합 캔버스를 로드하여 연산
-                using (FileStream fs = new FileStream(roiBackupPath, FileMode.Open, FileAccess.Read))
+                if (!hasBackup)
                 {
-                    using (Image originalImg = Image.FromStream(fs))
+                    foreach (string targetPath in targets)
                     {
-                        compositeBmp = new Bitmap(originalImg);
+                        string backupPath = Path.Combine(backupFolder, Path.GetFileName(targetPath));
+                        File.Copy(targetPath, backupPath, true);
                     }
-                }
 
-                using (Graphics g = Graphics.FromImage(compositeBmp))
-                {
-                    int w = compositeBmp.Width / 3;
-                    int h = compositeBmp.Height / 3;
-
-                    for (int r = 0; r < 3; r++)
+                    foreach (string targetPath in targets)
                     {
-                        for (int c = 0; c < 3; c++)
+                        Bitmap targetBitmap = null;
+                        try
                         {
-                            if (roiState[r, c])
-                            {
-                                int x = c * w;
-                                int y = r * h;
-                                int rectWidth = (c == 2) ? compositeBmp.Width - x : w;
-                                int rectHeight = (r == 2) ? compositeBmp.Height - y : h;
-
-                                g.FillRectangle(Brushes.Black, new Rectangle(x, y, rectWidth, rectHeight));
-                            }
+                            targetBitmap = LoadBitmapWithoutLock(targetPath);
+                            targetBitmap.RotateFlip(RotateFlipType.RotateNoneFlipY);
+                            SaveBitmapToPath(targetBitmap, targetPath);
+                        }
+                        finally
+                        {
+                            if (targetBitmap != null) targetBitmap.Dispose();
                         }
                     }
                 }
+                else
+                {
+                    string uploadFolder = GetUploadedFolder();
+                    foreach (string backupPath in Directory.GetFiles(backupFolder))
+                    {
+                        string destPath = Path.Combine(uploadFolder, Path.GetFileName(backupPath));
+                        File.Copy(backupPath, destPath, true);
+                    }
 
-                compositeBmp.Save(targetPath, System.Drawing.Imaging.ImageFormat.Jpeg);
+                    try
+                    {
+                        Directory.Delete(backupFolder, true);
+                    }
+                    catch { }
+                }
+
+                LoadUploadedFilesToD();
             }
-            catch { }
-            finally
+            catch (Exception ex)
             {
-                if (compositeBmp != null) compositeBmp.Dispose();
+                MessageBox.Show($"상하 반전 처리 중 오류가 발생했습니다: {ex.Message}");
+                LoadUploadedFilesToD();
+            }
+        }
+
+        private void ApplyROIBlackoutToAllImages(int row, int col)
+        {
+            List<string> targets = GetUploadedImageFiles();
+            if (targets.Count == 0) return;
+
+            roiState[row, col] = !roiState[row, col];
+            ReleaseCurrentImage();
+
+            foreach (string targetPath in targets)
+            {
+                string backupPath = targetPath + ".roiback";
+                Bitmap compositeBmp = null;
+
+                try
+                {
+                    if (!File.Exists(backupPath))
+                    {
+                        File.Copy(targetPath, backupPath, true);
+                    }
+
+                    compositeBmp = LoadBitmapWithoutLock(backupPath);
+
+                    using (Graphics g = Graphics.FromImage(compositeBmp))
+                    {
+                        int w = compositeBmp.Width / 3;
+                        int h = compositeBmp.Height / 3;
+
+                        for (int r = 0; r < 3; r++)
+                        {
+                            for (int c = 0; c < 3; c++)
+                            {
+                                if (roiState[r, c])
+                                {
+                                    int x = c * w;
+                                    int y = r * h;
+                                    int rectWidth = c == 2 ? compositeBmp.Width - x : w;
+                                    int rectHeight = r == 2 ? compositeBmp.Height - y : h;
+                                    g.FillRectangle(Brushes.Black, new Rectangle(x, y, rectWidth, rectHeight));
+                                }
+                            }
+                        }
+                    }
+
+                    SaveBitmapToPath(compositeBmp, targetPath);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"ROI 처리 중 오류가 발생했습니다.\n{Path.GetFileName(targetPath)}\n{ex.Message}");
+                }
+                finally
+                {
+                    if (compositeBmp != null) compositeBmp.Dispose();
+                }
             }
 
-            UpdateSlideDisplay();
+            LoadUploadedFilesToD();
         }
 
         private void trcbrContrastProperty_Scroll(object sender, EventArgs e)
         {
-            string targetPath = GetTargetImagePath();
-            if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) return;
-
-            if (string.IsNullOrEmpty(gammaBackupPath) || !File.Exists(gammaBackupPath))
-            {
-                gammaBackupPath = targetPath + ".gback";
-                if (File.Exists(gammaBackupPath)) File.Delete(gammaBackupPath);
-                File.Copy(targetPath, gammaBackupPath);
-            }
+            List<string> targets = GetUploadedImageFiles();
+            if (targets.Count == 0) return;
 
             int trackValue = trcbrContrastProperty.Value;
+            ReleaseCurrentImage();
 
-            if (trackValue == 0)
+            foreach (string targetPath in targets)
             {
-                if (picVideoBox.Image != null)
+                try
                 {
-                    picVideoBox.Image.Dispose();
-                    picVideoBox.Image = null;
-                }
-                File.Delete(targetPath);
-                File.Copy(gammaBackupPath, targetPath);
-                UpdateSlideDisplay();
-                return;
-            }
-
-            double gammaCalculationValue = 1.0;
-            if (trackValue > 0)
-            {
-                gammaCalculationValue = 1.0 - (trackValue * 0.08);
-            }
-            else if (trackValue < 0)
-            {
-                gammaCalculationValue = 1.0 + (-trackValue * 0.2);
-            }
-
-            if (picVideoBox.Image != null)
-            {
-                picVideoBox.Image.Dispose();
-                picVideoBox.Image = null;
-            }
-
-            Bitmap targetBitmap = null;
-            try
-            {
-                using (FileStream fs = new FileStream(gammaBackupPath, FileMode.Open, FileAccess.Read))
-                {
-                    using (Image originalImg = Image.FromStream(fs))
+                    if (!gammaBackupPaths.ContainsKey(targetPath) || !File.Exists(gammaBackupPaths[targetPath]))
                     {
-                        targetBitmap = new Bitmap(originalImg);
+                        string backupPath = targetPath + ".gback";
+                        File.Copy(targetPath, backupPath, true);
+                        gammaBackupPaths[targetPath] = backupPath;
                     }
-                }
 
-                using (Bitmap tempCopy = (Bitmap)targetBitmap.Clone())
-                {
-                    using (Graphics g = Graphics.FromImage(targetBitmap))
+                    string sourcePath = gammaBackupPaths[targetPath];
+
+                    if (trackValue == 0)
                     {
-                        using (System.Drawing.Imaging.ImageAttributes attributes = new System.Drawing.Imaging.ImageAttributes())
+                        File.Copy(sourcePath, targetPath, true);
+                        continue;
+                    }
+
+                    double gammaCalculationValue = 1.0;
+                    if (trackValue > 0)
+                    {
+                        gammaCalculationValue = 1.0 - trackValue * 0.08;
+                    }
+                    else if (trackValue < 0)
+                    {
+                        gammaCalculationValue = 1.0 + -trackValue * 0.2;
+                    }
+
+                    Bitmap targetBitmap = null;
+                    try
+                    {
+                        targetBitmap = LoadBitmapWithoutLock(sourcePath);
+
+                        using (Bitmap tempCopy = (Bitmap)targetBitmap.Clone())
                         {
-                            attributes.SetGamma((float)gammaCalculationValue, System.Drawing.Imaging.ColorAdjustType.Bitmap);
-                            g.DrawImage(tempCopy, new Rectangle(0, 0, targetBitmap.Width, targetBitmap.Height),
-                                0, 0, tempCopy.Width, tempCopy.Height, GraphicsUnit.Pixel, attributes);
+                            using (Graphics g = Graphics.FromImage(targetBitmap))
+                            {
+                                using (ImageAttributes attributes = new ImageAttributes())
+                                {
+                                    attributes.SetGamma((float)gammaCalculationValue, ColorAdjustType.Bitmap);
+                                    g.DrawImage(tempCopy, new Rectangle(0, 0, targetBitmap.Width, targetBitmap.Height), 0, 0, tempCopy.Width, tempCopy.Height, GraphicsUnit.Pixel, attributes);
+                                }
+                            }
                         }
+
+                        SaveBitmapToPath(targetBitmap, targetPath);
+                    }
+                    finally
+                    {
+                        if (targetBitmap != null) targetBitmap.Dispose();
                     }
                 }
-                targetBitmap.Save(targetPath, System.Drawing.Imaging.ImageFormat.Jpeg);
-            }
-            catch { }
-            finally
-            {
-                if (targetBitmap != null) targetBitmap.Dispose();
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"대비 처리 중 오류가 발생했습니다.\n{Path.GetFileName(targetPath)}\n{ex.Message}");
+                }
             }
 
-            UpdateSlideDisplay();
+            LoadUploadedFilesToD();
         }
 
-        // [추가] 프리셋 필터 버튼 클릭 시 임시 가공 처리 공용 코어 메서드
         private void HandlePaletteClick(int filterType, Button targetButton)
         {
-            // 1. 자동으로 btnColorCancle을 연동 실행하여 기교 폴더 정리
-            btnColorCancle_Click(this, EventArgs.Empty);
-
             activePaletteButton = targetButton;
+            ResetPaletteStatus();
+            activePaletteButton = targetButton;
+            if (activePaletteButton != null) activePaletteButton.Enabled = false;
 
-
-            string targetPath = GetTargetImagePath();
-            if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) return;
-
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string tempFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\ColorTempFile"));
-            if (!Directory.Exists(tempFolder))
+            ModifyAllUploadedImages((bmp, path) =>
             {
-                Directory.CreateDirectory(tempFolder);
-            }
-
-            // 2. 포커스 혹은 현재 슬라이드 이미지 명칭 뒤에 -Temp 접미사 바인딩 복사
-            string fileNameOnly = Path.GetFileNameWithoutExtension(targetPath);
-            string ext = Path.GetExtension(targetPath);
-            string tempFilePath = Path.Combine(tempFolder, $"{fileNameOnly}-Temp{ext}");
-
-            try
-            {
-                File.Copy(targetPath, tempFilePath, true);
-
-                // 3. 프리셋 색조 필터 연산 적용
-                ApplyPresetColorFilter(tempFilePath, filterType);
-
-                // 4. 메인 슬라이드 리스트를 ColorTempFile 내부 임시 가공 파일 슬라이드로 전환 대체
-                slideImages.Clear();
-                slideImages.Add(tempFilePath);
-                currentSlideIndex = 0;
-
-                sdrSeekBar.RangeMin = 0;
-                sdrSeekBar.RangeMax = 0;
-
-                UpdateSlideDisplay();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"임시 필터 구성 중 오류가 발생했습니다: {ex.Message}");
-            }
+                ApplyPresetColorFilterToBitmap(bmp, filterType);
+            });
         }
 
-        // [추가] ColorMatrix 고속 이미지 필터 하드 연산 유닛
-        private void ApplyPresetColorFilter(string filePath, int filterType)
+        private void ApplyPresetColorFilterToBitmap(Bitmap bmp, int filterType)
         {
             float[][] matrixElements;
             switch (filterType)
             {
-                case 1: // 흑백 필터
-                    matrixElements = new float[][] {
+                case 1:
+                    matrixElements = new float[][]
+                    {
                         new float[] {0.299f, 0.299f, 0.299f, 0, 0},
                         new float[] {0.587f, 0.587f, 0.587f, 0, 0},
                         new float[] {0.114f, 0.114f, 0.114f, 0, 0},
@@ -501,8 +603,9 @@ namespace AD_AI_LearningData_Editor
                         new float[] {0, 0, 0, 0, 1}
                     };
                     break;
-                case 2: // 색 반전 필터
-                    matrixElements = new float[][] {
+                case 2:
+                    matrixElements = new float[][]
+                    {
                         new float[] {-1, 0, 0, 0, 0},
                         new float[] {0, -1, 0, 0, 0},
                         new float[] {0, 0, -1, 0, 0},
@@ -510,8 +613,9 @@ namespace AD_AI_LearningData_Editor
                         new float[] {1, 1, 1, 0, 1}
                     };
                     break;
-                case 3: // 파란 빛 필터 (차가운 색조 증폭)
-                    matrixElements = new float[][] {
+                case 3:
+                    matrixElements = new float[][]
+                    {
                         new float[] {0.8f, 0, 0, 0, 0},
                         new float[] {0, 0.8f, 0, 0, 0},
                         new float[] {0, 0, 1.3f, 0, 0},
@@ -519,16 +623,19 @@ namespace AD_AI_LearningData_Editor
                         new float[] {0, 0, 0.15f, 0, 1}
                     };
                     break;
-                case 4: // 노란 빛 필터 (따뜻한 색조 증폭)
-                    matrixElements = new float[][] {
+                case 4:
+                    matrixElements = new float[][]
+                    {
                         new float[] {1.2f, 0, 0, 0, 0},
                         new float[] {0, 1.2f, 0, 0, 0},
                         new float[] {0, 0, 0.7f, 0, 0},
+                        new float[] {0, 0, 0, 1, 0},
                         new float[] {0.15f, 0.15f, 0, 0, 1}
                     };
                     break;
-                case 5: // 세피아 필터 (고전 예술풍 분위기 구상)
-                    matrixElements = new float[][] {
+                case 5:
+                    matrixElements = new float[][]
+                    {
                         new float[] {0.393f, 0.349f, 0.272f, 0, 0},
                         new float[] {0.769f, 0.686f, 0.534f, 0, 0},
                         new float[] {0.189f, 0.168f, 0.131f, 0, 0},
@@ -540,122 +647,38 @@ namespace AD_AI_LearningData_Editor
                     return;
             }
 
-            Bitmap bmp = null;
-            try
+            using (Bitmap tempCopy = (Bitmap)bmp.Clone())
             {
-                using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                using (Graphics g = Graphics.FromImage(bmp))
                 {
-                    using (Image originalImg = Image.FromStream(fs))
+                    using (ImageAttributes attributes = new ImageAttributes())
                     {
-                        bmp = new Bitmap(originalImg);
+                        ColorMatrix colorMatrix = new ColorMatrix(matrixElements);
+                        attributes.SetColorMatrix(colorMatrix);
+                        g.DrawImage(tempCopy, new Rectangle(0, 0, bmp.Width, bmp.Height), 0, 0, tempCopy.Width, tempCopy.Height, GraphicsUnit.Pixel, attributes);
                     }
                 }
-
-                using (Bitmap tempCopy = (Bitmap)bmp.Clone())
-                {
-                    using (Graphics g = Graphics.FromImage(bmp))
-                    {
-                        using (System.Drawing.Imaging.ImageAttributes attributes = new System.Drawing.Imaging.ImageAttributes())
-                        {
-                            System.Drawing.Imaging.ColorMatrix colorMatrix = new System.Drawing.Imaging.ColorMatrix(matrixElements);
-                            attributes.SetColorMatrix(colorMatrix);
-                            g.DrawImage(tempCopy, new Rectangle(0, 0, bmp.Width, bmp.Height),
-                                0, 0, tempCopy.Width, tempCopy.Height, GraphicsUnit.Pixel, attributes);
-                        }
-                    }
-                }
-                bmp.Save(filePath, System.Drawing.Imaging.ImageFormat.Jpeg);
-            }
-            catch { }
-            finally
-            {
-                if (bmp != null) bmp.Dispose();
             }
         }
 
-        private void ColorTrackBar_Scroll(object sender, EventArgs e) { }
-
-        // [수정] btnColorCfm 클릭 시 -Temp 제거 및 UploadedFile 동일 경로 파일 완전 덮어쓰기 복구 구조
         private void btnColorCfm_Click(object sender, EventArgs e)
         {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string tempFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\ColorTempFile"));
-            string uploadFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
-
-            if (Directory.Exists(tempFolder))
-            {
-                try
-                {
-                    string[] tempFiles = Directory.GetFiles(tempFolder);
-                    foreach (string tempFile in tempFiles)
-                    {
-                        string fileName = Path.GetFileName(tempFile);
-                        if (fileName.Contains("-Temp"))
-                        {
-                            string originalName = fileName.Replace("-Temp", "");
-                            string destPath = Path.Combine(uploadFolder, originalName);
-
-                            if (picVideoBox.Image != null)
-                            {
-                                picVideoBox.Image.Dispose();
-                                picVideoBox.Image = null;
-                            }
-
-                            if (File.Exists(destPath)) File.Delete(destPath);
-                            File.Move(tempFile, destPath);
-                        }
-                    }
-                }
-                catch { }
-            }
-
-            colorFilterBackupPath = null;
             ResetPaletteStatus();
-
-            // 메인 정규 업로드 파일 슬라이드로 전면 교체 로드 시동
             LoadUploadedFilesToD();
         }
 
-        // [수정] btnColorCancle 클릭 시 ColorTempFile 내부 파일 모두 제거 및 메인 원본 복원
         private void btnColorCancle_Click(object sender, EventArgs e)
         {
-            if (picVideoBox.Image != null)
-            {
-                picVideoBox.Image.Dispose();
-                picVideoBox.Image = null;
-            }
-
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string tempFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\ColorTempFile"));
-
-            if (Directory.Exists(tempFolder))
-            {
-                try
-                {
-                    string[] files = Directory.GetFiles(tempFolder);
-                    foreach (string file in files)
-                    {
-                        File.Delete(file);
-                    }
-                }
-                catch { }
-            }
-
-            colorFilterBackupPath = null;
             ResetPaletteStatus();
-
-            // 원본 메인 데이터 슬라이드 복구 로드 실행
             LoadUploadedFilesToD();
         }
 
         private void ResetPaletteStatus()
         {
-            activePaletteButton = null;
             foreach (var btn in paletteButtons)
             {
                 btn.Enabled = true;
             }
-
         }
 
         private void InitializeVideoPlayer()
@@ -676,13 +699,7 @@ namespace AD_AI_LearningData_Editor
 
         private void SetupTrashWatcher()
         {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
-
-            if (!Directory.Exists(trashFolder))
-            {
-                Directory.CreateDirectory(trashFolder);
-            }
+            string trashFolder = GetTrashFolder();
 
             trashWatcher = new FileSystemWatcher(trashFolder);
             trashWatcher.EnableRaisingEvents = true;
@@ -710,14 +727,7 @@ namespace AD_AI_LearningData_Editor
             slideImages.Clear();
             currentSlideIndex = 0;
 
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string targetFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
-
-            if (!Directory.Exists(targetFolder))
-            {
-                Directory.CreateDirectory(targetFolder);
-            }
-
+            string targetFolder = GetUploadedFolder();
             DirectoryInfo di = new DirectoryInfo(targetFolder);
 
             var folders = di.GetDirectories().OrderBy(d => d.CreationTime).ToList();
@@ -728,15 +738,20 @@ namespace AD_AI_LearningData_Editor
                 lstviewFileListD.Items.Add(item);
             }
 
-            var files = di.GetFiles().OrderBy(f => f.CreationTime).ToList();
+            var files = di.GetFiles()
+                .Where(f => !f.Name.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
+                .Where(f => !f.Name.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
+                .Where(f => !f.Name.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f.CreationTime)
+                .ToList();
+
             foreach (var file in files)
             {
                 ListViewItem item = new ListViewItem(file.Name);
                 item.Tag = "추가된파일";
                 lstviewFileListD.Items.Add(item);
 
-                string ext = file.Extension.ToLower();
-                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".bit")
+                if (IsImageFile(file.FullName))
                 {
                     slideImages.Add(file.FullName);
                 }
@@ -748,15 +763,21 @@ namespace AD_AI_LearningData_Editor
                 sdrSeekBar.RangeMax = slideImages.Count - 1;
                 UpdateSlideDisplay();
             }
+            else
+            {
+                ReleaseCurrentImage();
+                sdrSeekBar.RangeMin = 0;
+                sdrSeekBar.RangeMax = 0;
+                sdrSeekBar.Value = 0;
+                sdrSeekBar.Text = "0/0";
+            }
         }
 
         private void LoadTrashCanFiles()
         {
             lstviewTrash.Items.Clear();
 
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
-
+            string trashFolder = GetTrashFolder();
             if (!Directory.Exists(trashFolder)) return;
 
             DirectoryInfo di = new DirectoryInfo(trashFolder);
@@ -782,18 +803,21 @@ namespace AD_AI_LearningData_Editor
         {
             if (slideImages.Count == 0) return;
 
+            if (currentSlideIndex < 0) currentSlideIndex = 0;
+            if (currentSlideIndex >= slideImages.Count) currentSlideIndex = slideImages.Count - 1;
+
             string currentImagePath = slideImages[currentSlideIndex];
+            if (!File.Exists(currentImagePath)) return;
 
-            if (picVideoBox.Image != null)
+            ReleaseCurrentImage();
+
+            try
             {
-                Image oldImage = picVideoBox.Image;
-                picVideoBox.Image = null;
-                oldImage.Dispose();
+                picVideoBox.Image = LoadBitmapWithoutLock(currentImagePath);
             }
-
-            using (FileStream fs = new FileStream(currentImagePath, FileMode.Open, FileAccess.Read))
+            catch
             {
-                picVideoBox.Image = Image.FromStream(fs);
+                return;
             }
 
             isUpdatingSlider = true;
@@ -874,19 +898,12 @@ namespace AD_AI_LearningData_Editor
 
         private void btnDel_Click(object sender, EventArgs e)
         {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
-
-            if (!Directory.Exists(trashFolder))
-            {
-                Directory.CreateDirectory(trashFolder);
-            }
-
+            string trashFolder = GetTrashFolder();
+            string uploadFolder = GetUploadedFolder();
             List<string> targets = new List<string>();
 
             if (lstviewFileListD.SelectedItems.Count > 0)
             {
-                string uploadFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
                 foreach (ListViewItem item in lstviewFileListD.SelectedItems)
                 {
                     string name = item.Text.Replace("[폴더] ", "");
@@ -904,19 +921,13 @@ namespace AD_AI_LearningData_Editor
             if (targets.Count == 0) return;
 
             if (videoTimer.Enabled) videoTimer.Stop();
+            ReleaseCurrentImage();
 
             foreach (string target in targets)
             {
-                if (picVideoBox.Image != null && slideImages.Count > 0 && target == slideImages[currentSlideIndex])
-                {
-                    Image old = picVideoBox.Image;
-                    picVideoBox.Image = null;
-                    old.Dispose();
-                }
-
                 try
                 {
-                    string dest = Path.Combine(trashFolder, Path.GetFileName(target));
+                    string dest = GetNonConflictingPath(Path.Combine(trashFolder, Path.GetFileName(target)));
                     if (Directory.Exists(target))
                     {
                         Directory.Move(target, dest);
@@ -932,9 +943,116 @@ namespace AD_AI_LearningData_Editor
             LoadUploadedFilesToD();
         }
 
+        private string GetNonConflictingPath(string path)
+        {
+            if (!File.Exists(path) && !Directory.Exists(path)) return path;
+
+            string directory = Path.GetDirectoryName(path);
+            string fileName = Path.GetFileNameWithoutExtension(path);
+            string extension = Path.GetExtension(path);
+            int index = 1;
+
+            while (true)
+            {
+                string candidate = Path.Combine(directory, $"{fileName} ({index}){extension}");
+                if (!File.Exists(candidate) && !Directory.Exists(candidate)) return candidate;
+                index++;
+            }
+        }
+
+        private void btnSave_Click(object sender, EventArgs e)
+        {
+            string binFolder = GetBinFolder();
+            string uploadFolder = GetUploadedFolder();
+
+            if (!Directory.Exists(uploadFolder)) Directory.CreateDirectory(uploadFolder);
+
+            using (SaveFileDialog dialog = new SaveFileDialog())
+            {
+                dialog.Title = "저장할 새 폴더 이름을 입력하세요.";
+                dialog.InitialDirectory = binFolder;
+                dialog.FileName = "새 폴더 이름";
+                dialog.Filter = "폴더 이름|*.*";
+                dialog.AddExtension = false;
+                dialog.DefaultExt = "";
+                dialog.CheckPathExists = true;
+                dialog.CheckFileExists = false;
+                dialog.OverwritePrompt = false;
+                dialog.ValidateNames = true;
+
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+                string selectedFolder = Path.GetFullPath(dialog.FileName);
+                string folderName = Path.GetFileName(selectedFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+                if (string.IsNullOrWhiteSpace(folderName))
+                {
+                    MessageBox.Show("생성할 폴더 이름을 입력해야 합니다.");
+                    return;
+                }
+
+                char[] invalidChars = Path.GetInvalidFileNameChars();
+                if (folderName.IndexOfAny(invalidChars) >= 0)
+                {
+                    MessageBox.Show("폴더 이름에 사용할 수 없는 문자가 포함되어 있습니다.");
+                    return;
+                }
+
+                if (File.Exists(selectedFolder))
+                {
+                    MessageBox.Show("같은 이름의 파일이 이미 존재합니다. 다른 폴더 이름을 입력하세요.");
+                    return;
+                }
+
+                if (string.Equals(selectedFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), uploadFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                {
+                    MessageBox.Show("UploadedFile 폴더 자체는 저장 대상 폴더로 사용할 수 없습니다.");
+                    return;
+                }
+
+                try
+                {
+                    Directory.CreateDirectory(selectedFolder);
+                    ReleaseCurrentImage();
+
+                    string[] files = Directory.GetFiles(uploadFolder)
+                        .Where(path => !path.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
+                        .Where(path => !path.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
+                        .Where(path => !path.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+
+                    foreach (string file in files)
+                    {
+                        string dest = GetNonConflictingPath(Path.Combine(selectedFolder, Path.GetFileName(file)));
+                        File.Move(file, dest);
+                    }
+
+                    foreach (string backupFile in Directory.GetFiles(uploadFolder).Where(path => path.EndsWith(".gback", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase)).ToArray())
+                    {
+                        try { File.Delete(backupFile); } catch { }
+                    }
+
+                    string mirrorBackupFolder = Path.Combine(GetBinFolder(), mirrorYBackupFolderName);
+                    if (Directory.Exists(mirrorBackupFolder))
+                    {
+                        try { Directory.Delete(mirrorBackupFolder, true); } catch { }
+                    }
+
+                    gammaBackupPaths.Clear();
+                    Array.Clear(roiState, 0, roiState.Length);
+                    LoadUploadedFilesToD();
+                    MessageBox.Show("입력한 이름의 폴더를 만들고 UploadedFile 안의 파일을 이동했습니다.");
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"파일 저장 중 오류가 발생했습니다: {ex.Message}");
+                }
+            }
+        }
+
         private void btnOpnFileExplrr_Click(object sender, EventArgs e)
         {
-            string binFolder = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\"));
+            string binFolder = GetBinFolder();
             System.Diagnostics.Process.Start("explorer.exe", binFolder);
         }
 
@@ -942,20 +1060,16 @@ namespace AD_AI_LearningData_Editor
         {
             if (lstviewTrash.SelectedItems.Count == 0) return;
 
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string trashFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\TrashCan"));
-            string uploadFolder = Path.GetFullPath(Path.Combine(baseDir, @"..\..\UploadedFile"));
+            string trashFolder = GetTrashFolder();
+            string uploadFolder = GetUploadedFolder();
 
-            if (!Directory.Exists(uploadFolder))
-            {
-                Directory.CreateDirectory(uploadFolder);
-            }
+            ReleaseCurrentImage();
 
             foreach (ListViewItem item in lstviewTrash.SelectedItems)
             {
                 string fileName = item.Text.Replace("[폴더] ", "");
                 string sourcePath = Path.Combine(trashFolder, fileName);
-                string destPath = Path.Combine(uploadFolder, fileName);
+                string destPath = GetNonConflictingPath(Path.Combine(uploadFolder, fileName));
 
                 try
                 {
@@ -972,6 +1086,7 @@ namespace AD_AI_LearningData_Editor
             }
 
             LoadUploadedFilesToD();
+            LoadTrashCanFiles();
         }
 
         private void SetupTabs()
@@ -1031,7 +1146,7 @@ namespace AD_AI_LearningData_Editor
             lstviewTrash.Visible = false;
             lstviewMain.Visible = true;
 
-            lblLstVwName.Text = "";
+            SetListViewName("");
             btnRestoration.Visible = false;
         }
 
@@ -1048,7 +1163,7 @@ namespace AD_AI_LearningData_Editor
                     lstviewFileListD.Visible = true;
                     lstviewTrash.Visible = false;
 
-                    lblLstVwName.Text = "[파일 목록]";
+                    SetListViewName("[파일목록]");
                     btnRestoration.Visible = false;
                 }
                 else if (itemTag == "휴지통")
@@ -1058,7 +1173,7 @@ namespace AD_AI_LearningData_Editor
                     lstviewFileListD.Visible = false;
                     lstviewTrash.Visible = true;
 
-                    lblLstVwName.Text = "[휴지통]";
+                    SetListViewName("[휴지통]");
                     btnRestoration.Visible = true;
 
                     LoadTrashCanFiles();
@@ -1085,82 +1200,75 @@ namespace AD_AI_LearningData_Editor
         private void trackBar1_Scroll(object sender, EventArgs e) { }
         private void pnlContrastProperty_Paint(object sender, PaintEventArgs e) { }
         private void pnlCloseProperty_Paint(object sender, PaintEventArgs e) { }
+        private void GBPalete_Enter(object sender, EventArgs e) { }
+        private void ColorTrackBar_Scroll(object sender, EventArgs e) { }
 
         private class PropertyPanelFilter : IMessageFilter
         {
-            private frmMain _form;
+            private frmMain form;
             private const int WM_LBUTTONDOWN = 0x0201;
 
             public PropertyPanelFilter(frmMain form)
             {
-                _form = form;
+                this.form = form;
             }
 
             public bool PreFilterMessage(ref Message m)
             {
-                if (m.Msg == WM_LBUTTONDOWN)
-                {
-                    if (_form.pnlContrastProperty.Visible || _form.pnlROI.Visible || _form.pnlColorProperty.Visible) { return false; }
-                    {
-                        Point mousePos = Control.MousePosition;
+                if (m.Msg != WM_LBUTTONDOWN) return false;
+                if (form == null || form.IsDisposed) return false;
+                if (!form.pnlContrastProperty.Visible && !form.pnlROI.Visible && !form.pnlColorProperty.Visible) return false;
 
-                        if (IsOutside(_form.pnlContrastProperty, mousePos) && IsOutside(_form.btnContrastProperty, mousePos) &&
-                            IsOutside(_form.pnlROI, mousePos) && IsOutside(_form.btnROI, mousePos) &&
-                            IsOutside(_form.pnlColorProperty, mousePos) && IsOutside(_form.btnColorProperty, mousePos) &&
-                            IsOutside(_form.btnPalette1, mousePos) && IsOutside(_form.btnPalette2, mousePos) &&
-                            IsOutside(_form.btnPalette3, mousePos) && IsOutside(_form.btnPalette4, mousePos) &&
-                            IsOutside(_form.btnPalette5, mousePos))
-                        {
-                            _form.Invoke(new Action(() =>
-                            {
-                                _form.pnlContrastProperty.Visible = false;
-                                _form.pnlROI.Visible = false;
-                                _form.pnlColorProperty.Visible = false;
-                                _form.crdProperty.Visible = true;
-                            }));
-                        }
-                    }
+                Point mousePos = Control.MousePosition;
+
+                bool clickedInsidePropertyArea =
+                    IsInside(form.pnlContrastProperty, mousePos) ||
+                    IsInside(form.pnlROI, mousePos) ||
+                    IsInside(form.pnlColorProperty, mousePos) ||
+                    IsInside(form.btnContrastProperty, mousePos) ||
+                    IsInside(form.btnROI, mousePos) ||
+                    IsInside(form.btnColorProperty, mousePos);
+
+                if (!clickedInsidePropertyArea)
+                {
+                    form.BeginInvoke(new Action(() => form.HidePropertyPanels()));
                 }
+
                 return false;
             }
 
-            private bool IsOutside(Control c, Point p)
+            private bool IsInside(Control c, Point p)
             {
-                if (c == null || !c.Visible) return true;
+                if (c == null || !c.Visible) return false;
                 Rectangle r = c.RectangleToScreen(c.ClientRectangle);
-                return !r.Contains(p);
+                return r.Contains(p);
             }
-        }
-
-        private void GBPalete_Enter(object sender, EventArgs e)
-        {
-
         }
     }
 
     public class ClickOutsideFilter : IMessageFilter
     {
-        private Control _panel;
-        private Control _button;
+        private Control panel;
+        private Control button;
         private const int WM_LBUTTONDOWN = 0x0201;
 
         public ClickOutsideFilter(Control panel, Control button)
         {
-            _panel = panel;
-            _button = button;
+            this.panel = panel;
+            this.button = button;
         }
 
         public bool PreFilterMessage(ref Message m)
         {
-            if (m.Msg == WM_LBUTTONDOWN && _panel.Visible)
+            if (m.Msg == WM_LBUTTONDOWN && panel.Visible)
             {
                 Point mousePos = Control.MousePosition;
-                Rectangle panelRect = _panel.RectangleToScreen(_panel.ClientRectangle);
-                Rectangle btnRect = _button.RectangleToScreen(_button.ClientRectangle);
+                Rectangle panelRect = panel.RectangleToScreen(panel.ClientRectangle);
+                Rectangle btnRect = button.RectangleToScreen(button.ClientRectangle);
 
                 if (!panelRect.Contains(mousePos) && !btnRect.Contains(mousePos))
                 {
-                    _panel.Invoke(new Action(() => _panel.Visible = false));
+                    panel.Invoke(new Action(() => panel.Visible = false));
                 }
             }
             return false;
@@ -1172,9 +1280,7 @@ namespace AD_AI_LearningData_Editor
         public DoubleBufferedPictureBox()
         {
             this.DoubleBuffered = true;
-            this.SetStyle(ControlStyles.UserPaint |
-                          ControlStyles.AllPaintingInWmPaint |
-                          ControlStyles.OptimizedDoubleBuffer, true);
+            this.SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
             this.UpdateStyles();
         }
     }
