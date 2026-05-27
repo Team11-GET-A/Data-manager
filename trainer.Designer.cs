@@ -32,9 +32,9 @@
             materialButton1 = new MaterialSkin.Controls.MaterialButton();
             lblTrainer = new MaterialSkin.Controls.MaterialLabel();
             panel3 = new Panel();
+            btnAutoPilot1 = new Button();
             btnLoadData1 = new Button();
             libModelList = new MaterialSkin.Controls.MaterialListBox();
-            btnAutoPilot1 = new Button();
             panel1.SuspendLayout();
             panel3.SuspendLayout();
             SuspendLayout();
@@ -45,9 +45,8 @@
             panel1.Controls.Add(lblTrainer);
             panel1.Dock = DockStyle.Top;
             panel1.Location = new Point(0, 0);
-            panel1.Margin = new Padding(4, 5, 4, 5);
             panel1.Name = "panel1";
-            panel1.Size = new Size(2263, 220);
+            panel1.Size = new Size(1584, 132);
             panel1.TabIndex = 0;
             // 
             // materialButton1
@@ -58,12 +57,12 @@
             materialButton1.Depth = 0;
             materialButton1.HighEmphasis = true;
             materialButton1.Icon = null;
-            materialButton1.Location = new Point(1964, 15);
-            materialButton1.Margin = new Padding(6, 10, 6, 10);
+            materialButton1.Location = new Point(1375, 9);
+            materialButton1.Margin = new Padding(4, 6, 4, 6);
             materialButton1.MouseState = MaterialSkin.MouseState.HOVER;
             materialButton1.Name = "materialButton1";
             materialButton1.NoAccentTextColor = Color.Empty;
-            materialButton1.Size = new Size(229, 150);
+            materialButton1.Size = new Size(160, 90);
             materialButton1.TabIndex = 1;
             materialButton1.Text = "materialButton1";
             materialButton1.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
@@ -75,11 +74,10 @@
             lblTrainer.Depth = 0;
             lblTrainer.Font = new Font("Roboto Light", 60F, FontStyle.Regular, GraphicsUnit.Pixel);
             lblTrainer.FontType = MaterialSkin.MaterialSkinManager.fontType.H2;
-            lblTrainer.Location = new Point(17, 15);
-            lblTrainer.Margin = new Padding(4, 0, 4, 0);
+            lblTrainer.Location = new Point(12, 9);
             lblTrainer.MouseState = MaterialSkin.MouseState.HOVER;
             lblTrainer.Name = "lblTrainer";
-            lblTrainer.Size = new Size(334, 180);
+            lblTrainer.Size = new Size(234, 108);
             lblTrainer.TabIndex = 0;
             lblTrainer.Text = "트레이너";
             lblTrainer.TextAlign = ContentAlignment.MiddleCenter;
@@ -91,18 +89,28 @@
             panel3.Controls.Add(btnLoadData1);
             panel3.Controls.Add(libModelList);
             panel3.Dock = DockStyle.Fill;
-            panel3.Location = new Point(0, 220);
-            panel3.Margin = new Padding(4, 5, 4, 5);
+            panel3.Location = new Point(0, 132);
             panel3.Name = "panel3";
-            panel3.Padding = new Padding(14, 0, 14, 17);
-            panel3.Size = new Size(2263, 1215);
+            panel3.Padding = new Padding(10, 0, 10, 10);
+            panel3.Size = new Size(1584, 729);
             panel3.TabIndex = 2;
+            // 
+            // btnAutoPilot1
+            // 
+            btnAutoPilot1.Location = new Point(615, 126);
+            btnAutoPilot1.Margin = new Padding(2, 2, 2, 2);
+            btnAutoPilot1.Name = "btnAutoPilot1";
+            btnAutoPilot1.Size = new Size(266, 90);
+            btnAutoPilot1.TabIndex = 4;
+            btnAutoPilot1.Text = "button1";
+            btnAutoPilot1.UseVisualStyleBackColor = true;
             // 
             // btnLoadData1
             // 
-            btnLoadData1.Location = new Point(282, 210);
+            btnLoadData1.Location = new Point(197, 126);
+            btnLoadData1.Margin = new Padding(2, 2, 2, 2);
             btnLoadData1.Name = "btnLoadData1";
-            btnLoadData1.Size = new Size(380, 150);
+            btnLoadData1.Size = new Size(266, 90);
             btnLoadData1.TabIndex = 3;
             btnLoadData1.Text = "button1";
             btnLoadData1.UseVisualStyleBackColor = true;
@@ -115,32 +123,21 @@
             libModelList.Depth = 0;
             libModelList.Dock = DockStyle.Fill;
             libModelList.Font = new Font("Microsoft Sans Serif", 16F, FontStyle.Regular, GraphicsUnit.Pixel);
-            libModelList.Location = new Point(14, 0);
-            libModelList.Margin = new Padding(4, 5, 4, 5);
+            libModelList.Location = new Point(10, 0);
             libModelList.MouseState = MaterialSkin.MouseState.HOVER;
             libModelList.Name = "libModelList";
             libModelList.SelectedIndex = -1;
             libModelList.SelectedItem = null;
-            libModelList.Size = new Size(2235, 1198);
+            libModelList.Size = new Size(1564, 719);
             libModelList.TabIndex = 0;
-            // 
-            // btnAutoPilot1
-            // 
-            btnAutoPilot1.Location = new Point(878, 210);
-            btnAutoPilot1.Name = "btnAutoPilot1";
-            btnAutoPilot1.Size = new Size(380, 150);
-            btnAutoPilot1.TabIndex = 4;
-            btnAutoPilot1.Text = "button1";
-            btnAutoPilot1.UseVisualStyleBackColor = true;
             // 
             // trainer
             // 
-            AutoScaleDimensions = new SizeF(10F, 25F);
+            AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(2263, 1435);
+            ClientSize = new Size(1584, 861);
             Controls.Add(panel3);
             Controls.Add(panel1);
-            Margin = new Padding(4, 5, 4, 5);
             Name = "trainer";
             Text = "트레이너";
             panel1.ResumeLayout(false);

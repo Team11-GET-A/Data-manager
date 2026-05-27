@@ -1,7 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AD_AI_LearningData_Editor;
@@ -10,10 +9,13 @@ namespace Data_Manager
 {
     public partial class frmAddFile : Form
     {
+        // 업로드 완료 후 목록을 갱신할 메인 폼 참조
         private frmMain _mainForm;
 
-        private List<string> selectedPaths = new List<string>();
-        private List<string> copyTargetPaths = new List<string>();
+        // 사용자가 선택한 원본 파일 경로 목록
+        private readonly List<string> selectedPaths = new List<string>();
+        // 실제 복사 대상 경로 목록 (원본 경로 유지)
+        private readonly List<string> copyTargetPaths = new List<string>();
 
         public frmAddFile()
         {
@@ -28,6 +30,7 @@ namespace Data_Manager
             _mainForm = mainForm;
         }
 
+        // 리스트뷰 표시 형식과 컬럼 구성
         private void InitListViewStyles()
         {
             lstviewCopyFile.View = View.Details;
@@ -41,6 +44,7 @@ namespace Data_Manager
             lstviewAddFile.Columns.Add("Copy Name", lstviewAddFile.Width - 25);
         }
 
+        // 버튼 클릭 이벤트 연결
         private void RegisterEvents()
         {
             btnSelctFile.Click += btnSelctFile_Click;
@@ -49,7 +53,7 @@ namespace Data_Manager
             btnClose.Click += btnClose_Click;
         }
 
-        // 파일 선택 버튼
+        // 파일 선택 버튼 처리
         private void btnSelctFile_Click(object sender, EventArgs e)
         {
             lstviewCopyFile.Items.Clear();
@@ -60,9 +64,7 @@ namespace Data_Manager
             {
                 ofd.Multiselect = true;
 
-                // WSL Linux 경로
-                // Ubuntu 이름은 환경마다 다를 수 있음
-                // powershell -> wsl -l 로 확인 가능
+                // WSL 기본 경로가 있으면 시작 경로로 사용
                 string linuxPath = @"\\wsl$\Ubuntu\home\mycar\data";
 
                 // 경로가 존재하면 시작 위치 설정
@@ -95,7 +97,7 @@ namespace Data_Manager
             }
         }
 
-        // Copy 이름 생성
+        // 선택한 파일에 대해 복사본 이름 생성
         private void btnCopyFile_Click(object sender, EventArgs e)
         {
             lstviewAddFile.Items.Clear();
@@ -119,7 +121,7 @@ namespace Data_Manager
             }
         }
 
-        // 실제 복사
+        // 실제 파일 복사 및 진행 팝업 표시
         private async void btnAddFile_Click(object sender, EventArgs e)
         {
             if (lstviewAddFile.Items.Count == 0)
@@ -128,19 +130,18 @@ namespace Data_Manager
             }
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-
-            string targetFolder =
-                Path.Combine(baseDir, @"..\..\UploadedFile");
+            string targetFolder = Path.Combine(baseDir, @"..\..\UploadedFile");
 
             if (!Directory.Exists(targetFolder))
             {
                 Directory.CreateDirectory(targetFolder);
             }
 
+            // 작업 취소 시 롤백할 경로 수집
             List<string> rollbackPaths = new List<string>();
 
-            CancellationTokenSource cts =
-                new CancellationTokenSource();
+            // 진행 상태 팝업에서 사용할 취소 토큰
+            CancellationTokenSource cts = new CancellationTokenSource();
 
             frmWoking popup = new frmWoking();
 
@@ -149,6 +150,7 @@ namespace Data_Manager
 
             popup.Show(this);
 
+            // 팝업 작업 중 메인 폼 비활성화
             this.Enabled = false;
 
             bool isCancelled = false;
@@ -169,11 +171,9 @@ namespace Data_Manager
 
                         string sourcePath = copyTargetPaths[i];
 
-                        string targetName =
-                            lstviewAddFile.Items[i].Text;
+                        string targetName = lstviewAddFile.Items[i].Text;
 
-                        string destinationPath =
-                            Path.Combine(targetFolder, targetName);
+                        string destinationPath = Path.Combine(targetFolder, targetName);
 
                         rollbackPaths.Add(destinationPath);
 
@@ -194,6 +194,7 @@ namespace Data_Manager
 
             if (isCancelled)
             {
+                // 실패/취소 시 생성된 파일 삭제
                 foreach (string path in rollbackPaths)
                 {
                     try
@@ -216,6 +217,7 @@ namespace Data_Manager
 
                 if (_mainForm != null)
                 {
+                    // 메인 폼 목록 갱신
                     _mainForm.Invoke(new Action(() =>
                     {
                         _mainForm.LoadUploadedFilesToD();
@@ -226,14 +228,11 @@ namespace Data_Manager
             this.Enabled = true;
         }
 
+        // 닫기 버튼 처리
         private void btnClose_Click(object sender, EventArgs e)
         {
             this.Close();
         }
 
-        private void frmAddFile_Load(object sender, EventArgs e)
-        {
-
-        }
     }
 }

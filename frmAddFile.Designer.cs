@@ -146,7 +146,6 @@
             Name = "frmAddFile";
             StartPosition = FormStartPosition.CenterParent;
             Text = "로컬 파일을 프로그램에 업로드";
-            Load += frmAddFile_Load;
             pnlCopyFile.ResumeLayout(false);
             pnlAddFile.ResumeLayout(false);
             ResumeLayout(false);

@@ -12,24 +12,34 @@ namespace AD_AI_LearningData_Editor
 {
     public partial class frmMain : MaterialForm
     {
+        // 슬라이드 재생과 프레임 이동을 위한 타이머
         private System.Windows.Forms.Timer videoTimer;
+        // 이미지 표시용 더블버퍼 PictureBox
         private DoubleBufferedPictureBox picVideoBox;
+        // 현재 로드된 슬라이드 이미지 목록
         private List<string> slideImages = new List<string>();
+        // 현재 슬라이드 인덱스
         private int currentSlideIndex = 0;
+        // 리스트뷰에서 마지막으로 강조된 항목
         private ListViewItem lastHighlightedItem = null;
+        // 슬라이더 갱신 중 이벤트 루프 방지 플래그
         private bool isUpdatingSlider = false;
+        // 휴지통 폴더 변화 감시자
         private FileSystemWatcher trashWatcher;
 
+        // 명암 조절 시 원본 이미지 백업 경로
         private string gammaBackupPath = null;
-        private string colorFilterBackupPath = null;
+        // 현재 활성화된 팔레트 버튼
         private Button activePaletteButton = null;
+        // 팔레트 버튼 목록 (상태 초기화에 사용)
         private List<Button> paletteButtons = new List<Button>();
 
-        // [추가] ROI 상태값 및 복구를 위한 백업 필드 복합 레이어 설정
+        // ROI 상태값 및 복구를 위한 백업 필드
         private bool[,] roiState = new bool[3, 3];
         private string roiBackupPath = null;
         private string lastRoiTargetPath = null;
 
+        // 화면 깜빡임 완화를 위한 CreateParams 재정의
         protected override CreateParams CreateParams
         {
             get
@@ -40,6 +50,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 메인 폼 초기화 및 각 기능 초기화
         public frmMain()
         {
             InitializeComponent();
@@ -79,6 +90,7 @@ namespace AD_AI_LearningData_Editor
             InitializeImageEditor();
         }
 
+        // 배속 컨트롤 UI 초기화 및 이벤트 연결
         private void InitializeSpeedController()
         {
             pnlSpeedPopup.Visible = false;
@@ -107,6 +119,7 @@ namespace AD_AI_LearningData_Editor
             UpdateSpeedDisplay(sdrSpeedController.Value);
         }
 
+        // 배속 팝업 표시/숨김 토글
         private void btnSpeedPopup_Click(object sender, EventArgs e)
         {
             pnlSpeedPopup.Visible = !pnlSpeedPopup.Visible;
@@ -117,6 +130,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 배속 증가 버튼
         private void btnSpeedPlus_Click(object sender, EventArgs e)
         {
             if (sdrSpeedController.Value < sdrSpeedController.RangeMax)
@@ -126,6 +140,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 배속 감소 버튼
         private void btnSpeedMinus_Click(object sender, EventArgs e)
         {
             if (sdrSpeedController.Value > sdrSpeedController.RangeMin)
@@ -135,11 +150,13 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 배속 슬라이더 변경 시 표시 갱신
         private void sdrSpeedController_onValueChanged(object sender, int newValue)
         {
             UpdateSpeedDisplay(newValue);
         }
 
+        // 배속 텍스트와 타이머 간격 계산
         private void UpdateSpeedDisplay(int sliderValue)
         {
             double speed = sliderValue / 10.0;
@@ -151,6 +168,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 이미지 편집 관련 컨트롤 초기화
         private void InitializeImageEditor()
         {
             lstviewFileListD.HideSelection = false;
@@ -192,6 +210,7 @@ namespace AD_AI_LearningData_Editor
             Application.AddMessageFilter(new PropertyPanelFilter(this));
         }
 
+        // 속성 패널 표시 전환
         private void ShowPropertyPanel(Control activeControl)
         {
             pnlContrastProperty.Visible = (activeControl == pnlContrastProperty);
@@ -199,6 +218,7 @@ namespace AD_AI_LearningData_Editor
             pnlColorProperty.Visible = (activeControl == pnlColorProperty);
         }
 
+        // 선택된 항목 또는 슬라이드 기준 대상 이미지 경로 반환
         private string GetTargetImagePath()
         {
             if (lstviewFileListD.SelectedItems.Count > 0)
@@ -218,6 +238,7 @@ namespace AD_AI_LearningData_Editor
             return null;
         }
 
+        // 대상 이미지를 로드해 전달된 작업을 적용하고 저장
         private void ModifyTargetImage(Action<Bitmap> modifyAction)
         {
             string targetPath = GetTargetImagePath();
@@ -256,6 +277,7 @@ namespace AD_AI_LearningData_Editor
             UpdateSlideDisplay();
         }
 
+        // 화질 열화(노이즈) 적용
         private void btnNoise_Click(object sender, EventArgs e)
         {
             ModifyTargetImage(bmp =>
@@ -274,6 +296,7 @@ namespace AD_AI_LearningData_Editor
             });
         }
 
+        // 좌우 반전 적용
         private void btnMirror_Click(object sender, EventArgs e)
         {
             ModifyTargetImage(bmp =>
@@ -282,7 +305,7 @@ namespace AD_AI_LearningData_Editor
             });
         }
 
-        // [수정] ROI 영역 동일 위치 한 번 더 누를 시 원상복구(토글) 처리 로직 구현
+        // ROI 영역을 토글로 블랙아웃/복구
         private void ApplyROIBlackout(int row, int col)
         {
             string targetPath = GetTargetImagePath();
@@ -362,6 +385,7 @@ namespace AD_AI_LearningData_Editor
             UpdateSlideDisplay();
         }
 
+        // 명암 조절 적용
         private void trcbrContrastProperty_Scroll(object sender, EventArgs e)
         {
             string targetPath = GetTargetImagePath();
@@ -439,7 +463,7 @@ namespace AD_AI_LearningData_Editor
             UpdateSlideDisplay();
         }
 
-        // [추가] 프리셋 필터 버튼 클릭 시 임시 가공 처리 공용 코어 메서드
+        // 프리셋 필터 적용 (임시 파일 기반)
         private void HandlePaletteClick(int filterType, Button targetButton)
         {
             // 1. 자동으로 btnColorCancle을 연동 실행하여 기교 폴더 정리
@@ -486,7 +510,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        // [추가] ColorMatrix 고속 이미지 필터 하드 연산 유닛
+        // ColorMatrix 기반 프리셋 필터 적용
         private void ApplyPresetColorFilter(string filePath, int filterType)
         {
             float[][] matrixElements;
@@ -573,9 +597,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        private void ColorTrackBar_Scroll(object sender, EventArgs e) { }
-
-        // [수정] btnColorCfm 클릭 시 -Temp 제거 및 UploadedFile 동일 경로 파일 완전 덮어쓰기 복구 구조
+        // 색상 필터 확정 처리 (-Temp 파일을 원본으로 대체)
         private void btnColorCfm_Click(object sender, EventArgs e)
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -609,14 +631,13 @@ namespace AD_AI_LearningData_Editor
                 catch { }
             }
 
-            colorFilterBackupPath = null;
             ResetPaletteStatus();
 
             // 메인 정규 업로드 파일 슬라이드로 전면 교체 로드 시동
             LoadUploadedFilesToD();
         }
 
-        // [수정] btnColorCancle 클릭 시 ColorTempFile 내부 파일 모두 제거 및 메인 원본 복원
+        // 색상 필터 취소 처리 (임시 파일 제거)
         private void btnColorCancle_Click(object sender, EventArgs e)
         {
             if (picVideoBox.Image != null)
@@ -641,13 +662,13 @@ namespace AD_AI_LearningData_Editor
                 catch { }
             }
 
-            colorFilterBackupPath = null;
             ResetPaletteStatus();
 
             // 원본 메인 데이터 슬라이드 복구 로드 실행
             LoadUploadedFilesToD();
         }
 
+        // 팔레트 버튼 상태 초기화
         private void ResetPaletteStatus()
         {
             activePaletteButton = null;
@@ -658,6 +679,7 @@ namespace AD_AI_LearningData_Editor
 
         }
 
+        // 슬라이드 표시용 PictureBox 및 타이머 초기화
         private void InitializeVideoPlayer()
         {
             picVideoBox = new DoubleBufferedPictureBox();
@@ -674,6 +696,7 @@ namespace AD_AI_LearningData_Editor
             videoTimer.Tick += VideoTimer_Tick;
         }
 
+        // 휴지통 폴더 변경 감시 설정
         private void SetupTrashWatcher()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -692,6 +715,7 @@ namespace AD_AI_LearningData_Editor
             trashWatcher.Renamed += TrashWatcher_Changed;
         }
 
+        // 휴지통 변경 이벤트 핸들러
         private void TrashWatcher_Changed(object sender, FileSystemEventArgs e)
         {
             if (this.InvokeRequired)
@@ -704,6 +728,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 업로드 폴더를 읽어 리스트/슬라이드를 갱신
         public void LoadUploadedFilesToD()
         {
             lstviewFileListD.Items.Clear();
@@ -750,6 +775,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 휴지통 리스트 갱신
         private void LoadTrashCanFiles()
         {
             lstviewTrash.Items.Clear();
@@ -778,6 +804,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 현재 슬라이드 이미지를 화면에 표시하고 리스트 강조
         private void UpdateSlideDisplay()
         {
             if (slideImages.Count == 0) return;
@@ -819,6 +846,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 재생/정지 토글
         private void btnPlayStop_Click(object sender, EventArgs e)
         {
             if (slideImages.Count == 0) return;
@@ -837,6 +865,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        // 타이머 틱마다 다음 슬라이드로 이동
         private void VideoTimer_Tick(object sender, EventArgs e)
         {
             if (currentSlideIndex >= slideImages.Count - 1)
@@ -848,6 +877,7 @@ namespace AD_AI_LearningData_Editor
             UpdateSlideDisplay();
         }
 
+        // 슬라이더로 현재 프레임 이동
         private void SdrSeekBar_onValueChanged(object sender, int newValue)
         {
             if (isUpdatingSlider || slideImages.Count == 0) return;
@@ -855,6 +885,7 @@ namespace AD_AI_LearningData_Editor
             UpdateSlideDisplay();
         }
 
+        // 프레임 단위로 슬라이드 이동
         private void MoveSlide(int frames)
         {
             if (slideImages.Count == 0) return;
@@ -867,11 +898,13 @@ namespace AD_AI_LearningData_Editor
             UpdateSlideDisplay();
         }
 
+        // 단축 이동 버튼
         private void btnNxt1F_Click(object sender, EventArgs e) { MoveSlide(1); }
         private void btnNxt5F_Click(object sender, EventArgs e) { MoveSlide(5); }
         private void btnPre1F_Click(object sender, EventArgs e) { MoveSlide(-1); }
         private void btnPre5F_Click(object sender, EventArgs e) { MoveSlide(-5); }
 
+        // 선택 파일/폴더를 휴지통으로 이동
         private void btnDel_Click(object sender, EventArgs e)
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -932,12 +965,14 @@ namespace AD_AI_LearningData_Editor
             LoadUploadedFilesToD();
         }
 
+        // 작업 폴더를 탐색기로 열기
         private void btnOpnFileExplrr_Click(object sender, EventArgs e)
         {
             string binFolder = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\"));
             System.Diagnostics.Process.Start("explorer.exe", binFolder);
         }
 
+        // 휴지통에서 선택 항목 복구
         private void btnRestoration_Click(object sender, EventArgs e)
         {
             if (lstviewTrash.SelectedItems.Count == 0) return;
@@ -974,6 +1009,7 @@ namespace AD_AI_LearningData_Editor
             LoadUploadedFilesToD();
         }
 
+        // MaterialTabControl 구성 및 하위 폼 배치
         private void SetupTabs()
         {
             MaterialTabControl tabControl = new MaterialTabControl();
@@ -1019,11 +1055,8 @@ namespace AD_AI_LearningData_Editor
             this.DrawerTabControl = tabControl;
         }
 
-        private void materialSlider1_Click(object sender, EventArgs e) { }
-        private void materialButton2_Click(object sender, EventArgs e) { }
-        private void listView1_SelectedIndexChanged(object sender, EventArgs e) { }
-        private void listView1_SelectedIndexChanged_1(object sender, EventArgs e) { }
 
+        // 메인 리스트로 되돌리기
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
             lstviewFileList.Visible = false;
@@ -1035,6 +1068,7 @@ namespace AD_AI_LearningData_Editor
             btnRestoration.Visible = false;
         }
 
+        // 메인 메뉴 더블 클릭 처리
         private void lstviewMain_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             if (lstviewMain.SelectedItems.Count > 0)
@@ -1066,8 +1100,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        private void lstviewFileList_SelectedIndexChanged(object sender, EventArgs e) { }
-
+        // 파일 목록 더블 클릭 처리
         private void lstviewFileList_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             if (lstviewFileList.SelectedItems.Count > 0)
@@ -1082,10 +1115,8 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        private void trackBar1_Scroll(object sender, EventArgs e) { }
-        private void pnlContrastProperty_Paint(object sender, PaintEventArgs e) { }
-        private void pnlCloseProperty_Paint(object sender, PaintEventArgs e) { }
 
+        // 속성 패널 외부 클릭 시 패널을 닫는 필터
         private class PropertyPanelFilter : IMessageFilter
         {
             private frmMain _form;
@@ -1132,12 +1163,10 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        private void GBPalete_Enter(object sender, EventArgs e)
-        {
 
-        }
     }
 
+    // 배속 팝업 외부 클릭 시 숨김 처리 필터
     public class ClickOutsideFilter : IMessageFilter
     {
         private Control _panel;
@@ -1167,6 +1196,7 @@ namespace AD_AI_LearningData_Editor
         }
     }
 
+    // 깜빡임 완화를 위한 PictureBox 확장
     public class DoubleBufferedPictureBox : PictureBox
     {
         public DoubleBufferedPictureBox()

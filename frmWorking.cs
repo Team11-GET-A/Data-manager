@@ -7,7 +7,7 @@ namespace Data_Manager
 {
     public partial class frmWoking : Form
     {
-        // 윈폼 디자이너가 이 속성을 직렬화하지 않도록 숨김 처리
+        // 외부에서 전달된 작업 취소 토큰을 보관 (디자이너 직렬화 대상 제외)
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public CancellationTokenSource Cts { get; set; }
 
@@ -15,16 +15,16 @@ namespace Data_Manager
         {
             InitializeComponent();
 
-            // 초기 버튼 상태 설정
+            // 초기 버튼 상태 설정 (작업 진행 중)
             btnDone.Visible = false;
             btnCancle.Visible = true;
 
-            // 이벤트 연결
+            // 버튼 이벤트 연결
             btnCancle.Click += btnCancle_Click;
             btnDone.Click += btnDone_Click;
         }
 
-        // 1. 프로그레스바 진행도 갱신
+        // 진행률 표시 업데이트 (백그라운드 스레드 호출 대응)
         public void UpdateProgress(int percent)
         {
             if (this.InvokeRequired)
@@ -37,7 +37,7 @@ namespace Data_Manager
             }
         }
 
-        // 3. 작업 완료 시 버튼 상태 전환
+        // 작업 완료 시 버튼 표시 전환
         public void ShowDone()
         {
             if (this.InvokeRequired)
@@ -49,7 +49,7 @@ namespace Data_Manager
             btnDone.Visible = true;
         }
 
-        // 2. 취소 버튼 클릭 이벤트 (CS8622 해결을 위해 object?, EventArgs? 사용 및 소문자 메서드명 적용)
+        // 취소 요청 처리 (중복 클릭 방지 후 취소 토큰 호출)
         private void btnCancle_Click(object? sender, EventArgs? e)
         {
             if (Cts != null && !Cts.IsCancellationRequested)
@@ -59,7 +59,7 @@ namespace Data_Manager
             }
         }
 
-        // 4. 완료 버튼 클릭 이벤트
+        // 완료 버튼 클릭 시 팝업 닫기
         private void btnDone_Click(object? sender, EventArgs? e)
         {
             this.Close();
