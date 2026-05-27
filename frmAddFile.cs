@@ -20,6 +20,39 @@ namespace Data_Manager
         {
             InitializeComponent();
 
+            IconProperty.SetAutoImageByWidthHeight(
+                btnSelctFile,
+                Data_Manager.Properties.Resources.search3979322,
+                22,
+                10
+            );
+            IconProperty.SetAutoImageByWidthHeight(
+                btnCopyFile,
+                Data_Manager.Properties.Resources.AddFolder14970929,
+                30,
+                10
+            );
+            IconProperty.SetAutoImageByWidthHeight(
+                btnAddFile,
+                Data_Manager.Properties.Resources.A_download,
+                28,
+                10
+            );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             InitListViewStyles();
             RegisterEvents();
         }

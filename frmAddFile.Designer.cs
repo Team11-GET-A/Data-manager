@@ -80,34 +80,35 @@
             txtbSelctFile.Location = new Point(13, 26);
             txtbSelctFile.Multiline = true;
             txtbSelctFile.Name = "txtbSelctFile";
-            txtbSelctFile.Size = new Size(449, 31);
+            txtbSelctFile.Size = new Size(481, 31);
             txtbSelctFile.TabIndex = 2;
             // 
             // btnCopyFile
             // 
-            btnCopyFile.Location = new Point(451, 550);
+            btnCopyFile.ImageAlign = ContentAlignment.BottomCenter;
+            btnCopyFile.Location = new Point(461, 546);
             btnCopyFile.Name = "btnCopyFile";
-            btnCopyFile.Size = new Size(105, 57);
+            btnCopyFile.Size = new Size(90, 60);
             btnCopyFile.TabIndex = 4;
-            btnCopyFile.Text = " 복사";
+            btnCopyFile.Text = " ";
             btnCopyFile.UseVisualStyleBackColor = true;
             // 
             // btnAddFile
             // 
-            btnAddFile.Location = new Point(1018, 545);
+            btnAddFile.Location = new Point(1025, 546);
             btnAddFile.Name = "btnAddFile";
-            btnAddFile.Size = new Size(105, 57);
+            btnAddFile.Size = new Size(90, 60);
             btnAddFile.TabIndex = 5;
-            btnAddFile.Text = "파일추가";
             btnAddFile.UseVisualStyleBackColor = true;
             // 
             // btnSelctFile
             // 
-            btnSelctFile.Location = new Point(468, 12);
+            btnSelctFile.ImageAlign = ContentAlignment.BottomCenter;
+            btnSelctFile.Location = new Point(500, 18);
             btnSelctFile.Name = "btnSelctFile";
-            btnSelctFile.Size = new Size(87, 47);
+            btnSelctFile.Size = new Size(55, 42);
             btnSelctFile.TabIndex = 6;
-            btnSelctFile.Text = "파일선택";
+            btnSelctFile.TextAlign = ContentAlignment.BottomCenter;
             btnSelctFile.UseVisualStyleBackColor = true;
             // 
             // frmAddFile

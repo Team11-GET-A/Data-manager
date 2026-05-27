@@ -8,6 +8,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using AD_AI_LearningData_Editor; /////////////////////////////////////////
 
 namespace AD_AI_LearningData_Editor
 {
@@ -40,6 +41,35 @@ namespace AD_AI_LearningData_Editor
         public frmMain()
         {
             InitializeComponent();
+            IconProperty.SetAutoImageByWidthHeight(
+                btnOpnFolderList,
+                Data_Manager.Properties.Resources.UTurnArrow12262463,
+                10,
+                10
+            );
+            IconProperty.SetAutoImageByWidthHeight(
+                btnOpnFileExplrr,
+                Data_Manager.Properties.Resources.SearchFolder214608660,
+                6,
+                6
+            );
+            IconProperty.SetAutoImageByWidthHeight(
+                btnRemove,
+                Data_Manager.Properties.Resources.TrashCan11538270,
+                10,
+                10
+            );
+            IconProperty.SetAutoImageByWidthHeight(
+                btnRestoration,
+                Data_Manager.Properties.Resources.recycle6992289,
+                10,
+                10
+            );
+
+
+
+
+
 
             this.AutoScaleMode = AutoScaleMode.None;
 
