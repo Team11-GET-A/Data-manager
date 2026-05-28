@@ -16,6 +16,25 @@ namespace Data_Manager
         private List<string> selectedPaths = new List<string>();
         private List<string> copyTargetPaths = new List<string>();
 
+        private HashSet<string> allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".bmp",
+            ".bit",
+            ".gif",
+            ".tif",
+            ".tiff",
+            ".json",
+            ".txt",
+            ".csv",
+            ".xml",
+            ".yaml",
+            ".yml",
+            ".catalog"
+        };
+
         public frmAddFile()
         {
             InitializeComponent();
@@ -256,7 +275,8 @@ namespace Data_Manager
                 "obj",
                 "node_modules",
                 "packages",
-                ".nuget"
+                ".nuget",
+                "__pycache__"
             };
 
             return skipNames.Any(name => string.Equals(name, directoryName, StringComparison.OrdinalIgnoreCase));
@@ -294,11 +314,11 @@ namespace Data_Manager
                     return;
                 }
 
-                string[] files = Directory.GetFiles(selectedFolder, "*.*", SearchOption.TopDirectoryOnly);
+                string[] files = GetSelectableFilesFromFolder(selectedFolder);
 
                 if (files.Length == 0)
                 {
-                    MessageBox.Show("선택한 폴더 안에 파일이 없습니다.");
+                    MessageBox.Show("선택한 폴더 안에서 복사할 수 있는 파일을 찾지 못했습니다.");
                     return;
                 }
 
@@ -309,6 +329,63 @@ namespace Data_Manager
 
                 UpdateSelectedFileListView(selectedFolder);
             }
+        }
+
+        private string[] GetSelectableFilesFromFolder(string selectedFolder)
+        {
+            try
+            {
+                return Directory.GetFiles(selectedFolder, "*.*", SearchOption.AllDirectories)
+                    .Where(path => IsAllowedFile(path))
+                    .Where(path => !IsTemporaryOrBackupFile(path))
+                    .OrderBy(path => path)
+                    .ToArray();
+            }
+            catch
+            {
+                try
+                {
+                    return Directory.GetFiles(selectedFolder, "*.*", SearchOption.TopDirectoryOnly)
+                        .Where(path => IsAllowedFile(path))
+                        .Where(path => !IsTemporaryOrBackupFile(path))
+                        .OrderBy(path => path)
+                        .ToArray();
+                }
+                catch
+                {
+                    return new string[0];
+                }
+            }
+        }
+
+        private bool IsAllowedFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return false;
+            }
+
+            string ext = Path.GetExtension(path);
+
+            if (string.IsNullOrWhiteSpace(ext))
+            {
+                return true;
+            }
+
+            return allowedExtensions.Contains(ext);
+        }
+
+        private bool IsTemporaryOrBackupFile(string path)
+        {
+            string fileName = Path.GetFileName(path);
+
+            if (fileName.EndsWith(".gback", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.StartsWith("~", StringComparison.OrdinalIgnoreCase)) return true;
+
+            return false;
         }
 
         private void AddSelectedFilePath(string path)

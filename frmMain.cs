@@ -69,6 +69,13 @@ namespace AD_AI_LearningData_Editor
                 10,
                 10
             );
+            IconProperty.SetAutoImageByWidthHeight(
+                 btnSave,
+                 Data_Manager.Properties.Resources.Save,
+                 10,
+                 10
+            );
+
 
             this.AutoScaleMode = AutoScaleMode.None;
 
@@ -97,6 +104,7 @@ namespace AD_AI_LearningData_Editor
             btnRestoration.Visible = false;
 
             ConfigureListViewNameLabel();
+            ConfigureFileListDView();
             SetupTabs();
             LoadUploadedFilesToD();
             LoadTrashCanFiles();
@@ -155,6 +163,28 @@ namespace AD_AI_LearningData_Editor
             lblLstVwName.AutoSize = false;
             lblLstVwName.UseCompatibleTextRendering = true;
             lblLstVwName.Font = new Font("맑은 고딕", 14F, FontStyle.Bold, GraphicsUnit.Point);
+        }
+
+        private void ConfigureFileListDView()
+        {
+            lstviewFileListD.BeginUpdate();
+            lstviewFileListD.View = View.Details;
+            lstviewFileListD.HeaderStyle = ColumnHeaderStyle.None;
+            lstviewFileListD.FullRowSelect = true;
+            lstviewFileListD.MultiSelect = true;
+            lstviewFileListD.Scrollable = true;
+            lstviewFileListD.HideSelection = false;
+            lstviewFileListD.Columns.Clear();
+            lstviewFileListD.Columns.Add("FileName", Math.Max(1, lstviewFileListD.ClientSize.Width - 4));
+            lstviewFileListD.EndUpdate();
+
+            lstviewFileListD.Resize += (s, e) =>
+            {
+                if (lstviewFileListD.Columns.Count > 0)
+                {
+                    lstviewFileListD.Columns[0].Width = Math.Max(1, lstviewFileListD.ClientSize.Width - 4);
+                }
+            };
         }
 
         private void SetListViewName(string text)
@@ -751,6 +781,12 @@ namespace AD_AI_LearningData_Editor
 
         public void LoadUploadedFilesToD()
         {
+            if (lstviewFileListD.Columns.Count == 0)
+            {
+                ConfigureFileListDView();
+            }
+
+            lstviewFileListD.BeginUpdate();
             lstviewFileListD.Items.Clear();
             slideImages.Clear();
             currentSlideIndex = 0;
@@ -784,6 +820,8 @@ namespace AD_AI_LearningData_Editor
                     slideImages.Add(file.FullName);
                 }
             }
+
+            lstviewFileListD.EndUpdate();
 
             if (slideImages.Count > 0)
             {
@@ -853,22 +891,6 @@ namespace AD_AI_LearningData_Editor
             sdrSeekBar.Text = $"{currentSlideIndex + 1}/{slideImages.Count}";
             isUpdatingSlider = false;
 
-            if (lastHighlightedItem != null)
-            {
-                lastHighlightedItem.ForeColor = Color.Black;
-            }
-
-            string currentFileName = Path.GetFileName(currentImagePath);
-            foreach (ListViewItem item in lstviewFileListD.Items)
-            {
-                if (item.Text == currentFileName)
-                {
-                    item.ForeColor = Color.Green;
-                    lastHighlightedItem = item;
-                    item.EnsureVisible();
-                    break;
-                }
-            }
         }
 
         private void btnPlayStop_Click(object sender, EventArgs e)
