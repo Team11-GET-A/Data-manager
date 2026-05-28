@@ -22,6 +22,11 @@ namespace DonkeyDataManager
         private System.Windows.Forms.Timer playbackTimer =
             new System.Windows.Forms.Timer();
 
+        // WSL/브라우저 프로세스 관리
+        private Process wslProcess = null;
+        private Process browserProcess = null;
+        private System.Windows.Forms.Timer browserMonitorTimer = new System.Windows.Forms.Timer();
+
         // =====================================================
         // 데이터 구조
         // =====================================================
@@ -56,6 +61,8 @@ namespace DonkeyDataManager
             SetupCustomLayout();
 
             InitializePlaybackTimer();
+
+            InitializeBrowserMonitor();
         }
 
         // =====================================================
@@ -67,6 +74,24 @@ namespace DonkeyDataManager
             playbackTimer.Interval = 100;
 
             playbackTimer.Tick += PlaybackTimer_Tick;
+        }
+
+        /// <summary>
+        /// 브라우저 감시 타이머 초기화 (브라우저 종료 감지 및 재실행)
+        /// </summary>
+        private void InitializeBrowserMonitor()
+        {
+            browserMonitorTimer.Interval = 5000; // 5초마다 체크
+
+            browserMonitorTimer.Tick += (s, e) =>
+            {
+                // 브라우저 프로세스가 존재하고 종료되지 않았는지 확인
+                if (browserProcess != null && browserProcess.HasExited)
+                {
+                    // 브라우저가 종료됨 - 재실행
+                    TryRestartBrowser();
+                }
+            };
         }
 
         // =====================================================
@@ -98,10 +123,12 @@ namespace DonkeyDataManager
         private Button btnRestoreData = new Button();
 
         // =====================================================
-        // ✅ 통합 AI 버튼
+        // 🧠 AI 학습/자율주행 버튼 (분리됨)
         // =====================================================
 
-        private Button btnAutoPilot = new Button();
+        private Button btnTrain = new Button();
+
+        private Button btnDrive = new Button();
 
         // =====================================================
         // UI 레이아웃
@@ -341,32 +368,60 @@ namespace DonkeyDataManager
                 BtnRestoreData_Click;
 
             // =====================================================
-            // ✅ AI AUTO BUTTON
+            // 🧠 TRAIN BUTTON
             // =====================================================
 
-            btnAutoPilot.Text =
-                "🧠 AI 학습 + 🚗 자율주행 자동 시작";
+            btnTrain.Text =
+                "🧠 AI 학습 시작";
 
-            btnAutoPilot.Location =
+            btnTrain.Location =
                 new Point(510, 560);
 
-            btnAutoPilot.Size =
-                new Size(450, 60);
+            btnTrain.Size =
+                new Size(220, 60);
 
-            btnAutoPilot.BackColor =
+            btnTrain.BackColor =
                 Color.FromArgb(43, 108, 176);
 
-            btnAutoPilot.ForeColor =
+            btnTrain.ForeColor =
                 Color.White;
 
-            btnAutoPilot.Font =
+            btnTrain.Font =
                 new Font(
                     "Malgun Gothic",
                     10,
                     FontStyle.Bold);
 
-            btnAutoPilot.Click +=
-                BtnAutoPilot_Click;
+            btnTrain.Click +=
+                BtnTrain_Click;
+
+            // =====================================================
+            // 🚗 DRIVE BUTTON
+            // =====================================================
+
+            btnDrive.Text =
+                "🚗 자율주행 시작";
+
+            btnDrive.Location =
+                new Point(740, 560);
+
+            btnDrive.Size =
+                new Size(220, 60);
+
+            btnDrive.BackColor =
+                Color.FromArgb(34, 139, 34);
+
+            btnDrive.ForeColor =
+                Color.White;
+
+            btnDrive.Font =
+                new Font(
+                    "Malgun Gothic",
+                    10,
+                    FontStyle.Bold);
+
+            btnDrive.Click +=
+                BtnDrive_Click;
 
             // =====================================================
             // ADD CONTROLS
@@ -388,7 +443,9 @@ namespace DonkeyDataManager
 
             this.Controls.Add(btnRestoreData);
 
-            this.Controls.Add(btnAutoPilot);
+            this.Controls.Add(btnTrain);
+
+            this.Controls.Add(btnDrive);
         }
 
         // =====================================================
@@ -662,6 +719,179 @@ namespace DonkeyDataManager
         // ✅ TRAIN + DRIVE AUTO
         // =====================================================
 
+        /// <summary>
+        /// AI 학습만 시작합니다
+        /// </summary>
+        private void BtnTrain_Click(
+            object sender,
+            EventArgs e)
+        {
+            try
+            {
+                // 학습할 데이터 폴더 선택
+                string selectedTubFolder = PromptTubFolderSelection();
+
+                if (string.IsNullOrEmpty(selectedTubFolder))
+                {
+                    MessageBox.Show(
+                        "학습할 폴더가 선택되지 않았습니다.",
+                        "선택 취소",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+
+                MessageBox.Show(
+                    $"AI 학습을 시작합니다.\n\n" +
+                    $"데이터 폴더: {selectedTubFolder}\n" +
+                    $"WSL 창이 자동으로 열립니다.",
+                    "AI 학습 시작");
+
+                ProcessStartInfo psi =
+                    new ProcessStartInfo();
+
+                psi.FileName = "cmd.exe";
+
+                psi.Arguments =
+                    "/k wsl bash -c \"" +
+                    "source ~/miniconda3/etc/profile.d/conda.sh && " +
+                    "conda activate e2e_env && " +
+                    "cd ~/mycar && " +
+                    "echo '=================================' && " +
+                    "echo 'AI TRAIN START' && " +
+                    "echo '=================================' && " +
+                    "python train.py --tub " + selectedTubFolder + " --model models/mypilot.h5" +
+                    "\"";
+
+                psi.UseShellExecute = true;
+
+                // WSL 프로세스 추적
+                wslProcess = Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"학습 실행 실패\n\n{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 학습할 tub(데이터) 폴더를 선택합니다
+        /// </summary>
+        private string PromptTubFolderSelection()
+        {
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+            {
+                fbd.Description = "학습할 데이터 폴더를 선택하세요 (tub 폴더 또는 data 폴더)";
+                fbd.ShowNewFolderButton = false;
+
+                // 초기 경로: ~/mycar/data
+                string initialPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "mycar", "data");
+
+                if (Directory.Exists(initialPath))
+                {
+                    fbd.SelectedPath = initialPath;
+                }
+
+                if (fbd.ShowDialog() == DialogResult.OK)
+                {
+                    // 선택된 폴더의 상대 경로 반환
+                    // WSL에서 사용할 수 있도록 폴더명만 추출
+                    string folderName = Path.GetFileName(fbd.SelectedPath);
+                    return folderName;
+                }
+
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 자율주행을 시작합니다 (모델 선택 포함)
+        /// </summary>
+        private void BtnDrive_Click(
+            object sender,
+            EventArgs e)
+        {
+            try
+            {
+                // 먼저 모델 선택 대화상자 띄우기
+                string selectedModel = PromptModelSelection();
+
+                if (string.IsNullOrEmpty(selectedModel))
+                {
+                    MessageBox.Show(
+                        "모델이 선택되지 않았습니다.",
+                        "선택 취소",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+
+                MessageBox.Show(
+                    $"자율주행을 시작합니다.\n\n" +
+                    $"모델: {selectedModel}\n" +
+                    $"WSL 창과 웹브라우저가 자동으로 열립니다.",
+                    "자율주행 시작");
+
+                ProcessStartInfo psi =
+                    new ProcessStartInfo();
+
+                psi.FileName = "cmd.exe";
+
+                psi.Arguments =
+                    "/k wsl bash -c \"" +
+                    "source ~/miniconda3/etc/profile.d/conda.sh && " +
+                    "conda activate e2e_env && " +
+                    "cd ~/mycar && " +
+                    "echo '=================================' && " +
+                    "echo 'AI DRIVE START' && " +
+                    "echo '=================================' && " +
+                    "python manage.py drive --model ./models/" + selectedModel + "\"";
+
+                psi.UseShellExecute = true;
+
+                // WSL 프로세스 추적
+                wslProcess = Process.Start(psi);
+
+                // 약간의 지연 후 웹브라우저 오픈
+                OpenBrowserAfterDelay();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"자율주행 실행 실패\n\n{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 사용자로부터 AI 모델을 선택받습니다
+        /// </summary>
+        private string PromptModelSelection()
+        {
+            // 파일 탐색기에서 모델 파일 선택
+            using (OpenFileDialog ofd = new OpenFileDialog())
+            {
+                ofd.Title = "AI 모델 파일 선택";
+                ofd.InitialDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "mycar", "models");
+                ofd.Filter = "H5 파일 (*.h5)|*.h5|PK 파일 (*.pk)|*.pk|모든 파일 (*.*)|*.*";
+                ofd.FilterIndex = 1;
+                ofd.RestoreDirectory = true;
+
+                if (ofd.ShowDialog() == DialogResult.OK)
+                {
+                    // 선택된 파일 경로에서 파일명만 추출
+                    string modelFileName = Path.GetFileName(ofd.FileName);
+                    return modelFileName;
+                }
+
+                return null;
+            }
+        }
+
         private void BtnAutoPilot_Click(
             object sender,
             EventArgs e)
@@ -669,7 +899,9 @@ namespace DonkeyDataManager
             try
             {
                 MessageBox.Show(
-                    "AI 학습 후 자동으로 자율주행을 시작합니다.");
+                    "AI 학습 후 자동으로 자율주행을 시작합니다.\n\n" +
+                    "WSL 창과 웹브라우저가 자동으로 열립니다.",
+                    "AI 학습 + 자율주행 시작");
 
                 ProcessStartInfo psi =
                     new ProcessStartInfo();
@@ -702,11 +934,115 @@ namespace DonkeyDataManager
                 psi.UseShellExecute = true;
 
                 Process.Start(psi);
+
+                // 약간의 지연 후 웹브라우저 오픈 (drive 서버 시작 대기)
+                // train 시간이 소요되므로 충분한 지연 설정
+                OpenBrowserAfterDelay();
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
                     $"자동 실행 실패\n\n{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 지연 후 웹브라우저에서 자율주행 모니터링 페이지 오픈
+        /// </summary>
+        private async void OpenBrowserAfterDelay()
+        {
+            try
+            {
+                // Train 예상 시간: 수십 초 ~ 수분
+                // Drive 서버가 실제로 시작되려면 추가 지연 필요
+                // 총 지연: 30초 (train 시작 후 drive 시작까지 대기)
+                await System.Threading.Tasks.Task.Delay(30000);
+
+                string url = "http://localhost:8887";
+
+                // 브라우저 감시 시작
+                if (browserMonitorTimer != null)
+                {
+                    browserMonitorTimer.Start();
+                }
+
+                // 브라우저 오픈
+                OpenBrowserToUrl(url);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"웹브라우저 실행 중 오류:\n{ex.Message}",
+                    "오류",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// URL을 브라우저에서 오픈합니다 (프로세스 추적 포함)
+        /// </summary>
+        private void OpenBrowserToUrl(string url)
+        {
+            try
+            {
+                // 기본 브라우저로 열기
+                try
+                {
+                    browserProcess = System.Diagnostics.Process.Start(url);
+                }
+                catch
+                {
+                    // 브라우저가 없으면 Chrome이나 Edge 직접 실행 시도
+                    try
+                    {
+                        ProcessStartInfo browserPsi = new ProcessStartInfo();
+                        browserPsi.FileName = "chrome.exe";
+                        browserPsi.Arguments = url;
+                        browserProcess = System.Diagnostics.Process.Start(browserPsi);
+                    }
+                    catch
+                    {
+                        // Edge 시도
+                        try
+                        {
+                            ProcessStartInfo edgePsi = new ProcessStartInfo();
+                            edgePsi.FileName = "msedge.exe";
+                            edgePsi.Arguments = url;
+                            browserProcess = System.Diagnostics.Process.Start(edgePsi);
+                        }
+                        catch
+                        {
+                            MessageBox.Show(
+                                $"웹브라우저 자동 실행 실패\n\n" +
+                                $"수동으로 접속하세요: {url}",
+                                "브라우저 오픈 실패",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"브라우저 오픈 중 오류:\n{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 브라우저 재시작 시도
+        /// </summary>
+        private void TryRestartBrowser()
+        {
+            try
+            {
+                string url = "http://localhost:8887";
+                OpenBrowserToUrl(url);
+            }
+            catch
+            {
+                // 조용히 실패 - 로그만 남김
             }
         }
 
