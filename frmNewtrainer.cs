@@ -5,11 +5,42 @@ using System.Windows.Forms;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Threading;
+using System.Runtime.InteropServices;
 
 namespace DonkeyDataManager
 {
     public partial class frmNewtrainer : Form
     {
+        // =====================================================
+        // Windows API P/Invoke 선언
+        // =====================================================
+
+        [DllImport("user32.dll")]
+        private static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        private const int SW_RESTORE = 9;  // 창 복원
+        private const int FLASHW_ALL = 3;  // 모든 창 깜빡임
+        private const uint FLASHW_TIMERNOFG = 4;  // 배경에서도 깜빡임
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FLASHWINFO
+        {
+            public uint cbSize;
+            public IntPtr hwnd;
+            public uint dwFlags;
+            public uint uCount;
+            public uint dwTimeout;
+        }
+
         // =====================================================
         // 전역 변수
         // =====================================================
@@ -181,6 +212,66 @@ namespace DonkeyDataManager
             }
 
             return distros;
+        }
+
+        /// <summary>
+        /// 창을 깜빡이며 사용자의 주의를 끕니다
+        /// </summary>
+        private void FlashWindow()
+        {
+            try
+            {
+                FLASHWINFO fwi = new FLASHWINFO();
+                fwi.cbSize = Convert.ToUInt32(Marshal.SizeOf(fwi));
+                fwi.hwnd = this.Handle;
+                fwi.dwFlags = FLASHW_ALL | FLASHW_TIMERNOFG;  // 모든 창 깜빡임 + 배경에서도
+                fwi.uCount = 5;  // 5회 깜빡임
+                fwi.dwTimeout = 500;  // 500ms 간격
+
+                FlashWindowEx(ref fwi);
+            }
+            catch
+            {
+                // Windows API 실패해도 무시
+            }
+        }
+
+        /// <summary>
+        /// 창을 활성화시킵니다 (앞으로 가져오기)
+        /// </summary>
+        private void ActivateWindow()
+        {
+            try
+            {
+                // 최소화된 창이면 복원
+                if (IsIconic(this.Handle))
+                {
+                    ShowWindow(this.Handle, SW_RESTORE);
+                }
+
+                // 창을 앞으로 활성화
+                SetForegroundWindow(this.Handle);
+            }
+            catch
+            {
+                // Windows API 실패해도 무시
+            }
+        }
+
+        /// <summary>
+        /// 창을 깜빡이고 활성화시킵니다 (주의 끌기)
+        /// </summary>
+        private void AttentionWindow()
+        {
+            try
+            {
+                FlashWindow();
+                ActivateWindow();
+            }
+            catch
+            {
+                // 모든 오류 무시
+            }
         }
 
         // =====================================================
@@ -757,6 +848,9 @@ namespace DonkeyDataManager
         {
             try
             {
+                // 창을 깜빡이며 강조 (중요한 이벤트 알림)
+                AttentionWindow();
+
                 // 기본 브라우저로 열기
                 try
                 {
