@@ -27,6 +27,11 @@ namespace DonkeyDataManager
         private Process browserProcess = null;
         private System.Windows.Forms.Timer browserMonitorTimer = new System.Windows.Forms.Timer();
 
+        // WSL 경로 설정
+        private string wslDistroName = "Ubuntu";  // 기본값
+        private string wslUsername = "odozy";     // WSL 사용자명
+        private string wslBasePath = "";          // ~/mycar 경로
+
         // =====================================================
         // 데이터 구조
         // =====================================================
@@ -63,6 +68,9 @@ namespace DonkeyDataManager
             InitializePlaybackTimer();
 
             InitializeBrowserMonitor();
+
+            // WSL 경로 초기화
+            InitializeWSLPaths();
         }
 
         // =====================================================
@@ -92,6 +100,73 @@ namespace DonkeyDataManager
                     TryRestartBrowser();
                 }
             };
+        }
+
+        /// <summary>
+        /// WSL 경로 초기화 (Windows에서 접근 가능한 경로 설정)
+        /// </summary>
+        private void InitializeWSLPaths()
+        {
+            try
+            {
+                // WSL 배포판 목록 조회
+                var distros = GetWSLDistros();
+                if (distros.Count > 0)
+                {
+                    wslDistroName = distros[0];
+                }
+
+                // WSL 기본 경로 구성: \\wsl$\{distro}\home\{username}\mycar\
+                wslBasePath = $@"\\wsl$\{wslDistroName}\home\{wslUsername}\mycar";
+            }
+            catch
+            {
+                // WSL 경로 설정 실패 시 기본값 사용
+                wslBasePath = $@"\\wsl$\Ubuntu\home\{wslUsername}\mycar";
+            }
+        }
+
+        /// <summary>
+        /// 설치된 WSL 배포판 목록 조회
+        /// </summary>
+        private List<string> GetWSLDistros()
+        {
+            List<string> distros = new List<string>();
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = "wsl.exe",
+                    Arguments = "--list --quiet",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using (Process proc = Process.Start(psi))
+                {
+                    using (System.IO.StreamReader reader = proc.StandardOutput)
+                    {
+                        string line;
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            line = line.Trim();
+                            if (!string.IsNullOrEmpty(line))
+                            {
+                                distros.Add(line);
+                            }
+                        }
+                    }
+                    proc.WaitForExit();
+                }
+            }
+            catch
+            {
+                // WSL 명령 실패 시 기본 배포판 사용
+                distros.Add("Ubuntu");
+            }
+
+            return distros;
         }
 
         // =====================================================
@@ -785,10 +860,8 @@ namespace DonkeyDataManager
                 fbd.Description = "학습할 데이터 폴더를 선택하세요 (tub 폴더 또는 data 폴더)";
                 fbd.ShowNewFolderButton = false;
 
-                // 초기 경로: ~/mycar/data
-                string initialPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    "mycar", "data");
+                // 초기 경로: WSL의 ~/mycar/data
+                string initialPath = Path.Combine(wslBasePath, "data");
 
                 if (Directory.Exists(initialPath))
                 {
@@ -832,8 +905,13 @@ namespace DonkeyDataManager
                 MessageBox.Show(
                     $"자율주행을 시작합니다.\n\n" +
                     $"모델: {selectedModel}\n" +
-                    $"WSL 창과 웹브라우저가 자동으로 열립니다.",
-                    "자율주행 시작");
+                    $"\n[진행 상황]\n" +
+                    $"1. WSL 창 오픈\n" +
+                    $"2. Drive 서버 시작 중... (10초 대기)\n" +
+                    $"3. 서버 준비 확인 중... (최대 50초)\n" +
+                    $"4. 준비 완료 시 웹브라우저 자동 오픈\n\n" +
+                    $"잠시만 기다려주세요.",
+                    "자율주행 시작 중");
 
                 ProcessStartInfo psi =
                     new ProcessStartInfo();
@@ -855,7 +933,7 @@ namespace DonkeyDataManager
                 // WSL 프로세스 추적
                 wslProcess = Process.Start(psi);
 
-                // 약간의 지연 후 웹브라우저 오픈
+                // 약간의 지연 후 웹브라우저 오픈 (서버 준비 확인 포함)
                 OpenBrowserAfterDelay();
             }
             catch (Exception ex)
@@ -870,13 +948,25 @@ namespace DonkeyDataManager
         /// </summary>
         private string PromptModelSelection()
         {
-            // 파일 탐색기에서 모델 파일 선택
+            // 파일 탐색기에서 모델 파일 선택 (WSL 경로 사용)
             using (OpenFileDialog ofd = new OpenFileDialog())
             {
                 ofd.Title = "AI 모델 파일 선택";
-                ofd.InitialDirectory = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    "mycar", "models");
+
+                // WSL의 models 폴더 경로
+                string modelsPath = Path.Combine(wslBasePath, "models");
+
+                // 경로가 존재하면 사용
+                if (Directory.Exists(modelsPath))
+                {
+                    ofd.InitialDirectory = modelsPath;
+                }
+                else
+                {
+                    // 경로 존재 안 하면 사용자의 홈 디렉토리
+                    ofd.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                }
+
                 ofd.Filter = "H5 파일 (*.h5)|*.h5|PK 파일 (*.pk)|*.pk|모든 파일 (*.*)|*.*";
                 ofd.FilterIndex = 1;
                 ofd.RestoreDirectory = true;
@@ -953,12 +1043,10 @@ namespace DonkeyDataManager
         {
             try
             {
-                // Train 예상 시간: 수십 초 ~ 수분
-                // Drive 서버가 실제로 시작되려면 추가 지연 필요
-                // 총 지연: 30초 (train 시작 후 drive 시작까지 대기)
-                await System.Threading.Tasks.Task.Delay(30000);
-
                 string url = "http://localhost:8887";
+
+                // 초기 지연: 10초 (drive 서버 시작 시간)
+                await System.Threading.Tasks.Task.Delay(10000);
 
                 // 브라우저 감시 시작
                 if (browserMonitorTimer != null)
@@ -966,8 +1054,26 @@ namespace DonkeyDataManager
                     browserMonitorTimer.Start();
                 }
 
-                // 브라우저 오픈
-                OpenBrowserToUrl(url);
+                // 서버가 실제로 준비될 때까지 대기 (최대 50초 추가)
+                bool serverReady = await WaitForServerReady(url, 50);
+
+                if (serverReady)
+                {
+                    OpenBrowserToUrl(url);
+                }
+                else
+                {
+                    // 서버가 준비되지 않았으면 경고 후 브라우저 시도
+                    MessageBox.Show(
+                        $"서버 준비 시간초과 (60초)\n\n" +
+                        $"수동으로 접속하세요: {url}",
+                        "드라이브 서버 시작 확인 필요",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+
+                    // 그래도 시도
+                    OpenBrowserToUrl(url);
+                }
             }
             catch (Exception ex)
             {
@@ -1031,6 +1137,41 @@ namespace DonkeyDataManager
         }
 
         /// <summary>
+        /// 서버가 준비될 때까지 대기합니다 (HTTP GET 요청으로 확인)
+        /// </summary>
+        private async System.Threading.Tasks.Task<bool> WaitForServerReady(
+            string url,
+            int maxWaitSeconds = 60)
+        {
+            using (var client = new System.Net.Http.HttpClient())
+            {
+                client.Timeout = System.TimeSpan.FromSeconds(5);
+
+                for (int i = 0; i < maxWaitSeconds; i++)
+                {
+                    try
+                    {
+                        var response = await client.GetAsync(url);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                        // 아직 준비 안 됨 - 계속 대기
+                    }
+
+                    // 1초 대기 후 재시도
+                    await System.Threading.Tasks.Task.Delay(1000);
+                }
+            }
+
+            // 타임아웃
+            return false;
+        }
+
+        /// <summary>
         /// 브라우저 재시작 시도
         /// </summary>
         private void TryRestartBrowser()
@@ -1038,7 +1179,7 @@ namespace DonkeyDataManager
             try
             {
                 string url = "http://localhost:8887";
-                OpenBrowserToUrl(url);
+
             }
             catch
             {
