@@ -26,32 +26,13 @@ namespace Data_Manager
                 22,
                 10
             );
-            IconProperty.SetAutoImageByWidthHeight(
-                btnCopyFile,
-                Data_Manager.Properties.Resources.AddFolder14970929,
-                30,
-                10
-            );
+
             IconProperty.SetAutoImageByWidthHeight(
                 btnAddFile,
                 Data_Manager.Properties.Resources.A_download,
                 28,
                 10
             );
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
             InitListViewStyles();
             RegisterEvents();
@@ -78,7 +59,6 @@ namespace Data_Manager
         private void RegisterEvents()
         {
             btnSelctFile.Click += btnSelctFile_Click;
-            btnCopyFile.Click += btnCopyFile_Click;
             btnAddFile.Click += btnAddFile_Click;
         }
 
@@ -135,7 +115,7 @@ namespace Data_Manager
             string[] wslHomeRoots =
             {
                 @"\\wsl.localhost\Ubuntu\home",
-                @"\\wsl.localhost\Ubuntu22.04\home"
+                @"\\wsl.localhost\Ubuntu-22.04\home"
             };
 
             foreach (string homeRoot in wslHomeRoots)
@@ -285,38 +265,83 @@ namespace Data_Manager
         private void btnSelctFile_Click(object sender, EventArgs e)
         {
             lstviewCopyFile.Items.Clear();
+            lstviewAddFile.Items.Clear();
             selectedPaths.Clear();
+            copyTargetPaths.Clear();
             txtbSelctFile.Clear();
 
-            using (OpenFileDialog ofd = new OpenFileDialog())
-            {
-                ofd.Multiselect = true;
-                ofd.Title = "mycar/data 파일 선택";
+            string initialDirectory = GetInitialSelectFileDirectory();
 
-                string initialDirectory = GetInitialSelectFileDirectory();
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+            {
+                fbd.Description = "UploadedFile에 복사할 파일들이 들어있는 폴더를 선택하세요.";
+                fbd.ShowNewFolderButton = false;
 
                 if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
                 {
-                    ofd.InitialDirectory = initialDirectory;
+                    fbd.SelectedPath = initialDirectory;
                 }
 
-                if (ofd.ShowDialog() == DialogResult.OK)
+                if (fbd.ShowDialog(this) != DialogResult.OK)
                 {
-                    foreach (string path in ofd.FileNames)
-                    {
-                        selectedPaths.Add(path);
-                        lstviewCopyFile.Items.Add(new ListViewItem(Path.GetFileName(path)));
-                    }
-
-                    if (selectedPaths.Count > 0)
-                    {
-                        txtbSelctFile.Text = selectedPaths[0] + (selectedPaths.Count > 1 ? $" 외 {selectedPaths.Count - 1}건" : "");
-                    }
+                    return;
                 }
+
+                string selectedFolder = fbd.SelectedPath;
+
+                if (string.IsNullOrWhiteSpace(selectedFolder) || !Directory.Exists(selectedFolder))
+                {
+                    return;
+                }
+
+                string[] files = Directory.GetFiles(selectedFolder, "*.*", SearchOption.TopDirectoryOnly);
+
+                if (files.Length == 0)
+                {
+                    MessageBox.Show("선택한 폴더 안에 파일이 없습니다.");
+                    return;
+                }
+
+                foreach (string path in files)
+                {
+                    AddSelectedFilePath(path);
+                }
+
+                UpdateSelectedFileListView(selectedFolder);
             }
         }
 
-        private void btnCopyFile_Click(object sender, EventArgs e)
+        private void AddSelectedFilePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return;
+            }
+
+            if (selectedPaths.Any(x => string.Equals(x, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            selectedPaths.Add(path);
+        }
+
+        private void UpdateSelectedFileListView(string selectedFolder)
+        {
+            lstviewCopyFile.Items.Clear();
+
+            foreach (string path in selectedPaths)
+            {
+                lstviewCopyFile.Items.Add(new ListViewItem(Path.GetFileName(path)));
+            }
+
+            if (selectedPaths.Count > 0)
+            {
+                txtbSelctFile.Text = selectedFolder + $" 안의 파일 {selectedPaths.Count}개";
+            }
+        }
+
+        private void PrepareCopyFileList()
         {
             lstviewAddFile.Items.Clear();
             copyTargetPaths.Clear();
@@ -326,21 +351,52 @@ namespace Data_Manager
                 return;
             }
 
+            HashSet<string> usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (string path in selectedPaths)
             {
-                string nameWithoutExt = Path.GetFileNameWithoutExtension(path);
-                string ext = Path.GetExtension(path);
-                string copyName = $"{nameWithoutExt}-Copy{ext}";
+                string copyName = CreateCopyFileName(path, usedNames);
 
                 lstviewAddFile.Items.Add(new ListViewItem(copyName));
                 copyTargetPaths.Add(path);
             }
         }
 
+        private string CreateCopyFileName(string sourcePath, HashSet<string> usedNames)
+        {
+            string nameWithoutExt = Path.GetFileNameWithoutExtension(sourcePath);
+            string ext = Path.GetExtension(sourcePath);
+            string copyName = $"{nameWithoutExt}-Copy{ext}";
+
+            if (!usedNames.Contains(copyName))
+            {
+                usedNames.Add(copyName);
+                return copyName;
+            }
+
+            int index = 1;
+
+            while (true)
+            {
+                string candidate = $"{nameWithoutExt}-Copy({index}){ext}";
+
+                if (!usedNames.Contains(candidate))
+                {
+                    usedNames.Add(candidate);
+                    return candidate;
+                }
+
+                index++;
+            }
+        }
+
         private async void btnAddFile_Click(object sender, EventArgs e)
         {
+            PrepareCopyFileList();
+
             if (lstviewAddFile.Items.Count == 0)
             {
+                MessageBox.Show("먼저 폴더를 선택하세요.");
                 return;
             }
 
@@ -386,7 +442,7 @@ namespace Data_Manager
                             targetName = lstviewAddFile.Items[i].Text;
                         }));
 
-                        string destinationPath = Path.Combine(targetFolder, targetName);
+                        string destinationPath = GetNonConflictingPath(Path.Combine(targetFolder, targetName));
 
                         rollbackPaths.Add(destinationPath);
 
@@ -435,6 +491,31 @@ namespace Data_Manager
             }
 
             this.Enabled = true;
+        }
+
+        private string GetNonConflictingPath(string path)
+        {
+            if (!File.Exists(path))
+            {
+                return path;
+            }
+
+            string directory = Path.GetDirectoryName(path);
+            string nameWithoutExt = Path.GetFileNameWithoutExtension(path);
+            string ext = Path.GetExtension(path);
+            int index = 1;
+
+            while (true)
+            {
+                string candidate = Path.Combine(directory, $"{nameWithoutExt} ({index}){ext}");
+
+                if (!File.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                index++;
+            }
         }
 
         private void btnClose_Click(object sender, EventArgs e)

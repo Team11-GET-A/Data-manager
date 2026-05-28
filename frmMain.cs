@@ -8,7 +8,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
-using AD_AI_LearningData_Editor; /////////////////////////////////////////
+using AD_AI_LearningData_Editor;
 
 namespace AD_AI_LearningData_Editor
 {
@@ -41,35 +41,34 @@ namespace AD_AI_LearningData_Editor
         public frmMain()
         {
             InitializeComponent();
+
             IconProperty.SetAutoImageByWidthHeight(
                 btnOpnFolderList,
                 Data_Manager.Properties.Resources.UTurnArrow12262463,
                 10,
                 10
             );
+
             IconProperty.SetAutoImageByWidthHeight(
                 btnOpnFileExplrr,
                 Data_Manager.Properties.Resources.SearchFolder214608660,
                 6,
                 6
             );
+
             IconProperty.SetAutoImageByWidthHeight(
                 btnRemove,
                 Data_Manager.Properties.Resources.TrashCan11538270,
                 10,
                 10
             );
+
             IconProperty.SetAutoImageByWidthHeight(
                 btnRestoration,
                 Data_Manager.Properties.Resources.recycle6992289,
                 10,
                 10
             );
-
-
-
-
-
 
             this.AutoScaleMode = AutoScaleMode.None;
 
@@ -104,7 +103,6 @@ namespace AD_AI_LearningData_Editor
             SetupTrashWatcher();
 
             this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
-            this.lstviewFileList.MouseDoubleClick += lstviewFileList_MouseDoubleClick;
 
             InitializeSpeedController();
             InitializeImageEditor();
@@ -992,7 +990,6 @@ namespace AD_AI_LearningData_Editor
 
         private void btnSave_Click(object sender, EventArgs e)
         {
-            string binFolder = GetBinFolder();
             string uploadFolder = GetUploadedFolder();
 
             if (!Directory.Exists(uploadFolder)) Directory.CreateDirectory(uploadFolder);
@@ -1000,7 +997,7 @@ namespace AD_AI_LearningData_Editor
             using (SaveFileDialog dialog = new SaveFileDialog())
             {
                 dialog.Title = "저장할 새 폴더 이름을 입력하세요.";
-                dialog.InitialDirectory = binFolder;
+                dialog.InitialDirectory = GetBinFolder();
                 dialog.FileName = "새 폴더 이름";
                 dialog.Filter = "폴더 이름|*.*";
                 dialog.AddExtension = false;
@@ -1171,7 +1168,6 @@ namespace AD_AI_LearningData_Editor
 
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
-            lstviewFileList.Visible = false;
             lstviewFileListD.Visible = false;
             lstviewTrash.Visible = false;
             lstviewMain.Visible = true;
@@ -1182,48 +1178,37 @@ namespace AD_AI_LearningData_Editor
 
         private void lstviewMain_MouseDoubleClick(object sender, MouseEventArgs e)
         {
-            if (lstviewMain.SelectedItems.Count > 0)
+            if (lstviewMain.SelectedItems.Count == 0)
             {
-                string itemTag = lstviewMain.SelectedItems[0].Tag?.ToString();
-
-                if (itemTag == "파일목록")
-                {
-                    lstviewMain.Visible = false;
-                    lstviewFileList.Visible = true;
-                    lstviewFileListD.Visible = true;
-                    lstviewTrash.Visible = false;
-
-                    SetListViewName("[파일목록]");
-                    btnRestoration.Visible = false;
-                }
-                else if (itemTag == "휴지통")
-                {
-                    lstviewMain.Visible = false;
-                    lstviewFileList.Visible = false;
-                    lstviewFileListD.Visible = false;
-                    lstviewTrash.Visible = true;
-
-                    SetListViewName("[휴지통]");
-                    btnRestoration.Visible = true;
-
-                    LoadTrashCanFiles();
-                }
+                return;
             }
-        }
 
-        private void lstviewFileList_SelectedIndexChanged(object sender, EventArgs e) { }
+            string itemTag = lstviewMain.SelectedItems[0].Tag?.ToString();
 
-        private void lstviewFileList_MouseDoubleClick(object sender, MouseEventArgs e)
-        {
-            if (lstviewFileList.SelectedItems.Count > 0)
+            if (itemTag == "파일목록")
             {
-                string itemTag = lstviewFileList.SelectedItems[0].Tag?.ToString();
+                lstviewMain.Visible = false;
+                lstviewFileListD.Visible = true;
+                lstviewTrash.Visible = false;
 
-                if (itemTag == "파일추가")
-                {
-                    frmAddFile addFileForm = new frmAddFile(this);
-                    addFileForm.ShowDialog();
-                }
+                SetListViewName("[파일목록]");
+                btnRestoration.Visible = false;
+            }
+            else if (itemTag == "휴지통")
+            {
+                lstviewMain.Visible = false;
+                lstviewFileListD.Visible = false;
+                lstviewTrash.Visible = true;
+
+                SetListViewName("[휴지통]");
+                btnRestoration.Visible = true;
+
+                LoadTrashCanFiles();
+            }
+            else if (itemTag == "파일추가")
+            {
+                frmAddFile addFileForm = new frmAddFile(this);
+                addFileForm.ShowDialog();
             }
         }
 
