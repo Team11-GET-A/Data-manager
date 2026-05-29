@@ -29,9 +29,9 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            ListViewItem listViewItem4 = new ListViewItem(new string[] { "[업로드된 파일]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem5 = new ListViewItem(new string[] { "[파일추가]" }, 3, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
-            ListViewItem listViewItem6 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[업로드된 파일]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일추가]" }, 3, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
+            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
             sdrSeekBar = new MaterialSkin.Controls.MaterialSlider();
             pnlVideo = new Panel();
@@ -421,7 +421,7 @@
             btnColorProperty.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnColorProperty.Depth = 0;
             btnColorProperty.HighEmphasis = true;
-            btnColorProperty.Icon = Data_Manager.Properties.Resources.P_palette;
+            btnColorProperty.Icon = Data_Manager.Properties.Resources.palette_v2;
             btnColorProperty.Location = new Point(191, 18);
             btnColorProperty.Margin = new Padding(5, 7, 5, 7);
             btnColorProperty.MouseState = MaterialSkin.MouseState.HOVER;
@@ -566,7 +566,7 @@
             btnPre5F.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnPre5F.Depth = 0;
             btnPre5F.HighEmphasis = true;
-            btnPre5F.Icon = null;
+            btnPre5F.Icon = Data_Manager.Properties.Resources.arrow5_left;
             btnPre5F.Location = new Point(5, 62);
             btnPre5F.Margin = new Padding(5, 7, 5, 7);
             btnPre5F.MouseState = MaterialSkin.MouseState.HOVER;
@@ -682,10 +682,10 @@
             // lstviewMain
             // 
             lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem4.Tag = "파일목록";
-            listViewItem5.Tag = "파일추가";
-            listViewItem6.Tag = "휴지통";
-            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem4, listViewItem5, listViewItem6 });
+            listViewItem1.Tag = "파일목록";
+            listViewItem2.Tag = "파일추가";
+            listViewItem3.Tag = "휴지통";
+            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem1, listViewItem2, listViewItem3 });
             lstviewMain.Location = new Point(-1, 50);
             lstviewMain.Name = "lstviewMain";
             lstviewMain.Size = new Size(551, 576);
@@ -739,7 +739,7 @@
             btnSetInterval.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnSetInterval.Depth = 0;
             btnSetInterval.HighEmphasis = true;
-            btnSetInterval.Icon = null;
+            btnSetInterval.Icon = Data_Manager.Properties.Resources.range;
             btnSetInterval.Location = new Point(395, 130);
             btnSetInterval.Margin = new Padding(4, 6, 4, 6);
             btnSetInterval.MouseState = MaterialSkin.MouseState.HOVER;
@@ -801,7 +801,7 @@
             btnPre1F.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnPre1F.Depth = 0;
             btnPre1F.HighEmphasis = true;
-            btnPre1F.Icon = null;
+            btnPre1F.Icon = Data_Manager.Properties.Resources.arrow1_left;
             btnPre1F.Location = new Point(71, 62);
             btnPre1F.Margin = new Padding(5, 7, 5, 7);
             btnPre1F.MouseState = MaterialSkin.MouseState.HOVER;
@@ -841,7 +841,7 @@
             btnNxt5F.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnNxt5F.Depth = 0;
             btnNxt5F.HighEmphasis = true;
-            btnNxt5F.Icon = null;
+            btnNxt5F.Icon = Data_Manager.Properties.Resources.arrow5_right;
             btnNxt5F.Location = new Point(324, 62);
             btnNxt5F.Margin = new Padding(5, 7, 5, 7);
             btnNxt5F.MouseState = MaterialSkin.MouseState.HOVER;
@@ -860,7 +860,8 @@
             btnNxt1F.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
             btnNxt1F.Depth = 0;
             btnNxt1F.HighEmphasis = true;
-            btnNxt1F.Icon = null;
+            btnNxt1F.Icon = Data_Manager.Properties.Resources.arrow1_right;
+            btnNxt1F.ImageAlign = ContentAlignment.MiddleRight;
             btnNxt1F.Location = new Point(258, 62);
             btnNxt1F.Margin = new Padding(5, 7, 5, 7);
             btnNxt1F.MouseState = MaterialSkin.MouseState.HOVER;
@@ -969,7 +970,6 @@
             BackColor = SystemColors.Control;
             ClientSize = new Size(1829, 1020);
             Controls.Add(txtTempSpeed);
-            Controls.Add(pnlSpeedPopup);
             Controls.Add(pnlContrastProperty);
             Controls.Add(pnlFolderList);
             Controls.Add(txtTempAngle);
@@ -979,6 +979,7 @@
             Controls.Add(pnlColorProperty);
             Controls.Add(pnlProperty);
             Controls.Add(pnlROI);
+            Controls.Add(pnlSpeedPopup);
             Font = new Font("맑은 고딕", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
             Name = "frmMain";
             Padding = new Padding(0);

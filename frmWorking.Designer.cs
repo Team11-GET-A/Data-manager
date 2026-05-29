@@ -39,13 +39,13 @@
             txtbWait.BorderStyle = BorderStyle.None;
             txtbWait.Enabled = false;
             txtbWait.Font = new Font("맑은 고딕", 16F);
-            txtbWait.Location = new Point(27, 24);
+            txtbWait.Location = new Point(45, 35);
             txtbWait.Multiline = true;
             txtbWait.Name = "txtbWait";
-            txtbWait.Size = new Size(262, 64);
+            txtbWait.Size = new Size(262, 58);
             txtbWait.TabIndex = 0;
             txtbWait.TabStop = false;
-            txtbWait.Text = "작업 중입니다.\r\n잠시만 기다려 주세요.";
+            txtbWait.Text = "잠시만 기다려 주세요.";
             txtbWait.TextAlign = HorizontalAlignment.Center;
             // 
             // pgbarWorking

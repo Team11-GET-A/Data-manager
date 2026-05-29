@@ -121,6 +121,18 @@
   <data name="AddFolder14970929" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\add - folder-14970929.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="arrow1-left" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\arrow1-left.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="arrow1-right" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\arrow1-right.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="arrow5-left" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\arrow5-left.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="arrow5-right" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\arrow5-right.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="A_download" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\download-667443.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
@@ -135,6 +147,12 @@
   </data>
   <data name="OpenFolder3735291" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\open-folder-3735291.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="palette_v2" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\palette_v2.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="pause" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\pause.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="PlaySlide4655096" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\arrow-right-4655096.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
@@ -156,6 +174,9 @@
   </data>
   <data name="P_palette" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\palette-265464.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="range" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\range.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="recycle6992289" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\recycle-6992289.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>

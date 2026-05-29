@@ -2,11 +2,14 @@
 using MaterialSkin;
 using MaterialSkin.Controls;
 using System;
+using System.ComponentModel;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using AD_AI_LearningData_Editor;
 
@@ -16,6 +19,7 @@ namespace AD_AI_LearningData_Editor
     {
         private System.Windows.Forms.Timer videoTimer;
         private DoubleBufferedPictureBox picVideoBox;
+        private VideoOverlayControl videoPlayOverlay;
         private List<string> slideImages = new List<string>();
         private int currentSlideIndex = 0;
         private ListViewItem lastHighlightedItem = null;
@@ -27,9 +31,12 @@ namespace AD_AI_LearningData_Editor
         private Dictionary<string, string> gammaBackupPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private HashSet<string> imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".bit" };
         private string mirrorYBackupFolderName = "MirrorYBackupFile";
+        private Dictionary<string, DrivingInfo> drivingInfoCache = new Dictionary<string, DrivingInfo>(StringComparer.OrdinalIgnoreCase);
+        private DateTime drivingInfoCacheTime = DateTime.MinValue;
         private List<int> intervalPointIndices = new List<int>();
         private int selectedIntervalStartIndex = -1;
         private int selectedIntervalEndIndex = -1;
+        private Font lblSetIntervalDesignerFont = null;
 
         protected override CreateParams CreateParams
         {
@@ -44,6 +51,7 @@ namespace AD_AI_LearningData_Editor
         public frmMain()
         {
             InitializeComponent();
+            CaptureIntervalLabelDesignerFont();
 
             IconProperty.SetAutoImageByWidthHeight(
                 btnOpnFolderList,
@@ -92,6 +100,7 @@ namespace AD_AI_LearningData_Editor
             );
 
             InitializeVideoPlayer();
+            UpdatePlayStopButtonState();
 
             btnNxt1F.Click += btnNxt1F_Click;
             btnNxt5F.Click += btnNxt5F_Click;
@@ -207,6 +216,7 @@ namespace AD_AI_LearningData_Editor
                 btn.Click += btnSetInterval_Click;
             }
 
+            ConfigureIntervalLabelFont();
             SetIntervalLabelText("");
         }
 
@@ -257,12 +267,47 @@ namespace AD_AI_LearningData_Editor
             SetIntervalLabelText("");
         }
 
+        private void CaptureIntervalLabelDesignerFont()
+        {
+            Control label = this.Controls.Find("lblSetInterval", true).FirstOrDefault();
+
+            if (label != null && lblSetIntervalDesignerFont == null)
+            {
+                lblSetIntervalDesignerFont = (Font)label.Font.Clone();
+            }
+        }
+
+        private void ConfigureIntervalLabelFont()
+        {
+            Control label = this.Controls.Find("lblSetInterval", true).FirstOrDefault();
+
+            if (label == null)
+            {
+                return;
+            }
+
+            if (lblSetIntervalDesignerFont == null)
+            {
+                lblSetIntervalDesignerFont = (Font)label.Font.Clone();
+            }
+
+            label.Font = lblSetIntervalDesignerFont;
+
+            if (label is Label winLabel)
+            {
+                winLabel.UseCompatibleTextRendering = true;
+            }
+        }
+
         private void SetIntervalLabelText(string text)
         {
             Control label = this.Controls.Find("lblSetInterval", true).FirstOrDefault();
             if (label != null)
             {
+                ConfigureIntervalLabelFont();
                 label.Text = text;
+                label.Font = lblSetIntervalDesignerFont;
+                label.Refresh();
             }
         }
 
@@ -925,10 +970,22 @@ namespace AD_AI_LearningData_Editor
             picVideoBox = new DoubleBufferedPictureBox();
             picVideoBox.Dock = DockStyle.Fill;
             picVideoBox.SizeMode = PictureBoxSizeMode.StretchImage;
+            picVideoBox.Click += VideoArea_Click;
 
             if (this.Controls.Find("pnlVideo", true).FirstOrDefault() is Panel pnl)
             {
+                pnl.Click += VideoArea_Click;
+
                 pnl.Controls.Add(picVideoBox);
+
+                videoPlayOverlay = new VideoOverlayControl();
+                videoPlayOverlay.Dock = DockStyle.Fill;
+                videoPlayOverlay.Cursor = Cursors.Hand;
+                videoPlayOverlay.IconImage = GetResourceImageByName("PlaySlide4655096");
+                videoPlayOverlay.Click += VideoArea_Click;
+
+                pnl.Controls.Add(videoPlayOverlay);
+                videoPlayOverlay.BringToFront();
             }
 
             videoTimer = new System.Windows.Forms.Timer();
@@ -975,7 +1032,10 @@ namespace AD_AI_LearningData_Editor
             string targetFolder = GetUploadedFolder();
             DirectoryInfo di = new DirectoryInfo(targetFolder);
 
-            var folders = di.GetDirectories().OrderBy(d => d.CreationTime).ToList();
+            var folders = di.GetDirectories()
+                .OrderBy(d => d.Name, new NaturalFileNameComparer())
+                .ToList();
+
             foreach (var folder in folders)
             {
                 ListViewItem item = new ListViewItem("[폴더] " + folder.Name);
@@ -987,20 +1047,27 @@ namespace AD_AI_LearningData_Editor
                 .Where(f => !f.Name.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !f.Name.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !f.Name.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(f => f.CreationTime)
+                .Where(f => !f.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            foreach (var file in files)
+            var filesForListView = files
+                .OrderBy(f => f.Name, new NaturalFileNameComparer())
+                .ToList();
+
+            foreach (var file in filesForListView)
             {
                 ListViewItem item = new ListViewItem(file.Name);
                 item.Tag = "추가된파일";
                 lstviewFileListD.Items.Add(item);
-
-                if (IsImageFile(file.FullName))
-                {
-                    slideImages.Add(file.FullName);
-                }
             }
+
+            slideImages = files
+                .Where(f => IsImageFile(f.FullName))
+                .OrderBy(f => GetSlideImageSortNumber(f.Name))
+                .ThenBy(f => NormalizeDrivingImageName(f.Name), new NaturalFileNameComparer())
+                .ThenBy(f => f.Name, new NaturalFileNameComparer())
+                .Select(f => f.FullName)
+                .ToList();
 
             lstviewFileListD.EndUpdate();
 
@@ -1017,7 +1084,23 @@ namespace AD_AI_LearningData_Editor
                 sdrSeekBar.RangeMax = 0;
                 sdrSeekBar.Value = 0;
                 sdrSeekBar.Text = "0/0";
+                SetTempDrivingInfoText("", "");
             }
+
+            UpdatePlayStopButtonState();
+        }
+
+        private int GetSlideImageSortNumber(string fileName)
+        {
+            string normalizedName = NormalizeDrivingImageName(fileName);
+            string numberText = ExtractLeadingNumber(normalizedName);
+
+            if (int.TryParse(numberText, out int number))
+            {
+                return number;
+            }
+
+            return int.MaxValue;
         }
 
         private void LoadTrashCanFiles()
@@ -1046,6 +1129,717 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+
+        private class DrivingInfo
+        {
+            public string Angle { get; set; }
+            public string Throttle { get; set; }
+        }
+
+        private class CatalogFormatInfo
+        {
+            public List<string> Columns { get; set; } = new List<string>();
+            public List<string> CatalogFileNames { get; set; } = new List<string>();
+            public int ImageIndex { get; set; } = -1;
+            public int AngleIndex { get; set; } = -1;
+            public int ThrottleIndex { get; set; } = -1;
+        }
+
+        private void UpdateCurrentDrivingInfo(string imagePath)
+        {
+            DrivingInfo info = FindDrivingInfoForImage(imagePath);
+
+            if (info == null)
+            {
+                SetTempDrivingInfoText("", "");
+                return;
+            }
+
+            SetTempDrivingInfoText(info.Angle, info.Throttle);
+        }
+
+        private void SetTempDrivingInfoText(string angle, string throttle)
+        {
+            Control angleBox = this.Controls.Find("txtTempAngle", true).FirstOrDefault();
+            Control speedBox = this.Controls.Find("txtTempSpeed", true).FirstOrDefault();
+
+            if (angleBox != null)
+            {
+                angleBox.Text = angle;
+            }
+
+            if (speedBox != null)
+            {
+                speedBox.Text = throttle;
+            }
+        }
+
+        private DrivingInfo FindDrivingInfoForImage(string imagePath)
+        {
+            if (string.IsNullOrWhiteSpace(imagePath))
+            {
+                return null;
+            }
+
+            BuildDrivingInfoCacheIfNeeded();
+
+            string fileName = Path.GetFileName(imagePath);
+            string normalizedName = NormalizeDrivingImageName(fileName);
+            string normalizedNameWithoutExtension = Path.GetFileNameWithoutExtension(normalizedName);
+
+            if (drivingInfoCache.TryGetValue(fileName, out DrivingInfo directInfo))
+            {
+                return directInfo;
+            }
+
+            if (drivingInfoCache.TryGetValue(normalizedName, out DrivingInfo normalizedInfo))
+            {
+                return normalizedInfo;
+            }
+
+            if (drivingInfoCache.TryGetValue(normalizedNameWithoutExtension, out DrivingInfo nameWithoutExtInfo))
+            {
+                return nameWithoutExtInfo;
+            }
+
+            string index = ExtractLeadingNumber(normalizedName);
+
+            if (!string.IsNullOrWhiteSpace(index) && drivingInfoCache.TryGetValue("INDEX:" + index, out DrivingInfo indexInfo))
+            {
+                return indexInfo;
+            }
+
+            return null;
+        }
+
+        private void BuildDrivingInfoCacheIfNeeded()
+        {
+            string uploadFolder = GetUploadedFolder();
+
+            if (!Directory.Exists(uploadFolder))
+            {
+                drivingInfoCache.Clear();
+                drivingInfoCacheTime = DateTime.Now;
+                return;
+            }
+
+            List<string> dataFiles = Directory.GetFiles(uploadFolder, "*.*", SearchOption.AllDirectories)
+                .Where(path =>
+                    string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(Path.GetExtension(path), ".catalog", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(path => path)
+                .ToList();
+
+            DateTime newestWriteTime = dataFiles
+                .Select(path => File.GetLastWriteTime(path))
+                .DefaultIfEmpty(DateTime.MinValue)
+                .Max();
+
+            if (drivingInfoCache.Count > 0 && newestWriteTime <= drivingInfoCacheTime)
+            {
+                return;
+            }
+
+            drivingInfoCache.Clear();
+
+            List<CatalogFormatInfo> manifestFormats = new List<CatalogFormatInfo>();
+
+            foreach (string jsonFile in dataFiles.Where(path => string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase)))
+            {
+                CatalogFormatInfo manifest = TryReadManifestFormat(jsonFile);
+
+                if (manifest != null)
+                {
+                    manifestFormats.Add(manifest);
+                }
+            }
+
+            foreach (string catalogFile in dataFiles.Where(path => string.Equals(Path.GetExtension(path), ".catalog", StringComparison.OrdinalIgnoreCase)))
+            {
+                CatalogFormatInfo format = FindManifestForCatalog(catalogFile, manifestFormats);
+
+                if (format == null)
+                {
+                    format = CreateDefaultCatalogFormat();
+                }
+
+                TryReadCatalogFile(catalogFile, format);
+            }
+
+            foreach (string jsonFile in dataFiles.Where(path => string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (TryReadManifestFormat(jsonFile) != null)
+                {
+                    continue;
+                }
+
+                TryReadJsonRecordFile(jsonFile);
+            }
+
+            drivingInfoCacheTime = newestWriteTime;
+        }
+
+        private CatalogFormatInfo TryReadManifestFormat(string jsonFile)
+        {
+            try
+            {
+                string[] lines = File.ReadAllLines(jsonFile);
+
+                if (lines.Length < 2)
+                {
+                    return null;
+                }
+
+                List<string> columns = TryReadStringArrayLine(lines[0]);
+
+                if (columns == null || columns.Count == 0)
+                {
+                    return null;
+                }
+
+                bool looksLikeManifest =
+                    columns.Any(x => x.IndexOf("image", StringComparison.OrdinalIgnoreCase) >= 0) &&
+                    columns.Any(x => x.IndexOf("angle", StringComparison.OrdinalIgnoreCase) >= 0) &&
+                    columns.Any(x => x.IndexOf("throttle", StringComparison.OrdinalIgnoreCase) >= 0);
+
+                if (!looksLikeManifest)
+                {
+                    return null;
+                }
+
+                CatalogFormatInfo format = new CatalogFormatInfo();
+                format.Columns = columns;
+                format.ImageIndex = FindColumnIndex(columns, "image");
+                format.AngleIndex = FindColumnIndex(columns, "angle");
+                format.ThrottleIndex = FindColumnIndex(columns, "throttle");
+
+                foreach (string line in lines)
+                {
+                    foreach (string path in ExtractCatalogPathsFromManifestLine(line))
+                    {
+                        string fileName = Path.GetFileName(path);
+                        if (!string.IsNullOrWhiteSpace(fileName))
+                        {
+                            format.CatalogFileNames.Add(fileName);
+                            format.CatalogFileNames.Add(NormalizeDrivingFileName(fileName));
+                        }
+                    }
+                }
+
+                return format;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private List<string> TryReadStringArrayLine(string line)
+        {
+            try
+            {
+                using (JsonDocument doc = JsonDocument.Parse(line))
+                {
+                    if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                    {
+                        return null;
+                    }
+
+                    List<string> result = new List<string>();
+
+                    foreach (JsonElement item in doc.RootElement.EnumerateArray())
+                    {
+                        result.Add(item.ToString());
+                    }
+
+                    return result;
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private List<string> ExtractCatalogPathsFromManifestLine(string line)
+        {
+            List<string> result = new List<string>();
+
+            try
+            {
+                using (JsonDocument doc = JsonDocument.Parse(line))
+                {
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                        doc.RootElement.TryGetProperty("paths", out JsonElement pathsElement) &&
+                        pathsElement.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement item in pathsElement.EnumerateArray())
+                        {
+                            result.Add(item.ToString());
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return result;
+        }
+
+        private int FindColumnIndex(List<string> columns, string key)
+        {
+            for (int i = 0; i < columns.Count; i++)
+            {
+                if (columns[i].IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private CatalogFormatInfo FindManifestForCatalog(string catalogFile, List<CatalogFormatInfo> formats)
+        {
+            string catalogName = Path.GetFileName(catalogFile);
+            string normalizedCatalogName = NormalizeDrivingFileName(catalogName);
+
+            foreach (CatalogFormatInfo format in formats)
+            {
+                if (format.CatalogFileNames.Any(name =>
+                    string.Equals(name, catalogName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(name, normalizedCatalogName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return format;
+                }
+            }
+
+            return formats.FirstOrDefault();
+        }
+
+        private CatalogFormatInfo CreateDefaultCatalogFormat()
+        {
+            return new CatalogFormatInfo
+            {
+                Columns = new List<string> { "cam/image_array", "user/angle", "user/throttle", "user/mode" },
+                ImageIndex = 0,
+                AngleIndex = 1,
+                ThrottleIndex = 2
+            };
+        }
+
+        private void TryReadCatalogFile(string catalogFile, CatalogFormatInfo format)
+        {
+            try
+            {
+                foreach (string line in File.ReadLines(catalogFile))
+                {
+                    TryAddDrivingInfoFromCatalogLine(line, catalogFile, format);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void TryAddDrivingInfoFromCatalogLine(string line, string catalogFile, CatalogFormatInfo format)
+        {
+            if (string.IsNullOrWhiteSpace(line) || format == null)
+            {
+                return;
+            }
+
+            try
+            {
+                using (JsonDocument doc = JsonDocument.Parse(line))
+                {
+                    JsonElement root = doc.RootElement;
+
+                    if (root.ValueKind == JsonValueKind.Object && TryAddDrivingInfoFromDonkeyCatalogObject(root))
+                    {
+                        return;
+                    }
+
+                    if (root.ValueKind == JsonValueKind.Array)
+                    {
+                        TryAddDrivingInfoFromCatalogArray(root, format);
+                    }
+                    else if (root.ValueKind == JsonValueKind.Object)
+                    {
+                        TryAddDrivingInfoFromJsonObject(root, catalogFile);
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private bool TryAddDrivingInfoFromDonkeyCatalogObject(JsonElement root)
+        {
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            if (!root.TryGetProperty("cam/image_array", out JsonElement imageElement))
+            {
+                return false;
+            }
+
+            string imageName = imageElement.ToString();
+
+            if (string.IsNullOrWhiteSpace(imageName))
+            {
+                return false;
+            }
+
+            string angle = "";
+            string throttle = "";
+
+            if (root.TryGetProperty("user/angle", out JsonElement angleElement))
+            {
+                angle = angleElement.ToString();
+            }
+
+            if (root.TryGetProperty("user/throttle", out JsonElement throttleElement))
+            {
+                throttle = throttleElement.ToString();
+            }
+
+            DrivingInfo info = new DrivingInfo
+            {
+                Angle = angle,
+                Throttle = throttle
+            };
+
+            AddDrivingInfoForImageName(imageName, info);
+
+            if (root.TryGetProperty("_index", out JsonElement indexElement))
+            {
+                string index = indexElement.ToString();
+
+                if (!string.IsNullOrWhiteSpace(index))
+                {
+                    AddDrivingInfoCacheItem("INDEX:" + index, info);
+                }
+            }
+
+            return true;
+        }
+
+        private void TryAddDrivingInfoFromCatalogArray(JsonElement array, CatalogFormatInfo format)
+        {
+            int count = array.GetArrayLength();
+
+            if (format.ImageIndex < 0 || format.ImageIndex >= count)
+            {
+                return;
+            }
+
+            string imageName = Path.GetFileName(array[format.ImageIndex].ToString());
+
+            if (string.IsNullOrWhiteSpace(imageName))
+            {
+                return;
+            }
+
+            string angle = "";
+            string throttle = "";
+
+            if (format.AngleIndex >= 0 && format.AngleIndex < count)
+            {
+                angle = array[format.AngleIndex].ToString();
+            }
+
+            if (format.ThrottleIndex >= 0 && format.ThrottleIndex < count)
+            {
+                throttle = array[format.ThrottleIndex].ToString();
+            }
+
+            AddDrivingInfoForImageName(imageName, new DrivingInfo
+            {
+                Angle = angle,
+                Throttle = throttle
+            });
+        }
+
+        private void TryReadJsonRecordFile(string jsonFile)
+        {
+            try
+            {
+                string text = File.ReadAllText(jsonFile);
+
+                using (JsonDocument doc = JsonDocument.Parse(text))
+                {
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        TryAddDrivingInfoFromJsonObject(doc.RootElement, jsonFile);
+                    }
+                    else if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                    {
+                        CatalogFormatInfo format = CreateDefaultCatalogFormat();
+                        TryAddDrivingInfoFromCatalogArray(doc.RootElement, format);
+                    }
+                }
+            }
+            catch
+            {
+                try
+                {
+                    foreach (string line in File.ReadLines(jsonFile))
+                    {
+                        TryAddDrivingInfoFromCatalogLine(line, jsonFile, CreateDefaultCatalogFormat());
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private void TryAddDrivingInfoFromJsonObject(JsonElement root, string filePath)
+        {
+            string imageName = FindFirstImageNameInJson(root);
+            string angle = FindNumberLikeJsonValue(root, "angle");
+            string throttle = FindNumberLikeJsonValue(root, "throttle");
+
+            if (string.IsNullOrWhiteSpace(angle) && string.IsNullOrWhiteSpace(throttle))
+            {
+                return;
+            }
+
+            DrivingInfo info = new DrivingInfo
+            {
+                Angle = angle,
+                Throttle = throttle
+            };
+
+            if (!string.IsNullOrWhiteSpace(imageName))
+            {
+                AddDrivingInfoForImageName(imageName, info);
+            }
+
+            string extension = Path.GetExtension(filePath);
+
+            if (!string.Equals(extension, ".catalog", StringComparison.OrdinalIgnoreCase))
+            {
+                string recordIndex = ExtractRecordIndexFromPath(filePath);
+
+                if (!string.IsNullOrWhiteSpace(recordIndex))
+                {
+                    AddDrivingInfoCacheItem("INDEX:" + recordIndex, info);
+                }
+            }
+        }
+
+        private string FindFirstImageNameInJson(JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                string value = element.GetString();
+
+                if (LooksLikeImageFile(value))
+                {
+                    return Path.GetFileName(value);
+                }
+
+                return "";
+            }
+
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    if (property.Name.IndexOf("image", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        property.Value.ValueKind == JsonValueKind.String &&
+                        LooksLikeImageFile(property.Value.GetString()))
+                    {
+                        return Path.GetFileName(property.Value.GetString());
+                    }
+
+                    string nested = FindFirstImageNameInJson(property.Value);
+
+                    if (!string.IsNullOrWhiteSpace(nested))
+                    {
+                        return nested;
+                    }
+                }
+            }
+
+            if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    string nested = FindFirstImageNameInJson(item);
+
+                    if (!string.IsNullOrWhiteSpace(nested))
+                    {
+                        return nested;
+                    }
+                }
+            }
+
+            return "";
+        }
+
+        private string FindNumberLikeJsonValue(JsonElement element, string keyName)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    if (property.Name.IndexOf(keyName, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        if (property.Value.ValueKind == JsonValueKind.Number ||
+                            property.Value.ValueKind == JsonValueKind.String)
+                        {
+                            return property.Value.ToString();
+                        }
+                    }
+
+                    string nested = FindNumberLikeJsonValue(property.Value, keyName);
+
+                    if (!string.IsNullOrWhiteSpace(nested))
+                    {
+                        return nested;
+                    }
+                }
+            }
+
+            if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement item in element.EnumerateArray())
+                {
+                    string nested = FindNumberLikeJsonValue(item, keyName);
+
+                    if (!string.IsNullOrWhiteSpace(nested))
+                    {
+                        return nested;
+                    }
+                }
+            }
+
+            return "";
+        }
+
+        private bool LooksLikeImageFile(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string ext = Path.GetExtension(value);
+            return imageExtensions.Contains(ext);
+        }
+
+        private void AddDrivingInfoForImageName(string imageName, DrivingInfo info)
+        {
+            if (string.IsNullOrWhiteSpace(imageName) || info == null)
+            {
+                return;
+            }
+
+            string fileName = Path.GetFileName(imageName.Replace("\\", "/"));
+            string normalizedName = NormalizeDrivingImageName(fileName);
+            string imageIndex = ExtractLeadingNumber(normalizedName);
+
+            AddDrivingInfoCacheItem(fileName, info);
+            AddDrivingInfoCacheItem(normalizedName, info);
+            AddDrivingInfoCacheItem(Path.GetFileNameWithoutExtension(normalizedName), info);
+
+            if (!string.IsNullOrWhiteSpace(imageIndex))
+            {
+                AddDrivingInfoCacheItem("INDEX:" + imageIndex, info);
+            }
+        }
+
+        private void AddDrivingInfoCacheItem(string key, DrivingInfo info)
+        {
+            if (string.IsNullOrWhiteSpace(key) || info == null)
+            {
+                return;
+            }
+
+            drivingInfoCache[key] = info;
+        }
+
+        private string NormalizeDrivingImageName(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return "";
+            }
+
+            string onlyFileName = Path.GetFileName(fileName.Replace("\\", "/"));
+            string name = Path.GetFileNameWithoutExtension(onlyFileName);
+            string ext = Path.GetExtension(onlyFileName);
+
+            name = Regex.Replace(name, @"\s\(\d+\)$", "", RegexOptions.IgnoreCase);
+            name = Regex.Replace(name, @"-Copy$", "", RegexOptions.IgnoreCase);
+            name = Regex.Replace(name, @"_Copy$", "", RegexOptions.IgnoreCase);
+            name = Regex.Replace(name, @"\sCopy$", "", RegexOptions.IgnoreCase);
+
+            return name + ext;
+        }
+
+        private string NormalizeDrivingFileName(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return "";
+            }
+
+            string onlyFileName = Path.GetFileName(fileName.Replace("\\", "/"));
+            string name = Path.GetFileNameWithoutExtension(onlyFileName);
+            string ext = Path.GetExtension(onlyFileName);
+
+            name = Regex.Replace(name, @"\s\(\d+\)$", "", RegexOptions.IgnoreCase);
+            name = Regex.Replace(name, @"-Copy$", "", RegexOptions.IgnoreCase);
+            name = Regex.Replace(name, @"_Copy$", "", RegexOptions.IgnoreCase);
+            name = Regex.Replace(name, @"\sCopy$", "", RegexOptions.IgnoreCase);
+
+            return name + ext;
+        }
+
+        private string ExtractLeadingNumber(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return "";
+            }
+
+            string name = Path.GetFileNameWithoutExtension(fileName);
+            Match match = Regex.Match(name, @"^(\d+)");
+
+            if (match.Success)
+            {
+                return match.Groups[1].Value;
+            }
+
+            return "";
+        }
+
+        private string ExtractRecordIndexFromPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return "";
+            }
+
+            string name = Path.GetFileNameWithoutExtension(path);
+            Match match = Regex.Match(name, @"(?:record[_-]?|catalog[_-]?|^)(\d+)", RegexOptions.IgnoreCase);
+
+            if (match.Success)
+            {
+                return match.Groups[1].Value;
+            }
+
+            return "";
+        }
+
         private void UpdateSlideDisplay()
         {
             if (slideImages.Count == 0) return;
@@ -1054,7 +1848,12 @@ namespace AD_AI_LearningData_Editor
             if (currentSlideIndex >= slideImages.Count) currentSlideIndex = slideImages.Count - 1;
 
             string currentImagePath = slideImages[currentSlideIndex];
-            if (!File.Exists(currentImagePath)) return;
+
+            if (!File.Exists(currentImagePath))
+            {
+                SetTempDrivingInfoText("", "");
+                return;
+            }
 
             ReleaseCurrentImage();
 
@@ -1072,11 +1871,122 @@ namespace AD_AI_LearningData_Editor
             sdrSeekBar.Text = $"{currentSlideIndex + 1}/{slideImages.Count}";
             isUpdatingSlider = false;
 
+            UpdateCurrentDrivingInfo(currentImagePath);
+        }
+
+
+        private void VideoArea_Click(object sender, EventArgs e)
+        {
+            btnPlayStop_Click(btnPlayStop, EventArgs.Empty);
+        }
+
+        private void UpdatePlayStopButtonState()
+        {
+            bool isPlaying = videoTimer != null && videoTimer.Enabled;
+
+            if (btnPlayStop == null)
+            {
+                return;
+            }
+
+            btnPlayStop.Text = isPlaying ? "정지" : "재생";
+
+            Image icon = isPlaying
+                ? GetResourceImageByName("pause")
+                : GetResourceImageByName("PlaySlide4655096");
+
+            if (icon != null)
+            {
+                int iconSize = Math.Max(1, btnPlayStop.Height - 14);
+
+                if (btnPlayStop is MaterialButton materialButton)
+                {
+                    IconProperty.SetIcon(materialButton, icon, iconSize);
+                }
+                else
+                {
+                    IconProperty.SetImage(btnPlayStop, icon, iconSize, iconSize);
+                }
+            }
+
+            if (videoPlayOverlay != null)
+            {
+                videoPlayOverlay.IconImage = GetResourceImageByName("PlaySlide4655096");
+                videoPlayOverlay.Visible = !isPlaying && slideImages.Count > 0;
+                videoPlayOverlay.BringToFront();
+                videoPlayOverlay.Invalidate();
+            }
+        }
+
+        private Image GetResourceImageByName(string resourceName)
+        {
+            try
+            {
+                object resource = Data_Manager.Properties.Resources.ResourceManager.GetObject(resourceName);
+
+                if (resource is Image image)
+                {
+                    return image;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private Image GetResourceImageByKeyword(string keyword)
+        {
+            try
+            {
+                System.Resources.ResourceSet resourceSet =
+                    Data_Manager.Properties.Resources.ResourceManager.GetResourceSet(
+                        System.Globalization.CultureInfo.CurrentUICulture,
+                        true,
+                        true
+                    );
+
+                if (resourceSet == null)
+                {
+                    return null;
+                }
+
+                foreach (System.Collections.DictionaryEntry entry in resourceSet)
+                {
+                    string key = entry.Key?.ToString();
+
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        continue;
+                    }
+
+                    if (key.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        entry.Value is Image image)
+                    {
+                        return image;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
         }
 
         private void btnPlayStop_Click(object sender, EventArgs e)
         {
-            if (slideImages.Count == 0) return;
+            if (slideImages.Count == 0)
+            {
+                if (videoTimer != null && videoTimer.Enabled)
+                {
+                    videoTimer.Stop();
+                }
+
+                UpdatePlayStopButtonState();
+                return;
+            }
 
             if (videoTimer.Enabled)
             {
@@ -1087,9 +1997,13 @@ namespace AD_AI_LearningData_Editor
                 if (currentSlideIndex >= slideImages.Count - 1)
                 {
                     currentSlideIndex = 0;
+                    UpdateSlideDisplay();
                 }
+
                 videoTimer.Start();
             }
+
+            UpdatePlayStopButtonState();
         }
 
         private void VideoTimer_Tick(object sender, EventArgs e)
@@ -1097,8 +2011,10 @@ namespace AD_AI_LearningData_Editor
             if (currentSlideIndex >= slideImages.Count - 1)
             {
                 videoTimer.Stop();
+                UpdatePlayStopButtonState();
                 return;
             }
+
             currentSlideIndex++;
             UpdateSlideDisplay();
         }
@@ -1163,6 +2079,7 @@ namespace AD_AI_LearningData_Editor
             if (targets.Count == 0) return;
 
             if (videoTimer.Enabled) videoTimer.Stop();
+            UpdatePlayStopButtonState();
             ReleaseCurrentImage();
 
             foreach (string target in targets)
@@ -1432,7 +2349,52 @@ namespace AD_AI_LearningData_Editor
         private void pnlCloseProperty_Paint(object sender, PaintEventArgs e) { }
         private void GBPalete_Enter(object sender, EventArgs e) { }
         private void ColorTrackBar_Scroll(object sender, EventArgs e) { }
+        private class NaturalFileNameComparer : IComparer<string>
+        {
+            public int Compare(string x, string y)
+            {
+                if (ReferenceEquals(x, y)) return 0;
+                if (x == null) return -1;
+                if (y == null) return 1;
 
+                MatchCollection xParts = Regex.Matches(x, @"\d+|\D+");
+                MatchCollection yParts = Regex.Matches(y, @"\d+|\D+");
+
+                int count = Math.Min(xParts.Count, yParts.Count);
+
+                for (int i = 0; i < count; i++)
+                {
+                    string xPart = xParts[i].Value;
+                    string yPart = yParts[i].Value;
+
+                    bool xIsNumber = long.TryParse(xPart, out long xNumber);
+                    bool yIsNumber = long.TryParse(yPart, out long yNumber);
+
+                    int result;
+
+                    if (xIsNumber && yIsNumber)
+                    {
+                        result = xNumber.CompareTo(yNumber);
+
+                        if (result == 0)
+                        {
+                            result = xPart.Length.CompareTo(yPart.Length);
+                        }
+                    }
+                    else
+                    {
+                        result = string.Compare(xPart, yPart, StringComparison.CurrentCultureIgnoreCase);
+                    }
+
+                    if (result != 0)
+                    {
+                        return result;
+                    }
+                }
+
+                return xParts.Count.CompareTo(yParts.Count);
+            }
+        }
         private class PropertyPanelFilter : IMessageFilter
         {
             private frmMain form;
@@ -1515,6 +2477,63 @@ namespace AD_AI_LearningData_Editor
         }
     }
 
+
+    public class VideoOverlayControl : Control
+    {
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Image IconImage { get; set; }
+
+        public VideoOverlayControl()
+        {
+            this.SetStyle(
+                ControlStyles.SupportsTransparentBackColor |
+                ControlStyles.UserPaint |
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer,
+                true
+            );
+
+            this.BackColor = Color.Transparent;
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x20;
+                return cp;
+            }
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs pevent)
+        {
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+
+            if (IconImage == null)
+            {
+                return;
+            }
+
+            int size = Math.Max(1, Math.Min(this.Width, this.Height) / 4);
+            size = Math.Min(size, 120);
+
+            int x = (this.Width - size) / 2;
+            int y = (this.Height - size) / 2;
+
+            e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            e.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            e.Graphics.DrawImage(IconImage, new Rectangle(x, y, size, size));
+        }
+    }
+}
+
     public class DoubleBufferedPictureBox : PictureBox
     {
         public DoubleBufferedPictureBox()
@@ -1524,4 +2543,4 @@ namespace AD_AI_LearningData_Editor
             this.UpdateStyles();
         }
     }
-}
+
