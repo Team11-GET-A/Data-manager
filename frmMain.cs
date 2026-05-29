@@ -19,7 +19,6 @@ namespace AD_AI_LearningData_Editor
     {
         private System.Windows.Forms.Timer videoTimer;
         private DoubleBufferedPictureBox picVideoBox;
-        private VideoOverlayControl videoPlayOverlay;
         private List<string> slideImages = new List<string>();
         private int currentSlideIndex = 0;
         private ListViewItem lastHighlightedItem = null;
@@ -970,22 +969,14 @@ namespace AD_AI_LearningData_Editor
             picVideoBox = new DoubleBufferedPictureBox();
             picVideoBox.Dock = DockStyle.Fill;
             picVideoBox.SizeMode = PictureBoxSizeMode.StretchImage;
+            picVideoBox.Cursor = Cursors.Hand;
+            picVideoBox.OverlayIcon = GetResourceImageByName("PlaySlide4655096");
             picVideoBox.Click += VideoArea_Click;
 
             if (this.Controls.Find("pnlVideo", true).FirstOrDefault() is Panel pnl)
             {
                 pnl.Click += VideoArea_Click;
-
                 pnl.Controls.Add(picVideoBox);
-
-                videoPlayOverlay = new VideoOverlayControl();
-                videoPlayOverlay.Dock = DockStyle.Fill;
-                videoPlayOverlay.Cursor = Cursors.Hand;
-                videoPlayOverlay.IconImage = GetResourceImageByName("PlaySlide4655096");
-                videoPlayOverlay.Click += VideoArea_Click;
-
-                pnl.Controls.Add(videoPlayOverlay);
-                videoPlayOverlay.BringToFront();
             }
 
             videoTimer = new System.Windows.Forms.Timer();
@@ -1842,15 +1833,24 @@ namespace AD_AI_LearningData_Editor
 
         private void UpdateSlideDisplay()
         {
-            if (slideImages.Count == 0) return;
+            if (slideImages.Count == 0)
+            {
+                return;
+            }
 
             if (currentSlideIndex < 0) currentSlideIndex = 0;
             if (currentSlideIndex >= slideImages.Count) currentSlideIndex = slideImages.Count - 1;
 
             string currentImagePath = slideImages[currentSlideIndex];
 
+            isUpdatingSlider = true;
+            sdrSeekBar.Value = currentSlideIndex;
+            sdrSeekBar.Text = $"{currentSlideIndex + 1}/{slideImages.Count}";
+            isUpdatingSlider = false;
+
             if (!File.Exists(currentImagePath))
             {
+                ReleaseCurrentImage();
                 SetTempDrivingInfoText("", "");
                 return;
             }
@@ -1863,15 +1863,12 @@ namespace AD_AI_LearningData_Editor
             }
             catch
             {
+                SetTempDrivingInfoText("", "");
                 return;
             }
 
-            isUpdatingSlider = true;
-            sdrSeekBar.Value = currentSlideIndex;
-            sdrSeekBar.Text = $"{currentSlideIndex + 1}/{slideImages.Count}";
-            isUpdatingSlider = false;
-
             UpdateCurrentDrivingInfo(currentImagePath);
+            UpdatePlayStopButtonState();
         }
 
 
@@ -1909,12 +1906,11 @@ namespace AD_AI_LearningData_Editor
                 }
             }
 
-            if (videoPlayOverlay != null)
+            if (picVideoBox != null)
             {
-                videoPlayOverlay.IconImage = GetResourceImageByName("PlaySlide4655096");
-                videoPlayOverlay.Visible = !isPlaying && slideImages.Count > 0;
-                videoPlayOverlay.BringToFront();
-                videoPlayOverlay.Invalidate();
+                picVideoBox.OverlayIcon = GetResourceImageByName("PlaySlide4655096");
+                picVideoBox.ShowOverlayIcon = !isPlaying && slideImages.Count > 0;
+                picVideoBox.Invalidate();
             }
         }
 
@@ -2476,71 +2472,48 @@ namespace AD_AI_LearningData_Editor
             return false;
         }
     }
-
-
-    public class VideoOverlayControl : Control
+    public class DoubleBufferedPictureBox : PictureBox
     {
         [Browsable(false)]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public Image IconImage { get; set; }
+        public Image OverlayIcon { get; set; }
 
-        public VideoOverlayControl()
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool ShowOverlayIcon { get; set; }
+
+        public DoubleBufferedPictureBox()
         {
+            this.DoubleBuffered = true;
             this.SetStyle(
-                ControlStyles.SupportsTransparentBackColor |
                 ControlStyles.UserPaint |
                 ControlStyles.AllPaintingInWmPaint |
-                ControlStyles.OptimizedDoubleBuffer,
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw,
                 true
             );
-
-            this.BackColor = Color.Transparent;
+            this.UpdateStyles();
         }
 
-        protected override CreateParams CreateParams
+        protected override void OnPaint(PaintEventArgs pe)
         {
-            get
-            {
-                CreateParams cp = base.CreateParams;
-                cp.ExStyle |= 0x20;
-                return cp;
-            }
-        }
+            base.OnPaint(pe);
 
-        protected override void OnPaintBackground(PaintEventArgs pevent)
-        {
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-
-            if (IconImage == null)
+            if (!ShowOverlayIcon || OverlayIcon == null)
             {
                 return;
             }
 
-            int size = Math.Max(1, Math.Min(this.Width, this.Height) / 4);
+            int size = Math.Max(1, Math.Min(this.ClientSize.Width, this.ClientSize.Height) / 4);
             size = Math.Min(size, 120);
 
-            int x = (this.Width - size) / 2;
-            int y = (this.Height - size) / 2;
+            int x = (this.ClientSize.Width - size) / 2;
+            int y = (this.ClientSize.Height - size) / 2;
 
-            e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            e.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-            e.Graphics.DrawImage(IconImage, new Rectangle(x, y, size, size));
+            pe.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            pe.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            pe.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            pe.Graphics.DrawImage(OverlayIcon, new Rectangle(x, y, size, size));
         }
     }
 }
-
-    public class DoubleBufferedPictureBox : PictureBox
-    {
-        public DoubleBufferedPictureBox()
-        {
-            this.DoubleBuffered = true;
-            this.SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-            this.UpdateStyles();
-        }
-    }
-
