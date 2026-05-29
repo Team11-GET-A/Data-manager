@@ -27,6 +27,9 @@ namespace AD_AI_LearningData_Editor
         private Dictionary<string, string> gammaBackupPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private HashSet<string> imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".bit" };
         private string mirrorYBackupFolderName = "MirrorYBackupFile";
+        private List<int> intervalPointIndices = new List<int>();
+        private int selectedIntervalStartIndex = -1;
+        private int selectedIntervalEndIndex = -1;
 
         protected override CreateParams CreateParams
         {
@@ -100,6 +103,7 @@ namespace AD_AI_LearningData_Editor
             btnOpnFileExplrr.Click += btnOpnFileExplrr_Click;
             btnRestoration.Click += btnRestoration_Click;
             btnSave.Click += btnSave_Click;
+            RegisterIntervalControls();
 
             btnRestoration.Visible = false;
 
@@ -193,6 +197,165 @@ namespace AD_AI_LearningData_Editor
             lblLstVwName.Font = new Font("맑은 고딕", 14F, FontStyle.Bold, GraphicsUnit.Point);
             lblLstVwName.UseCompatibleTextRendering = true;
             lblLstVwName.Refresh();
+        }
+
+        private void RegisterIntervalControls()
+        {
+            Control btn = this.Controls.Find("btnSetInterval", true).FirstOrDefault();
+            if (btn != null)
+            {
+                btn.Click += btnSetInterval_Click;
+            }
+
+            SetIntervalLabelText("");
+        }
+
+        private void btnSetInterval_Click(object sender, EventArgs e)
+        {
+            if (slideImages.Count == 0)
+            {
+                ResetSelectedInterval();
+                return;
+            }
+
+            if (HasSelectedInterval() || intervalPointIndices.Count >= 2)
+            {
+                ResetSelectedInterval();
+            }
+
+            intervalPointIndices.Add(currentSlideIndex);
+
+            if (intervalPointIndices.Count == 1)
+            {
+                int displayIndex = currentSlideIndex + 1;
+                SetIntervalLabelText($"({displayIndex}~ )");
+                return;
+            }
+
+            int first = intervalPointIndices[0];
+            int second = intervalPointIndices[1];
+
+            selectedIntervalStartIndex = Math.Min(first, second);
+            selectedIntervalEndIndex = Math.Max(first, second);
+
+            SetIntervalLabelText($"({selectedIntervalStartIndex + 1}~{selectedIntervalEndIndex + 1})");
+            SelectIntervalItemsInListView();
+        }
+
+        private bool HasSelectedInterval()
+        {
+            return selectedIntervalStartIndex >= 0 &&
+                   selectedIntervalEndIndex >= selectedIntervalStartIndex &&
+                   selectedIntervalStartIndex < slideImages.Count;
+        }
+
+        private void ResetSelectedInterval()
+        {
+            intervalPointIndices.Clear();
+            selectedIntervalStartIndex = -1;
+            selectedIntervalEndIndex = -1;
+            SetIntervalLabelText("");
+        }
+
+        private void SetIntervalLabelText(string text)
+        {
+            Control label = this.Controls.Find("lblSetInterval", true).FirstOrDefault();
+            if (label != null)
+            {
+                label.Text = text;
+            }
+        }
+
+        private List<string> GetIntervalImageFiles()
+        {
+            List<string> targets = new List<string>();
+
+            if (!HasSelectedInterval())
+            {
+                return targets;
+            }
+
+            int start = Math.Max(0, selectedIntervalStartIndex);
+            int end = Math.Min(slideImages.Count - 1, selectedIntervalEndIndex);
+
+            for (int i = start; i <= end; i++)
+            {
+                string path = slideImages[i];
+
+                if (File.Exists(path) && IsImageFile(path))
+                {
+                    targets.Add(path);
+                }
+            }
+
+            return targets;
+        }
+
+        private List<string> GetSelectedListViewImageFiles()
+        {
+            List<string> targets = new List<string>();
+            string uploadFolder = GetUploadedFolder();
+
+            if (lstviewFileListD.SelectedItems.Count == 0)
+            {
+                return targets;
+            }
+
+            foreach (ListViewItem item in lstviewFileListD.SelectedItems)
+            {
+                string name = item.Text.Replace("[폴더] ", "");
+                string path = Path.Combine(uploadFolder, name);
+
+                if (File.Exists(path) && IsImageFile(path))
+                {
+                    targets.Add(path);
+                }
+            }
+
+            return targets
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private List<string> GetTargetImageFilesForEdit()
+        {
+            List<string> intervalTargets = GetIntervalImageFiles();
+
+            if (intervalTargets.Count > 0)
+            {
+                return intervalTargets;
+            }
+
+            List<string> selectedTargets = GetSelectedListViewImageFiles();
+
+            if (selectedTargets.Count > 0)
+            {
+                return selectedTargets;
+            }
+
+            return GetUploadedImageFiles();
+        }
+
+        private void SelectIntervalItemsInListView()
+        {
+            if (!HasSelectedInterval())
+            {
+                return;
+            }
+
+            HashSet<string> selectedNames = new HashSet<string>(
+                GetIntervalImageFiles().Select(path => Path.GetFileName(path)),
+                StringComparer.OrdinalIgnoreCase
+            );
+
+            lstviewFileListD.BeginUpdate();
+
+            foreach (ListViewItem item in lstviewFileListD.Items)
+            {
+                item.Selected = selectedNames.Contains(item.Text);
+            }
+
+            lstviewFileListD.EndUpdate();
         }
 
         private void InitializeSpeedController()
@@ -392,7 +555,7 @@ namespace AD_AI_LearningData_Editor
 
         private void ModifyAllUploadedImages(Action<Bitmap, string> modifyAction)
         {
-            List<string> targets = GetUploadedImageFiles();
+            List<string> targets = GetTargetImageFilesForEdit();
             if (targets.Count == 0) return;
 
             ReleaseCurrentImage();
@@ -417,6 +580,7 @@ namespace AD_AI_LearningData_Editor
             }
 
             LoadUploadedFilesToD();
+            SelectIntervalItemsInListView();
         }
 
         private void btnNoise_Click(object sender, EventArgs e)
@@ -447,22 +611,28 @@ namespace AD_AI_LearningData_Editor
 
         private void btnMirrorY_Click(object sender, EventArgs e)
         {
-            List<string> targets = GetUploadedImageFiles();
+            List<string> targets = GetTargetImageFilesForEdit();
             if (targets.Count == 0) return;
 
             string backupFolder = GetMirrorYBackupFolder();
-            bool hasBackup = Directory.Exists(backupFolder) && Directory.GetFiles(backupFolder).Any();
+            bool hasBackupForTargets = targets.All(targetPath =>
+                File.Exists(Path.Combine(backupFolder, Path.GetFileName(targetPath)))
+            );
 
             ReleaseCurrentImage();
 
             try
             {
-                if (!hasBackup)
+                if (!hasBackupForTargets)
                 {
                     foreach (string targetPath in targets)
                     {
                         string backupPath = Path.Combine(backupFolder, Path.GetFileName(targetPath));
-                        File.Copy(targetPath, backupPath, true);
+
+                        if (!File.Exists(backupPath))
+                        {
+                            File.Copy(targetPath, backupPath, true);
+                        }
                     }
 
                     foreach (string targetPath in targets)
@@ -482,32 +652,41 @@ namespace AD_AI_LearningData_Editor
                 }
                 else
                 {
-                    string uploadFolder = GetUploadedFolder();
-                    foreach (string backupPath in Directory.GetFiles(backupFolder))
+                    foreach (string targetPath in targets)
                     {
-                        string destPath = Path.Combine(uploadFolder, Path.GetFileName(backupPath));
-                        File.Copy(backupPath, destPath, true);
+                        string backupPath = Path.Combine(backupFolder, Path.GetFileName(targetPath));
+
+                        if (File.Exists(backupPath))
+                        {
+                            File.Copy(backupPath, targetPath, true);
+                            try { File.Delete(backupPath); } catch { }
+                        }
                     }
 
                     try
                     {
-                        Directory.Delete(backupFolder, true);
+                        if (Directory.Exists(backupFolder) && !Directory.GetFiles(backupFolder).Any())
+                        {
+                            Directory.Delete(backupFolder, true);
+                        }
                     }
                     catch { }
                 }
 
                 LoadUploadedFilesToD();
+                SelectIntervalItemsInListView();
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"상하 반전 처리 중 오류가 발생했습니다: {ex.Message}");
                 LoadUploadedFilesToD();
+                SelectIntervalItemsInListView();
             }
         }
 
         private void ApplyROIBlackoutToAllImages(int row, int col)
         {
-            List<string> targets = GetUploadedImageFiles();
+            List<string> targets = GetTargetImageFilesForEdit();
             if (targets.Count == 0) return;
 
             roiState[row, col] = !roiState[row, col];
@@ -561,11 +740,12 @@ namespace AD_AI_LearningData_Editor
             }
 
             LoadUploadedFilesToD();
+            SelectIntervalItemsInListView();
         }
 
         private void trcbrContrastProperty_Scroll(object sender, EventArgs e)
         {
-            List<string> targets = GetUploadedImageFiles();
+            List<string> targets = GetTargetImageFilesForEdit();
             if (targets.Count == 0) return;
 
             int trackValue = trcbrContrastProperty.Value;
@@ -631,6 +811,7 @@ namespace AD_AI_LearningData_Editor
             }
 
             LoadUploadedFilesToD();
+            SelectIntervalItemsInListView();
         }
 
         private void HandlePaletteClick(int filterType, Button targetButton)
@@ -952,7 +1133,13 @@ namespace AD_AI_LearningData_Editor
             string uploadFolder = GetUploadedFolder();
             List<string> targets = new List<string>();
 
-            if (lstviewFileListD.SelectedItems.Count > 0)
+            List<string> intervalTargets = GetIntervalImageFiles();
+
+            if (intervalTargets.Count > 0)
+            {
+                targets.AddRange(intervalTargets);
+            }
+            else if (lstviewFileListD.SelectedItems.Count > 0)
             {
                 foreach (ListViewItem item in lstviewFileListD.SelectedItems)
                 {
@@ -967,6 +1154,11 @@ namespace AD_AI_LearningData_Editor
                     targets.Add(slideImages[currentSlideIndex]);
                 }
             }
+
+            targets = targets
+                .Where(path => File.Exists(path) || Directory.Exists(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
             if (targets.Count == 0) return;
 
@@ -990,6 +1182,7 @@ namespace AD_AI_LearningData_Editor
                 catch { }
             }
 
+            ResetSelectedInterval();
             LoadUploadedFilesToD();
         }
 
@@ -1280,6 +1473,16 @@ namespace AD_AI_LearningData_Editor
                 Rectangle r = c.RectangleToScreen(c.ClientRectangle);
                 return r.Contains(p);
             }
+        }
+
+        private void lstviewFileListD_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void groupBox2_Enter(object sender, EventArgs e)
+        {
+
         }
     }
 
