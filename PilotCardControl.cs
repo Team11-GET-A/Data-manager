@@ -10,6 +10,7 @@ namespace Data_Manager
         // UI Controls
         private Label lblModelNameTitle;
         private Label lblModelName;
+        private Button btnTubSelect;
         private Button btnModelSelect;
         private Button btnDelete;
         private PictureBox picDriveView;
@@ -31,6 +32,9 @@ namespace Data_Manager
         private double modelAngle = 0;
         private double driveThrottle = 0;
         private double modelThrottle = 0;
+        private string modelFolderPath = string.Empty;
+        private string modelFilePath = string.Empty;
+        private string tubFolderPath = string.Empty;
 
         // Events
         public event Action<PilotCardControl> RemoveRequested;
@@ -39,6 +43,36 @@ namespace Data_Manager
         public PilotCardControl()
         {
             BuildUi();
+        }
+
+        public void SetModelFolderPath(string path)
+        {
+            modelFolderPath = path ?? string.Empty;
+        }
+
+        public void SetModelFilePath(string path)
+        {
+            modelFilePath = path ?? string.Empty;
+        }
+
+        public string GetModelFolderPath()
+        {
+            return modelFolderPath;
+        }
+
+        public string GetModelFilePath()
+        {
+            return modelFilePath;
+        }
+
+        public void SetTubFolderPath(string path)
+        {
+            tubFolderPath = path ?? string.Empty;
+        }
+
+        public string GetTubFolderPath()
+        {
+            return tubFolderPath;
         }
 
         private void BuildUi()
@@ -59,6 +93,9 @@ namespace Data_Manager
             lblModelNameTitle = new Label { Text = "모델 이름:", Location = new Point(10, 12), AutoSize = true, Font = new Font("맑은 고딕", 9, FontStyle.Bold) };
             lblModelName = new Label { Text = "선택 안 됨", Location = new Point(80, 12), AutoSize = true, Font = new Font("맑은 고딕", 9) };
 
+            btnTubSelect = new Button { Text = "tub 입력", Size = new Size(75, 25), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            btnTubSelect.Click += BtnTubSelect_Click;
+
             btnModelSelect = new Button { Text = "모델 선택", Size = new Size(95, 25), Anchor = AnchorStyles.Top | AnchorStyles.Right };
             btnModelSelect.Click += (s, e) => ModelSelectRequested?.Invoke(this);
 
@@ -68,6 +105,7 @@ namespace Data_Manager
 
             pnlHeader.Controls.Add(lblModelNameTitle);
             pnlHeader.Controls.Add(lblModelName);
+            pnlHeader.Controls.Add(btnTubSelect);
             pnlHeader.Controls.Add(btnModelSelect);
             pnlHeader.Controls.Add(btnDelete);
 
@@ -129,7 +167,7 @@ namespace Data_Manager
                 return;
             }
 
-            if (btnDelete == null || btnModelSelect == null || lblDriveThrottleTitle == null || pbDriveThrottle == null
+            if (btnDelete == null || btnModelSelect == null || btnTubSelect == null || lblDriveThrottleTitle == null || pbDriveThrottle == null
                 || lblDriveThrottleVal == null || lblDriveThrottleDir == null || lblModelThrottleTitle == null
                 || pbModelThrottle == null || lblModelThrottleVal == null || lblModelThrottleDir == null)
             {
@@ -138,7 +176,8 @@ namespace Data_Manager
 
             int headerPadding = 10;
             btnDelete.Location = new Point(width - btnDelete.Width - headerPadding, 13);
-            btnModelSelect.Location = new Point(btnDelete.Left - btnModelSelect.Width - 15, 13);
+            btnModelSelect.Location = new Point(btnDelete.Left - btnModelSelect.Width - 10, 13);
+            btnTubSelect.Location = new Point(btnModelSelect.Left - btnTubSelect.Width - 10, 13);
 
             int headerHeight = Math.Max(50, (int)Math.Round(height * 0.1));
             int pictureHeight = Math.Max(230, (int)Math.Round(height * 0.56));
@@ -176,6 +215,21 @@ namespace Data_Manager
             lblModelThrottleVal.Size = new Size(valueWidth, 20);
             lblModelThrottleDir.Location = new Point(xDir, 75);
             lblModelThrottleDir.Size = new Size(dirWidth, 20);
+        }
+
+        private void BtnTubSelect_Click(object sender, EventArgs e)
+        {
+            using (var dialog = new FolderBrowserDialog())
+            {
+                dialog.Description = "tub 폴더 선택";
+
+                if (dialog.ShowDialog() != DialogResult.OK)
+                {
+                    return;
+                }
+
+                tubFolderPath = dialog.SelectedPath;
+            }
         }
 
         private void PicDriveView_Paint(object sender, PaintEventArgs e)

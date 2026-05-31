@@ -7,8 +7,12 @@ namespace Data_Manager
 {
     public partial class PliotModelList : Form
     {
+        // 전체 모델 목록 및 필터 적용 후 표시 목록
         private readonly List<ModelListItem> allModels = new List<ModelListItem>();
         private readonly List<ModelListItem> visibleModels = new List<ModelListItem>();
+
+        // 마지막으로 불러온 폴더 (필터 초기화 시 재로드용)
+        private string? lastLoadedFolderPath;
 
         public event Action<string>? ModelSelected;
 
@@ -16,12 +20,18 @@ namespace Data_Manager
         {
             InitializeComponent();
             btnModelFliter.Text = "검색";
+            btnResetFilter.Text = "초기화";
             btnModelLoad.Text = "불러오기";
             btnModelFliter.Click += BtnModelFliter_Click;
+            btnResetFilter.Click += BtnResetFilter_Click;
             btnModelLoad.Click += BtnModelLoad_Click;
             lstModelList.DoubleClick += LstModelList_DoubleClick;
+            lstModelList.KeyDown += LstModelList_KeyDown;
+            KeyPreview = true;
+            KeyDown += PliotModelList_KeyDown;
         }
 
+        // frmNewtrainer 리스트박스에서 모델을 가져오는 진입점
         public void LoadFromTrainerList()
         {
             allModels.Clear();
@@ -32,6 +42,7 @@ namespace Data_Manager
             ApplyFilter(txtModelFilter.Text);
         }
 
+        // 모델 폴더 선택 후 h5 파일 목록 로드
         private void BtnModelLoad_Click(object? sender, EventArgs e)
         {
             using (var dialog = new FolderBrowserDialog())
@@ -47,11 +58,62 @@ namespace Data_Manager
             }
         }
 
+        // 필터 초기화 및 마지막 폴더 재로드 (파일 갱신 반영)
+        private void BtnResetFilter_Click(object? sender, EventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(lastLoadedFolderPath)
+                || !Directory.Exists(lastLoadedFolderPath))
+            {
+                ApplyFilter(string.Empty);
+                return;
+            }
+
+            LoadModelsFromFolder(lastLoadedFolderPath);
+        }
+
+        private void PliotModelList_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                btnModelFliter.PerformClick();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                return;
+            }
+
+            if (e.KeyCode == Keys.Escape)
+            {
+                btnResetFilter.PerformClick();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        private void LstModelList_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Tab)
+            {
+                return;
+            }
+
+            SelectNextControl(
+                lstModelList,
+                !e.Shift,
+                true,
+                true,
+                true);
+
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
+
+        // 현재 입력값으로 필터 적용
         private void BtnModelFliter_Click(object? sender, EventArgs e)
         {
             ApplyFilter(txtModelFilter.Text);
         }
 
+        // 모델 선택 후 호출(더블클릭)
         private void LstModelList_DoubleClick(object? sender, EventArgs e)
         {
             if (lstModelList.SelectedIndex < 0 || lstModelList.SelectedIndex >= visibleModels.Count)
@@ -64,6 +126,7 @@ namespace Data_Manager
             ModelSelected?.Invoke(model.Path);
         }
 
+        // 필터 문자열을 기준으로 리스트 표시 갱신
         private void ApplyFilter(string? filterText)
         {
             string normalizedFilter = (filterText ?? string.Empty).Trim();
@@ -83,9 +146,11 @@ namespace Data_Manager
             }
         }
 
+        // 선택한 폴더 내 h5 파일을 목록으로 로드
         private void LoadModelsFromFolder(string folderPath)
         {
             allModels.Clear();
+            lastLoadedFolderPath = folderPath;
 
             foreach (string file in Directory.EnumerateFiles(folderPath, "*.h5"))
             {
@@ -98,6 +163,7 @@ namespace Data_Manager
             ApplyFilter(txtModelFilter.Text);
         }
 
+        // 현재는 이름 열만 필터링 대상으로 사용
         private static bool IsMatch(ModelListItem model, string normalizedFilter)
         {
             if (string.IsNullOrWhiteSpace(normalizedFilter))
@@ -117,10 +183,13 @@ namespace Data_Manager
                 SourceItem = source;
             }
 
+            // 이름 열 (현재 필터 기준)
             public string Name { get; }
 
+            // 모델 경로
             public string Path { get; }
 
+            // 원본 항목 보관 (추후 매핑용)
             public object? SourceItem { get; }
 
             public string DisplayText => Name;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.IO;
 using System.Text;
 using System.Windows.Forms;
 using MaterialSkin;
@@ -30,6 +31,8 @@ namespace Data_Manager
         private List<CatalogRecord>
             integratedCatalogList =
             new List<CatalogRecord>();
+
+        private PilotCardControl? pendingModelCard;
 
         // =====================================================
         // 데이터 구조
@@ -160,8 +163,51 @@ namespace Data_Manager
         private void Card_ModelSelectRequested(
             PilotCardControl card)
         {
-            MessageBox.Show(
-                "추후 모델 선택 로직이 연동될 예정입니다.");
+            pendingModelCard = card;
+
+            PliotModelList modelList =
+                new PliotModelList();
+
+            // TODO: frmNewtrainer 폼의 리스트박스 존재 여부 확인 후 항목 복사
+            // if (/* frmNewtrainer 리스트박스에 항목 있음 */)
+            // {
+            //     modelList.LoadFromTrainerList();
+            // }
+
+            modelList.ModelSelected +=
+                path => ApplySelectedModel(path, modelList);
+
+            modelList.Show(this);
+        }
+
+        private void ApplySelectedModel(
+            string modelPath,
+            Form modelList)
+        {
+            if (pendingModelCard == null)
+            {
+                return;
+            }
+
+            pendingModelCard.SetModelFilePath(modelPath);
+
+            string? folderPath =
+                Path.GetDirectoryName(modelPath);
+
+            if (!string.IsNullOrWhiteSpace(folderPath))
+            {
+                pendingModelCard.SetModelFolderPath(folderPath);
+            }
+
+            // TODO: 모델 경로를 기반으로 필요한 데이터 파싱/반영
+            string modelName =
+                Path.GetFileNameWithoutExtension(
+                    modelPath);
+
+            pendingModelCard.SetModelName(modelName);
+            pendingModelCard = null;
+
+            modelList.Close();
         }
 
         // =====================================================
