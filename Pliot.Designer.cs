@@ -39,11 +39,10 @@
             btnPlay = new Button();
             cbxFaster = new ComboBox();
             panel2 = new Panel();
+            btnLoadData1 = new Button();
             btnCardAdder = new Button();
             materialLabel1 = new MaterialSkin.Controls.MaterialLabel();
             flowLayoutPanel1 = new FlowLayoutPanel();
-            btnLoadData1 = new Button();
-            button2 = new Button();
             panel1.SuspendLayout();
             panel2.SuspendLayout();
             SuspendLayout();
@@ -157,12 +156,11 @@
             cbxFaster.Location = new Point(1392, 74);
             cbxFaster.Margin = new Padding(4);
             cbxFaster.Name = "cbxFaster";
-            cbxFaster.Size = new Size(168, 39);
+            cbxFaster.Size = new Size(168, 28);
             cbxFaster.TabIndex = 2;
             // 
             // panel2
             // 
-            panel2.Controls.Add(button2);
             panel2.Controls.Add(btnLoadData1);
             panel2.Controls.Add(btnCardAdder);
             panel2.Controls.Add(materialLabel1);
@@ -173,12 +171,21 @@
             panel2.Size = new Size(1580, 106);
             panel2.TabIndex = 1;
             // 
+            // btnLoadData1
+            // 
+            btnLoadData1.Location = new Point(1156, 20);
+            btnLoadData1.Name = "btnLoadData1";
+            btnLoadData1.Size = new Size(191, 61);
+            btnLoadData1.TabIndex = 0;
+            btnLoadData1.Text = "파일 가져오기";
+            btnLoadData1.UseVisualStyleBackColor = true;
+            // 
             // btnCardAdder
             // 
-            btnCardAdder.Location = new Point(1354, 28);
+            btnCardAdder.Location = new Point(1354, 20);
             btnCardAdder.Margin = new Padding(4);
             btnCardAdder.Name = "btnCardAdder";
-            btnCardAdder.Size = new Size(206, 45);
+            btnCardAdder.Size = new Size(206, 61);
             btnCardAdder.TabIndex = 11;
             btnCardAdder.Text = "모델 추가하기";
             btnCardAdder.UseVisualStyleBackColor = true;
@@ -196,7 +203,6 @@
             materialLabel1.Size = new Size(124, 58);
             materialLabel1.TabIndex = 0;
             materialLabel1.Text = "파일럿";
-            
             // 
             // flowLayoutPanel1
             // 
@@ -210,28 +216,9 @@
             flowLayoutPanel1.TabIndex = 2;
             flowLayoutPanel1.WrapContents = false;
             // 
-            // btnLoadData1
-            // 
-            btnLoadData1.Location = new Point(384, 20);
-            btnLoadData1.Name = "btnLoadData1";
-            btnLoadData1.Size = new Size(191, 61);
-            btnLoadData1.TabIndex = 0;
-            btnLoadData1.Text = "파일 가져오기";
-            btnLoadData1.UseVisualStyleBackColor = true;
-            
-            // 
-            // button2
-            // 
-            button2.Location = new Point(695, 23);
-            button2.Name = "button2";
-            button2.Size = new Size(191, 61);
-            button2.TabIndex = 12;
-            button2.Text = "button2";
-            button2.UseVisualStyleBackColor = true;
-            // 
             // Pliot
             // 
-            AutoScaleDimensions = new SizeF(13F, 31F);
+            AutoScaleDimensions = new SizeF(9F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1584, 861);
             Controls.Add(flowLayoutPanel1);
@@ -266,6 +253,5 @@
         private MaterialSkin.Controls.MaterialLabel materialLabel1;
         private Button btnCardAdder;
         private Button btnLoadData1;
-        private Button button2;
     }
 }

@@ -21,18 +21,6 @@ namespace Data_Manager
 
         private const int CardHeight = 552;
 
-        private readonly Dictionary<Control, Rectangle>
-            panel1BaseBounds =
-            new Dictionary<Control, Rectangle>();
-
-        private readonly Dictionary<Control, Rectangle>
-            panel2BaseBounds =
-            new Dictionary<Control, Rectangle>();
-
-        private Size panel1BaseSize;
-
-        private Size panel2BaseSize;
-
         // =====================================================
         // 데이터 변수
         // =====================================================
@@ -91,16 +79,6 @@ namespace Data_Manager
             object sender,
             EventArgs e)
         {
-            CapturePanelLayout(
-                panel1,
-                panel1BaseBounds,
-                ref panel1BaseSize);
-
-            CapturePanelLayout(
-                panel2,
-                panel2BaseBounds,
-                ref panel2BaseSize);
-
             UpdatePilotCardLayout();
         }
 
@@ -112,16 +90,6 @@ namespace Data_Manager
             object sender,
             EventArgs e)
         {
-            ApplyPanelScale(
-                panel1,
-                panel1BaseBounds,
-                panel1BaseSize);
-
-            ApplyPanelScale(
-                panel2,
-                panel2BaseBounds,
-                panel2BaseSize);
-
             UpdatePilotCardLayout();
         }
 
@@ -199,68 +167,6 @@ namespace Data_Manager
         // =====================================================
         // PANEL CAPTURE
         // =====================================================
-
-        private void CapturePanelLayout(
-            Panel panel,
-            Dictionary<Control, Rectangle> bounds,
-            ref Size baseSize)
-        {
-            bounds.Clear();
-
-            baseSize = panel.ClientSize;
-
-            foreach (Control control
-                in panel.Controls)
-            {
-                bounds[control] =
-                    control.Bounds;
-            }
-        }
-
-        // =====================================================
-        // PANEL SCALE
-        // =====================================================
-
-        private void ApplyPanelScale(
-            Panel panel,
-            Dictionary<Control, Rectangle> bounds,
-            Size baseSize)
-        {
-            if (
-                baseSize.Width == 0 ||
-                baseSize.Height == 0)
-            {
-                return;
-            }
-
-            float scaleX =
-                panel.ClientSize.Width /
-                (float)baseSize.Width;
-
-            float scaleY =
-                panel.ClientSize.Height /
-                (float)baseSize.Height;
-
-            foreach (var entry in bounds)
-            {
-                Rectangle original =
-                    entry.Value;
-
-                entry.Key.Bounds =
-                    new Rectangle(
-                        (int)Math.Round(
-                            original.X * scaleX),
-
-                        (int)Math.Round(
-                            original.Y * scaleY),
-
-                        (int)Math.Round(
-                            original.Width * scaleX),
-
-                        (int)Math.Round(
-                            original.Height * scaleY));
-            }
-        }
 
         // =====================================================
         // CARD LAYOUT
