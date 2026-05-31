@@ -14,7 +14,8 @@ namespace Data_Manager
         // 마지막으로 불러온 폴더 (필터 초기화 시 재로드용)
         private string? lastLoadedFolderPath;
 
-        public event Action<string>? ModelSelected;
+        // 모델 이름과 파일 경로를 함께 전달합니다.
+        public event Action<string, string>? ModelSelected;
 
         public PliotModelList()
         {
@@ -123,7 +124,7 @@ namespace Data_Manager
 
             ModelListItem model = visibleModels[lstModelList.SelectedIndex];
 
-            ModelSelected?.Invoke(model.Path);
+            ModelSelected?.Invoke(model.Name, model.Path);
         }
 
         // 필터 문자열을 기준으로 리스트 표시 갱신

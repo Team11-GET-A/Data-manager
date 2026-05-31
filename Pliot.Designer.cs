@@ -39,7 +39,7 @@
             btnPlay = new Button();
             cbxFaster = new ComboBox();
             panel2 = new Panel();
-            btnLoadData1 = new Button();
+            btnChart = new Button();
             btnCardAdder = new Button();
             materialLabel1 = new MaterialSkin.Controls.MaterialLabel();
             flowLayoutPanel1 = new FlowLayoutPanel();
@@ -161,7 +161,7 @@
             // 
             // panel2
             // 
-            panel2.Controls.Add(btnLoadData1);
+            panel2.Controls.Add(btnChart);
             panel2.Controls.Add(btnCardAdder);
             panel2.Controls.Add(materialLabel1);
             panel2.Dock = DockStyle.Top;
@@ -171,14 +171,14 @@
             panel2.Size = new Size(1580, 106);
             panel2.TabIndex = 1;
             // 
-            // btnLoadData1
+            // btnChart
             // 
-            btnLoadData1.Location = new Point(1156, 20);
-            btnLoadData1.Name = "btnLoadData1";
-            btnLoadData1.Size = new Size(191, 61);
-            btnLoadData1.TabIndex = 0;
-            btnLoadData1.Text = "파일 가져오기";
-            btnLoadData1.UseVisualStyleBackColor = true;
+            btnChart.Location = new Point(1156, 20);
+            btnChart.Name = "btnChart";
+            btnChart.Size = new Size(191, 61);
+            btnChart.TabIndex = 0;
+            btnChart.Text = "차트 열기";
+            btnChart.UseVisualStyleBackColor = true;
             // 
             // btnCardAdder
             // 
@@ -252,6 +252,6 @@
         private Button btnSpeedSet1;
         private MaterialSkin.Controls.MaterialLabel materialLabel1;
         private Button btnCardAdder;
-        private Button btnLoadData1;
+        private Button btnChart;
     }
 }
