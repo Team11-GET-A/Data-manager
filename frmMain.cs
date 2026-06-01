@@ -44,6 +44,10 @@ namespace AD_AI_LearningData_Editor
         private System.Windows.Forms.Timer slideHoldRepeatTimer;
         private Action slideHoldAction;
         private bool slideHoldStarted;
+        private Size originalMainClientSize;
+        private Dictionary<Control, Rectangle> originalControlBounds = new Dictionary<Control, Rectangle>();
+        private Dictionary<Control, float> originalControlFontSizes = new Dictionary<Control, float>();
+        private bool isApplyingResponsiveLayout;
 
         protected override CreateParams CreateParams
         {
@@ -144,6 +148,7 @@ namespace AD_AI_LearningData_Editor
 
             this.KeyPreview = true;
             InitializeSlideHoldButtons();
+            InitializeResponsiveLayout();
         }
 
         private string GetBinFolder()
@@ -2369,6 +2374,130 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        private void InitializeResponsiveLayout()
+        {
+            originalMainClientSize = this.ClientSize;
+            originalControlBounds.Clear();
+            originalControlFontSizes.Clear();
+
+            CaptureOriginalControlLayout(this);
+
+            this.Resize += frmMain_Resize;
+        }
+
+        private void CaptureOriginalControlLayout(Control parent)
+        {
+            if (parent == null)
+            {
+                return;
+            }
+
+            foreach (Control control in parent.Controls)
+            {
+                if (!originalControlBounds.ContainsKey(control))
+                {
+                    originalControlBounds.Add(control, control.Bounds);
+                }
+
+                if (!originalControlFontSizes.ContainsKey(control) && control.Font != null)
+                {
+                    originalControlFontSizes.Add(control, control.Font.Size);
+                }
+
+                if (control.HasChildren)
+                {
+                    CaptureOriginalControlLayout(control);
+                }
+            }
+        }
+
+        private void frmMain_Resize(object sender, EventArgs e)
+        {
+            ApplyResponsiveLayout();
+        }
+
+        private void ApplyResponsiveLayout()
+        {
+            if (isApplyingResponsiveLayout)
+            {
+                return;
+            }
+
+            if (originalMainClientSize.Width <= 0 || originalMainClientSize.Height <= 0)
+            {
+                return;
+            }
+
+            if (this.ClientSize.Width <= 0 || this.ClientSize.Height <= 0)
+            {
+                return;
+            }
+
+            float scaleX = (float)this.ClientSize.Width / originalMainClientSize.Width;
+            float scaleY = (float)this.ClientSize.Height / originalMainClientSize.Height;
+            float fontScale = Math.Min(scaleX, scaleY);
+
+            isApplyingResponsiveLayout = true;
+
+            try
+            {
+                this.SuspendLayout();
+
+                foreach (Control control in this.Controls)
+                {
+                    ApplyResponsiveLayoutToControl(control, scaleX, scaleY, fontScale);
+                }
+
+                ConfigureDrivingVisualControlLayout();
+            }
+            finally
+            {
+                this.ResumeLayout(true);
+                isApplyingResponsiveLayout = false;
+            }
+        }
+
+        private void ApplyResponsiveLayoutToControl(Control control, float scaleX, float scaleY, float fontScale)
+        {
+            if (control == null || control.IsDisposed)
+            {
+                return;
+            }
+
+            // Dock으로 부모 전체를 채우는 컨트롤은 WinForms의 Dock 계산에 맡깁니다.
+            // 대신 그 내부의 자식 컨트롤들은 계속 비율에 맞춰 조정합니다.
+            if (control.Dock == DockStyle.None && originalControlBounds.TryGetValue(control, out Rectangle originalBounds))
+            {
+                int newX = (int)Math.Round(originalBounds.X * scaleX);
+                int newY = (int)Math.Round(originalBounds.Y * scaleY);
+                int newWidth = Math.Max(1, (int)Math.Round(originalBounds.Width * scaleX));
+                int newHeight = Math.Max(1, (int)Math.Round(originalBounds.Height * scaleY));
+
+                control.Bounds = new Rectangle(newX, newY, newWidth, newHeight);
+            }
+
+            if (originalControlFontSizes.TryGetValue(control, out float originalFontSize) && control.Font != null)
+            {
+                float newFontSize = Math.Max(6f, originalFontSize * fontScale);
+
+                if (Math.Abs(control.Font.Size - newFontSize) > 0.2f)
+                {
+                    Font oldFont = control.Font;
+                    control.Font = new Font(oldFont.FontFamily, newFontSize, oldFont.Style, oldFont.Unit);
+                }
+            }
+
+            foreach (Control child in control.Controls)
+            {
+                ApplyResponsiveLayoutToControl(child, scaleX, scaleY, fontScale);
+            }
+
+            if (control is ListView listView && listView.Columns.Count == 1)
+            {
+                listView.Columns[0].Width = Math.Max(1, listView.ClientSize.Width - 4);
+            }
+        }
+
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             Keys keyCode = keyData & Keys.KeyCode;
@@ -2393,6 +2522,12 @@ namespace AD_AI_LearningData_Editor
             if (keyCode == Keys.Left)
             {
                 ClickControlButton(btnPre1F, () => btnPre1F_Click(btnPre1F, EventArgs.Empty));
+                return true;
+            }
+
+            if (keyCode == Keys.ControlKey || keyCode == Keys.Control)
+            {
+                ClickControlButton(btnSetInterval, () => btnSetInterval_Click(btnSetInterval, EventArgs.Empty));
                 return true;
             }
 
