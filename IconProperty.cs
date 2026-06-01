@@ -15,6 +15,13 @@ namespace AD_AI_LearningData_Editor
             button.Icon = ResizeImage(icon, iconSize, iconSize);
         }
 
+        public static void SetIcon(MaterialButton button, Image icon, int iconWidth, int iconHeight)
+        {
+            if (button == null || icon == null) return;
+
+            button.Icon = ResizeImage(icon, iconWidth, iconHeight);
+        }
+
         public static void SetAutoIcon(MaterialButton button, Image icon, int margin = 10)
         {
             if (button == null || icon == null) return;
@@ -37,6 +44,25 @@ namespace AD_AI_LearningData_Editor
             {
                 ApplyAutoIconByWidthHeight(button, icon, widthMargin, heightMargin);
             };
+        }
+
+        public static void SetAutoIconByMargins(MaterialButton button, Image icon, int leftMargin, int topMargin, int rightMargin, int bottomMargin)
+        {
+            if (button == null || icon == null) return;
+
+            ApplyAutoIconByMargins(button, icon, leftMargin, topMargin, rightMargin, bottomMargin);
+
+            button.Resize += (s, e) =>
+            {
+                ApplyAutoIconByMargins(button, icon, leftMargin, topMargin, rightMargin, bottomMargin);
+            };
+        }
+
+        public static void SetAutoIconByHorizontalVerticalMargins(MaterialButton button, Image icon, int horizontalMargin, int verticalMargin)
+        {
+            if (button == null || icon == null) return;
+
+            SetAutoIconByMargins(button, icon, horizontalMargin, verticalMargin, horizontalMargin, verticalMargin);
         }
 
         public static void SetImage(Button button, Image image, int width, int height)
@@ -71,6 +97,25 @@ namespace AD_AI_LearningData_Editor
             };
         }
 
+        public static void SetAutoImageByMargins(Button button, Image image, int leftMargin, int topMargin, int rightMargin, int bottomMargin)
+        {
+            if (button == null || image == null) return;
+
+            ApplyAutoImageByMargins(button, image, leftMargin, topMargin, rightMargin, bottomMargin);
+
+            button.Resize += (s, e) =>
+            {
+                ApplyAutoImageByMargins(button, image, leftMargin, topMargin, rightMargin, bottomMargin);
+            };
+        }
+
+        public static void SetAutoImageByHorizontalVerticalMargins(Button button, Image image, int horizontalMargin, int verticalMargin)
+        {
+            if (button == null || image == null) return;
+
+            SetAutoImageByMargins(button, image, horizontalMargin, verticalMargin, horizontalMargin, verticalMargin);
+        }
+
         public static Image ResizeImage(Image image, int width, int height)
         {
             if (image == null) return null;
@@ -93,6 +138,44 @@ namespace AD_AI_LearningData_Editor
             return bitmap;
         }
 
+        public static Image ResizeImageWithMargins(Image image, int canvasWidth, int canvasHeight, int leftMargin, int topMargin, int rightMargin, int bottomMargin)
+        {
+            if (image == null) return null;
+
+            int safeCanvasWidth = Math.Max(1, canvasWidth);
+            int safeCanvasHeight = Math.Max(1, canvasHeight);
+
+            int safeLeft = Math.Max(0, leftMargin);
+            int safeTop = Math.Max(0, topMargin);
+            int safeRight = Math.Max(0, rightMargin);
+            int safeBottom = Math.Max(0, bottomMargin);
+
+            int iconWidth = Math.Max(1, safeCanvasWidth - safeLeft - safeRight);
+            int iconHeight = Math.Max(1, safeCanvasHeight - safeTop - safeBottom);
+
+            Bitmap bitmap = new Bitmap(safeCanvasWidth, safeCanvasHeight);
+
+            using (Graphics g = Graphics.FromImage(bitmap))
+            {
+                g.Clear(Color.Transparent);
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.CompositingQuality = CompositingQuality.HighQuality;
+
+                Rectangle destRect = new Rectangle(
+                    safeLeft,
+                    safeTop,
+                    iconWidth,
+                    iconHeight
+                );
+
+                g.DrawImage(image, destRect);
+            }
+
+            return bitmap;
+        }
+
         private static void ApplyAutoIcon(MaterialButton button, Image icon, int margin)
         {
             int iconSize = Math.Max(1, button.Height - margin);
@@ -104,6 +187,22 @@ namespace AD_AI_LearningData_Editor
             int iconWidth = Math.Max(1, button.Width - widthMargin);
             int iconHeight = Math.Max(1, button.Height - heightMargin);
             button.Icon = ResizeImage(icon, iconWidth, iconHeight);
+        }
+
+        private static void ApplyAutoIconByMargins(MaterialButton button, Image icon, int leftMargin, int topMargin, int rightMargin, int bottomMargin)
+        {
+            int canvasWidth = Math.Max(1, button.Width);
+            int canvasHeight = Math.Max(1, button.Height);
+
+            button.Icon = ResizeImageWithMargins(
+                icon,
+                canvasWidth,
+                canvasHeight,
+                leftMargin,
+                topMargin,
+                rightMargin,
+                bottomMargin
+            );
         }
 
         private static void ApplyAutoImage(Button button, Image image, int margin)
@@ -118,6 +217,24 @@ namespace AD_AI_LearningData_Editor
             int imageWidth = Math.Max(1, button.Width - widthMargin);
             int imageHeight = Math.Max(1, button.Height - heightMargin);
             button.Image = ResizeImage(image, imageWidth, imageHeight);
+            button.ImageAlign = ContentAlignment.MiddleCenter;
+        }
+
+        private static void ApplyAutoImageByMargins(Button button, Image image, int leftMargin, int topMargin, int rightMargin, int bottomMargin)
+        {
+            int canvasWidth = Math.Max(1, button.Width);
+            int canvasHeight = Math.Max(1, button.Height);
+
+            button.Image = ResizeImageWithMargins(
+                image,
+                canvasWidth,
+                canvasHeight,
+                leftMargin,
+                topMargin,
+                rightMargin,
+                bottomMargin
+            );
+
             button.ImageAlign = ContentAlignment.MiddleCenter;
         }
     }

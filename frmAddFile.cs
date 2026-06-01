@@ -42,19 +42,24 @@ namespace Data_Manager
             AddFileToolTip = propToolTip.CreateDefaultToolTip();
             InitializeToolTips();
 
-            IconProperty.SetAutoImageByWidthHeight(
+            IconProperty.SetAutoImageByMargins(
                 btnSelctFile,
-                Data_Manager.Properties.Resources.search3979322,
-                22,
-                10
+                Data_Manager.Properties.Resources.AddFolder14970929,
+                leftMargin:22,
+                topMargin: 7,
+                rightMargin: 22,
+                bottomMargin: 19
             );
 
-            IconProperty.SetAutoImageByWidthHeight(
-                btnAddFile,
-                Data_Manager.Properties.Resources.A_download,
-                28,
-                10
-            );
+            IconProperty.SetAutoImageByMargins(
+               btnAddFile,
+               Data_Manager.Properties.Resources.A_download,
+               leftMargin: 22,
+               topMargin: 7,
+               rightMargin: 22,
+               bottomMargin: 19
+           );
+
 
             InitListViewStyles();
             RegisterEvents();
@@ -492,7 +497,12 @@ namespace Data_Manager
             frmWoking popup = new frmWoking();
 
             popup.Cts = cts;
-            popup.StartPosition = FormStartPosition.CenterParent;
+
+            // frmWoking이 frmAddFile의 중앙에 뜨도록 직접 위치를 계산합니다.
+            // Show(this) + CenterParent만으로는 모델리스 폼에서 원하는 위치가 안 잡히는 경우가 있어
+            // StartPosition.Manual을 사용합니다.
+            popup.StartPosition = FormStartPosition.Manual;
+            CenterWorkingPopupOnThisForm(popup);
 
             popup.Show(this);
 
@@ -573,6 +583,30 @@ namespace Data_Manager
             this.Enabled = true;
         }
 
+        private void CenterWorkingPopupOnThisForm(Form popup)
+        {
+            if (popup == null)
+            {
+                return;
+            }
+
+            // 현재 frmAddFile의 실제 화면 좌표를 기준으로 중앙 위치를 계산합니다.
+            Rectangle ownerBounds = this.Bounds;
+
+            int x = ownerBounds.Left + (ownerBounds.Width - popup.Width) / 2;
+            int y = ownerBounds.Top + (ownerBounds.Height - popup.Height) / 2;
+
+            // 팝업이 모니터 밖으로 나가지 않도록 보정합니다.
+            Rectangle workingArea = Screen.FromControl(this).WorkingArea;
+
+            if (x < workingArea.Left) x = workingArea.Left;
+            if (y < workingArea.Top) y = workingArea.Top;
+            if (x + popup.Width > workingArea.Right) x = workingArea.Right - popup.Width;
+            if (y + popup.Height > workingArea.Bottom) y = workingArea.Bottom - popup.Height;
+
+            popup.Location = new System.Drawing.Point(Math.Max(workingArea.Left, x), Math.Max(workingArea.Top, y));
+        }
+
         private string GetNonConflictingPath(string path)
         {
             if (!File.Exists(path))
@@ -602,11 +636,6 @@ namespace Data_Manager
         {
             SetToolTipByName("btnSelctFile", "파일 업로드하기");
             SetToolTipByName("btnAddFile", "업로드된 파일을 프로그램에 추가");
-
-
-
-
-
         }
         private void SetToolTipByName(string controlName, string text)
         {

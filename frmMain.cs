@@ -997,7 +997,7 @@ namespace AD_AI_LearningData_Editor
             SetToolTipByName("btnMirrorY", "상하 반전");
 
             SetToolTipByName("btnOpnFolderList", "돌아가기");
-            SetToolTipByName("btnOpnFileExplrr", "윈도우 파일 탐색기 열기");
+            SetToolTipByName("btnOpnFileExplrr", "프로그램 폴더 열기");
             SetToolTipByName("btnRemove", "선택된 항목을 제거");
             SetToolTipByName("btnRestoration", "선택한 항목을 복원");
         }

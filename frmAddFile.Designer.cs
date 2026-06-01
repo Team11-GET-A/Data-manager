@@ -76,27 +76,33 @@
             // txtbSelctFile
             // 
             txtbSelctFile.Font = new Font("맑은 고딕", 9F);
-            txtbSelctFile.Location = new Point(13, 26);
+            txtbSelctFile.Location = new Point(13, 28);
             txtbSelctFile.Multiline = true;
             txtbSelctFile.Name = "txtbSelctFile";
-            txtbSelctFile.Size = new Size(481, 31);
+            txtbSelctFile.Size = new Size(460, 31);
             txtbSelctFile.TabIndex = 2;
             // 
             // btnAddFile
             // 
-            btnAddFile.Location = new Point(1057, 549);
+            btnAddFile.Font = new Font("맑은 고딕", 8F);
+            btnAddFile.Location = new Point(1046, 548);
             btnAddFile.Name = "btnAddFile";
-            btnAddFile.Size = new Size(60, 44);
+            btnAddFile.RightToLeft = RightToLeft.No;
+            btnAddFile.Size = new Size(75, 48);
             btnAddFile.TabIndex = 5;
+            btnAddFile.Text = "파일 추가";
+            btnAddFile.TextAlign = ContentAlignment.BottomCenter;
             btnAddFile.UseVisualStyleBackColor = true;
             // 
             // btnSelctFile
             // 
+            btnSelctFile.Font = new Font("맑은 고딕", 8.25F, FontStyle.Regular, GraphicsUnit.Point, 129);
             btnSelctFile.ImageAlign = ContentAlignment.BottomCenter;
-            btnSelctFile.Location = new Point(500, 18);
+            btnSelctFile.Location = new Point(479, 13);
             btnSelctFile.Name = "btnSelctFile";
-            btnSelctFile.Size = new Size(55, 40);
+            btnSelctFile.Size = new Size(75, 48);
             btnSelctFile.TabIndex = 6;
+            btnSelctFile.Text = "파일 탐색";
             btnSelctFile.TextAlign = ContentAlignment.BottomCenter;
             btnSelctFile.UseVisualStyleBackColor = true;
             // 
