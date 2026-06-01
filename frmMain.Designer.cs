@@ -953,9 +953,9 @@
             Controls.Add(sdrSeekBar);
             Controls.Add(pnlCtrl);
             Controls.Add(pnlColorProperty);
-            Controls.Add(pnlProperty);
             Controls.Add(pnlROI);
             Controls.Add(pnlSpeedPopup);
+            Controls.Add(pnlProperty);
             Font = new Font("맑은 고딕", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
             Name = "frmMain";
             Padding = new Padding(0);
