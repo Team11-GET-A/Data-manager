@@ -13,7 +13,6 @@ namespace Data_Manager
         private Button btnTubSelect;
         private Button btnModelSelect;
         private Button btnDelete;
-        private DataGridView dgvTubRecords;
         private PictureBox picDriveView;
         private Panel pnlHeader;
         private Panel pnlThrottle;
@@ -87,10 +86,6 @@ namespace Data_Manager
             return picDriveView;
         }
 
-        public DataGridView GetTubGrid()
-        {
-            return dgvTubRecords;
-        }
 
         private void BuildUi()
         {
@@ -137,19 +132,7 @@ namespace Data_Manager
             // Paint 이벤트 연동 (방향 선 및 텍스트 그리기)
             picDriveView.Paint += PicDriveView_Paint;
 
-            // 3. Tub 데이터 목록 영역
-            dgvTubRecords = new DataGridView
-            {
-                Location = new Point(10, 110),
-                Size = new Size(350, 70),
-                ReadOnly = true,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                RowHeadersVisible = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
-            };
-
-            // 4. Throttle (스로틀 비교) 영역 구성
+            // 3. Throttle (스로틀 비교) 영역 구성
             pnlThrottle = new Panel
             {
                 Dock = DockStyle.Fill,
@@ -170,8 +153,7 @@ namespace Data_Manager
 
             pnlThrottle.Controls.AddRange(new Control[] {
                 lblDriveThrottleTitle, pbDriveThrottle, lblDriveThrottleVal, lblDriveThrottleDir,
-                lblModelThrottleTitle, pbModelThrottle, lblModelThrottleVal, lblModelThrottleDir,
-                dgvTubRecords
+                lblModelThrottleTitle, pbModelThrottle, lblModelThrottleVal, lblModelThrottleDir
             });
 
             this.Controls.Add(pnlThrottle);

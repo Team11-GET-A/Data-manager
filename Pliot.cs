@@ -38,6 +38,13 @@ namespace Data_Manager
         private DonkeyAsyncWorker.PilotCardState? pendingModelState;
         private CancellationTokenSource? modelLoadCts;
 
+        // 현재 선택된 tub 프레임 목록과 인덱스 상태
+        private readonly List<DonkeyAsyncWorker.PilotFrameData> currentFrames =
+            new List<DonkeyAsyncWorker.PilotFrameData>();
+
+        private int currentFrameIndex = -1;
+        private bool isTrackBarUpdating;
+
         // =====================================================
         // 데이터 구조
         // =====================================================
@@ -66,6 +73,10 @@ namespace Data_Manager
         public Pliot()
         {
             InitializeComponent();
+
+            // 트랙바로 프레임 이동을 처리합니다.
+            trbImageLocation.onValueChanged +=
+                TrbImageLocation_ValueChanged;
 
             flowLayoutPanel1.SizeChanged +=
                 (s, e) => UpdatePilotCardLayout();
@@ -359,31 +370,25 @@ namespace Data_Manager
                 IsIndeterminate = true
             });
 
-            DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.TubDrivingRecord>> tubResult =
-                await DonkeyAsyncWorker.LoadTubDrivingRecordsAsync(
-                    cardState.TrainingTubPaths,
+            DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.PilotFrameData>> tubResult =
+                await DonkeyAsyncWorker.ParseSingleTubFolderAsync(
+                    cardState.TrainingTubPaths.FirstOrDefault() ?? string.Empty,
                     cardState.WslDistroName,
                     progress,
                     token);
 
-            cardState.TubRecords = tubResult.Data ?? new List<DonkeyAsyncWorker.TubDrivingRecord>();
-            cardState.IsTubConnected = tubResult.Success && cardState.TubRecords.Count > 0;
-
             await InvokeAsync(() =>
             {
-                if (!cardState.IsTubConnected)
+                if (!tubResult.Success || tubResult.Data == null || tubResult.Data.Count == 0)
                 {
+                    cardState.IsTubConnected = false;
                     DrawTubRequiredMessage(card.GetDrivePictureBox());
-                    BindTubDrivingRecordsToGrid(card.GetTubGrid(), cardState.TubRecords, progress);
+                    SetFrameList(new List<DonkeyAsyncWorker.PilotFrameData>(), cardState.WslDistroName, card);
+                    return;
                 }
-                else
-                {
-                    ShowImageInPictureBox(
-                        card.GetDrivePictureBox(),
-                        cardState.TubRecords.First().ImagePath,
-                        cardState.WslDistroName);
-                    BindTubDrivingRecordsToGrid(card.GetTubGrid(), cardState.TubRecords, progress);
-                }
+
+                cardState.IsTubConnected = true;
+                SetFrameList(tubResult.Data, cardState.WslDistroName, card);
             });
 
             DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> judementResult =
@@ -392,20 +397,13 @@ namespace Data_Manager
                     progress,
                     token);
 
-            await InvokeAsync(() =>
+            if (!judementResult.Success)
             {
-                if (judementResult.Success && judementResult.Data != null)
+                progress.Report(new DonkeyAsyncWorker.ProgressReport
                 {
-                    BindJudementRecordsToGrid(card.GetTubGrid(), judementResult.Data, progress);
-                }
-                else
-                {
-                    progress.Report(new DonkeyAsyncWorker.ProgressReport
-                    {
-                        Log = "AI 판단 데이터가 아직 없습니다. 생성 버튼을 눌러 생성하세요."
-                    });
-                }
-            });
+                    Log = "AI 판단 데이터가 아직 없습니다. 생성 버튼을 눌러 생성하세요."
+                });
+            }
 
             pendingModelState = cardState;
         }
@@ -414,6 +412,17 @@ namespace Data_Manager
         {
             using FolderBrowserDialog dialog = new FolderBrowserDialog();
             dialog.Description = "tub 폴더 선택";
+
+            DonkeyAsyncWorker.OperationResult<string> homeResult =
+                await DonkeyAsyncWorker.GetWslHomePathAsync(
+                    pendingModelState?.WslDistroName ?? "Ubuntu-22.04",
+                    null,
+                    CancellationToken.None);
+
+            if (homeResult.Success && !string.IsNullOrWhiteSpace(homeResult.Data))
+            {
+                dialog.SelectedPath = homeResult.Data;
+            }
 
             if (dialog.ShowDialog() != DialogResult.OK)
             {
@@ -454,29 +463,31 @@ namespace Data_Manager
                 progressForm.SetIndeterminate(report.IsIndeterminate);
             });
 
-            DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.TubDrivingRecord>> tubResult =
-                await DonkeyAsyncWorker.LoadTubDrivingRecordsAsync(
-                    pendingModelState.TrainingTubPaths,
+            string selectedPathWsl =
+                DonkeyAsyncWorker.ToWslPathFromWindowsPath(dialog.SelectedPath);
+
+            DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.PilotFrameData>> tubResult =
+                await DonkeyAsyncWorker.ParseSingleTubFolderAsync(
+                    selectedPathWsl,
                     pendingModelState.WslDistroName,
                     progress,
                     CancellationToken.None);
 
-            pendingModelState.TubRecords = tubResult.Data ?? new List<DonkeyAsyncWorker.TubDrivingRecord>();
-            pendingModelState.IsTubConnected = tubResult.Success && pendingModelState.TubRecords.Count > 0;
-
-            if (!pendingModelState.IsTubConnected)
+            if (!tubResult.Success || tubResult.Data == null || tubResult.Data.Count == 0)
             {
                 DrawTubRequiredMessage(card.GetDrivePictureBox());
-                BindTubDrivingRecordsToGrid(card.GetTubGrid(), pendingModelState.TubRecords, progress);
+                SetFrameList(new List<DonkeyAsyncWorker.PilotFrameData>(), pendingModelState.WslDistroName, card);
                 progressForm.MarkFailed("tub 데이터를 찾지 못했습니다.");
                 return;
             }
 
-            ShowImageInPictureBox(
-                card.GetDrivePictureBox(),
-                pendingModelState.TubRecords.First().ImagePath,
-                pendingModelState.WslDistroName);
-            BindTubDrivingRecordsToGrid(card.GetTubGrid(), pendingModelState.TubRecords, progress);
+            pendingModelState.IsTubConnected = true;
+            pendingModelState.TrainingTubPaths = new List<string>
+            {
+                selectedPathWsl
+            };
+
+            SetFrameList(tubResult.Data, pendingModelState.WslDistroName, card);
             card.SetTubFolderPath(pendingModelState.TrainingTubPaths.FirstOrDefault() ?? string.Empty);
             progressForm.MarkCompleted("tub 데이터 연결 완료");
         }
@@ -507,14 +518,14 @@ namespace Data_Manager
 
             if (string.IsNullOrWhiteSpace(imagePath))
             {
-                DrawTubRequiredMessage(pictureBox);
+                DrawImageMissingMessage(pictureBox);
                 return;
             }
 
             string windowsPath = DonkeyAsyncWorker.ToWindowsPathFromWslPath(imagePath, distroName);
             if (!File.Exists(windowsPath))
             {
-                DrawTubRequiredMessage(pictureBox);
+                DrawImageMissingMessage(pictureBox);
                 return;
             }
 
@@ -549,58 +560,129 @@ namespace Data_Manager
             pictureBox.Image = bmp;
         }
 
-        private void BindTubDrivingRecordsToGrid(
-            DataGridView grid,
-            List<DonkeyAsyncWorker.TubDrivingRecord> records,
-            IProgress<DonkeyAsyncWorker.ProgressReport> progress)
+        private void DrawImageMissingMessage(PictureBox pictureBox)
         {
-            var data = records.Take(1000).Select(record => new
+            if (pictureBox.Image != null)
             {
-                record.Index,
-                record.ImagePath,
-                record.UserAngle,
-                record.UserThrottle,
-                record.Mode
-            }).ToList();
+                pictureBox.Image.Dispose();
+                pictureBox.Image = null;
+            }
 
-            grid.DataSource = data;
-
-            if (records.Count > 1000)
+            Bitmap bmp = new Bitmap(pictureBox.Width, pictureBox.Height);
+            using (Graphics g = Graphics.FromImage(bmp))
+            using (Font font = new Font("맑은 고딕", 16, FontStyle.Bold))
+            using (Brush brush = new SolidBrush(Color.Gray))
             {
-                progress.Report(new DonkeyAsyncWorker.ProgressReport
-                {
-                    Log = $"tub 데이터 {records.Count}건 중 1000건만 표시합니다."
-                });
+                g.Clear(Color.LightGray);
+                string text = "이미지 없음";
+                SizeF size = g.MeasureString(text, font);
+                float x = (bmp.Width - size.Width) / 2;
+                float y = (bmp.Height - size.Height) / 2;
+                g.DrawString(text, font, brush, x, y);
+            }
+
+            pictureBox.Image = bmp;
+        }
+
+        private void SetFrameList(
+            List<DonkeyAsyncWorker.PilotFrameData> frames,
+            string distroName,
+            PilotCardControl card)
+        {
+            currentFrames.Clear();
+            currentFrames.AddRange(frames);
+
+            if (currentFrames.Count == 0)
+            {
+                currentFrameIndex = -1;
+                ConfigureImageTrackBar();
+                UpdateFrameIndicator();
+                return;
+            }
+
+            currentFrameIndex = 0;
+            ConfigureImageTrackBar();
+            ShowCurrentFrame(distroName, card);
+        }
+
+        private void ShowCurrentFrame(string distroName, PilotCardControl card)
+        {
+            if (currentFrameIndex < 0 || currentFrameIndex >= currentFrames.Count)
+            {
+                ConfigureImageTrackBar();
+                UpdateFrameIndicator();
+                return;
+            }
+
+            DonkeyAsyncWorker.PilotFrameData frame =
+                currentFrames[currentFrameIndex];
+
+            ShowImageInPictureBox(
+                card.GetDrivePictureBox(),
+                frame.ImagePath,
+                distroName);
+
+            UpdateFrameIndicator();
+        }
+
+        private void UpdateFrameIndicator()
+        {
+            isTrackBarUpdating = true;
+
+            int total = currentFrames.Count;
+            int safeIndex = total > 0
+                ? Math.Max(0, Math.Min(currentFrameIndex, total - 1))
+                : 0;
+            int current = total > 0 ? safeIndex + 1 : 0;
+
+            trbImageLocation.RangeMin = 0;
+            trbImageLocation.RangeMax = total > 0 ? total - 1 : 0;
+            trbImageLocation.Value = total > 0
+                ? safeIndex
+                : 0;
+            trbImageLocation.Enabled = total > 0;
+
+            trbImageLocation.Text = $"{current}/{total}";
+
+            isTrackBarUpdating = false;
+        }
+
+        private void TrbImageLocation_ValueChanged(object? sender, int newValue)
+        {
+            if (isTrackBarUpdating || currentFrames.Count == 0)
+            {
+                return;
+            }
+
+            currentFrameIndex = newValue;
+            if (pendingModelCard != null)
+            {
+                ShowCurrentFrame(pendingModelState?.WslDistroName ?? "Ubuntu-22.04", pendingModelCard);
             }
         }
 
-        private void BindJudementRecordsToGrid(
-            DataGridView grid,
-            List<DonkeyAsyncWorker.JudementRecord> records,
-            IProgress<DonkeyAsyncWorker.ProgressReport> progress)
+        private void ConfigureImageTrackBar()
         {
-            var data = records.Take(1000).Select(record => new
-            {
-                record.Index,
-                record.ImagePath,
-                record.UserAngle,
-                record.UserThrottle,
-                record.PilotAngle,
-                record.PilotThrottle,
-                record.AngleError,
-                record.ThrottleError,
-                record.Mode
-            }).ToList();
+            isTrackBarUpdating = true;
 
-            grid.DataSource = data;
-
-            if (records.Count > 1000)
+            if (currentFrames.Count == 0)
             {
-                progress.Report(new DonkeyAsyncWorker.ProgressReport
-                {
-                    Log = $"AI 판단 데이터 {records.Count}건 중 1000건만 표시합니다."
-                });
+                trbImageLocation.RangeMin = 0;
+                trbImageLocation.RangeMax = 0;
+                trbImageLocation.Value = 0;
+                trbImageLocation.Enabled = false;
+                trbImageLocation.Text = "0/0";
             }
+            else
+            {
+                trbImageLocation.RangeMin = 0;
+                trbImageLocation.RangeMax = currentFrames.Count - 1;
+                trbImageLocation.Value = 0;
+                trbImageLocation.Enabled = true;
+                trbImageLocation.Text = $"1/{currentFrames.Count}";
+            }
+
+            isTrackBarUpdating = false;
         }
 
         // =====================================================

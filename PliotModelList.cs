@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace Data_Manager
@@ -44,18 +45,34 @@ namespace Data_Manager
         }
 
         // 모델 폴더 선택 후 h5 파일 목록 로드
-        private void BtnModelLoad_Click(object? sender, EventArgs e)
+        private async void BtnModelLoad_Click(object? sender, EventArgs e)
         {
-            using (var dialog = new FolderBrowserDialog())
+            using (var dialog = new OpenFileDialog())
             {
-                dialog.Description = "모델 폴더 선택";
+                dialog.Title = "모델 파일 선택";
+                dialog.Filter = "Model Files (*.h5;*.keras;*.tflite)|*.h5;*.keras;*.tflite|All Files (*.*)|*.*";
+
+                DonkeyAsyncWorker.OperationResult<string> homeResult =
+                    await DonkeyAsyncWorker.GetWslHomePathAsync(
+                        "Ubuntu-22.04",
+                        null,
+                        CancellationToken.None);
+
+                if (homeResult.Success && !string.IsNullOrWhiteSpace(homeResult.Data))
+                {
+                    dialog.InitialDirectory = homeResult.Data;
+                }
 
                 if (dialog.ShowDialog() != DialogResult.OK)
                 {
                     return;
                 }
 
-                LoadModelsFromFolder(dialog.SelectedPath);
+                string folderPath = Path.GetDirectoryName(dialog.FileName) ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(folderPath))
+                {
+                    LoadModelsFromFolder(folderPath);
+                }
             }
         }
 

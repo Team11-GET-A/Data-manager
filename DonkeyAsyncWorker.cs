@@ -23,6 +23,563 @@ namespace Data_Manager
             public string MyCarPath { get; set; } = string.Empty;
         }
 
+        public static async Task<OperationResult<string>> GetWslHomePathAsync(
+            string distroName,
+            IProgress<ProgressReport>? progress,
+            CancellationToken cancellationToken)
+        {
+            progress?.Report(new ProgressReport
+            {
+                Log = "WSL HOME 경로를 확인합니다."
+            });
+
+            OperationResult<string> result =
+                await RunWslCommandAsync(
+                    distroName,
+                    "printf %s \"$HOME\"",
+                    progress,
+                    cancellationToken);
+
+            if (!result.Success || string.IsNullOrWhiteSpace(result.Data))
+            {
+                return new OperationResult<string>
+                {
+                    Success = false,
+                    ErrorMessage = "WSL HOME 경로 확인 실패"
+                };
+            }
+
+            string wslHome = result.Data.Trim();
+            string windowsHome = ToWindowsPathFromWslPath(wslHome, distroName);
+
+            return new OperationResult<string>
+            {
+                Success = true,
+                Data = windowsHome
+            };
+        }
+
+        public static async Task<OperationResult<List<PilotFrameData>>> ParseSingleTubFolderAsync(
+            string tubPath,
+            string distroName,
+            IProgress<ProgressReport>? progress,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(tubPath))
+            {
+                return new OperationResult<List<PilotFrameData>>
+                {
+                    Success = false,
+                    ErrorMessage = "tub 경로가 비어 있습니다.",
+                    Data = new List<PilotFrameData>()
+                };
+            }
+
+            string normalizedTubPath = tubPath.Trim();
+            bool isWslPathInput = normalizedTubPath.StartsWith("/");
+
+            string tubPathWsl = isWslPathInput
+                ? normalizedTubPath
+                : ToWslPathFromWindowsPath(normalizedTubPath);
+
+            string tubPathWindows = isWslPathInput
+                ? ToWindowsPathFromWslPath(normalizedTubPath, distroName)
+                : normalizedTubPath;
+
+            progress?.Report(new ProgressReport
+            {
+                Log = $"tub 경로 입력: {tubPath}"
+            });
+            progress?.Report(new ProgressReport
+            {
+                Log = $"WSL 경로: {tubPathWsl}"
+            });
+            progress?.Report(new ProgressReport
+            {
+                Log = $"Windows 경로: {tubPathWindows}"
+            });
+
+            if (!Directory.Exists(tubPathWindows))
+            {
+                return new OperationResult<List<PilotFrameData>>
+                {
+                    Success = false,
+                    ErrorMessage = "tub 폴더가 존재하지 않습니다.",
+                    Data = new List<PilotFrameData>()
+                };
+            }
+
+            List<PilotFrameData> frames = new List<PilotFrameData>();
+            List<string> tubRoots = FindTubRoots(tubPathWindows, progress);
+            if (tubRoots.Count == 0)
+            {
+                tubRoots.Add(tubPathWindows);
+                progress?.Report(new ProgressReport
+                {
+                    Log = "tub 루트를 찾지 못해 입력 경로를 직접 처리합니다."
+                });
+            }
+
+            progress?.Report(new ProgressReport
+            {
+                Log = $"발견된 tub 루트 개수: {tubRoots.Count}"
+            });
+
+            foreach (string tubRoot in tubRoots)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string rootWsl = ToWslPathFromWindowsPath(tubRoot);
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"tub 루트 처리 중: {tubRoot}"
+                });
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"tub 루트 WSL 경로: {rootWsl}"
+                });
+
+                string manifestPath = Path.Combine(tubRoot, "manifest.json");
+                string catalogManifestPath = Path.Combine(tubRoot, "catalog_manifest.json");
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"manifest.json 존재: {File.Exists(manifestPath)}"
+                });
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"catalog_manifest.json 존재: {File.Exists(catalogManifestPath)}"
+                });
+
+                string[] catalogFiles = Directory.GetFiles(tubRoot, "catalog_*.catalog", SearchOption.TopDirectoryOnly);
+                Array.Sort(catalogFiles, StringComparer.OrdinalIgnoreCase);
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"catalog 파일 개수: {catalogFiles.Length}"
+                });
+
+                string imagesFolder = Path.Combine(tubRoot, "images");
+                bool imagesFolderExists = Directory.Exists(imagesFolder);
+                int imageCount = imagesFolderExists
+                    ? Directory.GetFiles(imagesFolder, "*.*", SearchOption.TopDirectoryOnly)
+                        .Count(path => path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                                       || path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+                                       || path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                    : 0;
+
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"images 폴더 존재: {imagesFolderExists}, 이미지 수: {imageCount}"
+                });
+
+                List<PilotFrameData> rootFrames = new List<PilotFrameData>();
+                if (catalogFiles.Length > 0)
+                {
+                    rootFrames = await ParseCatalogFilesAsync(
+                        rootWsl,
+                        tubRoot,
+                        catalogFiles,
+                        progress,
+                        cancellationToken);
+                }
+
+                if (rootFrames.Count == 0)
+                {
+                    progress?.Report(new ProgressReport
+                    {
+                        Log = "catalog 데이터를 읽지 못해 images 폴더 기준으로 이미지만 로드했습니다."
+                    });
+
+                    rootFrames = BuildFramesFromImagesOnly(rootWsl, tubRoot);
+                }
+
+                frames.AddRange(rootFrames);
+
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"현재 루트 frame 개수: {rootFrames.Count}, 누적 frame 개수: {frames.Count}"
+                });
+            }
+
+            progress?.Report(new ProgressReport
+            {
+                Log = $"최종 frame 개수: {frames.Count}"
+            });
+
+            if (frames.Count > 0)
+            {
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"첫 번째 frame 이미지: {frames[0].ImagePath}, UserAngle: {frames[0].UserAngle}, UserThrottle: {frames[0].UserThrottle}"
+                });
+            }
+
+            return new OperationResult<List<PilotFrameData>>
+            {
+                Success = frames.Count > 0,
+                ErrorMessage = frames.Count > 0 ? string.Empty : "tub 데이터를 찾지 못했습니다.",
+                Data = frames
+            };
+        }
+
+        public static async Task<List<PilotFrameData>> ParseCatalogFilesAsync(
+            string tubPathWsl,
+            string tubPathWindows,
+            string[] catalogFiles,
+            IProgress<ProgressReport>? progress,
+            CancellationToken cancellationToken)
+        {
+            var frames = new List<PilotFrameData>();
+            int resolvedCount = 0;
+            int unresolvedCount = 0;
+
+            Array.Sort(catalogFiles, StringComparer.OrdinalIgnoreCase);
+            int recordIndex = 0;
+
+            foreach (string catalogFile in catalogFiles)
+            {
+                using var reader = new StreamReader(catalogFile);
+                string? line;
+                while ((line = await reader.ReadLineAsync()) != null)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    JObject? obj;
+                    try
+                    {
+                        obj = JObject.Parse(line);
+                    }
+                    catch (Exception ex)
+                    {
+                        progress?.Report(new ProgressReport
+                        {
+                            Log = $"catalog 라인 파싱 실패: {ex.Message}"
+                        });
+                        continue;
+                    }
+
+                    int index = SafeGetIntFromKeys(obj, "_index", "index", "record/index") ?? recordIndex;
+                    string imageValue = SafeGetStringFromKeys(obj, "cam/image_array", "cam/image_array_path", "image", "image_path", "img") ?? string.Empty;
+                    double? userAngle = SafeGetDoubleFromKeys(obj, "user/angle", "user/steering", "angle", "steering");
+                    double? userThrottle = SafeGetDoubleFromKeys(obj, "user/throttle", "throttle");
+                    string mode = SafeGetStringFromKeys(obj, "user/mode", "mode") ?? string.Empty;
+
+                    string imagePath = ResolveTubImagePath(tubPathWsl, tubPathWindows, imageValue, index);
+                    if (!string.IsNullOrWhiteSpace(imagePath))
+                    {
+                        resolvedCount++;
+                    }
+                    else
+                    {
+                        unresolvedCount++;
+                    }
+
+                    frames.Add(new PilotFrameData
+                    {
+                        Index = index,
+                        TubPath = tubPathWsl,
+                        ImagePath = imagePath,
+                        UserAngle = userAngle,
+                        UserThrottle = userThrottle,
+                        Mode = mode
+                    });
+
+                    recordIndex++;
+                    if (recordIndex % 100 == 0)
+                    {
+                        progress?.Report(new ProgressReport
+                        {
+                            Log = $"catalog {recordIndex}건 처리 중"
+                        });
+                    }
+                }
+            }
+
+            progress?.Report(new ProgressReport
+            {
+                Log = $"catalog record 수: {frames.Count}, 이미지 연결 성공: {resolvedCount}, 실패: {unresolvedCount}"
+            });
+
+            return frames;
+        }
+
+        private static List<string> FindTubRoots(
+            string inputPathWindows,
+            IProgress<ProgressReport>? progress)
+        {
+            var roots = new List<string>();
+            if (string.IsNullOrWhiteSpace(inputPathWindows) || !Directory.Exists(inputPathWindows))
+            {
+                return roots;
+            }
+
+            bool IsTubRoot(string path)
+            {
+                if (!Directory.Exists(path))
+                {
+                    return false;
+                }
+
+                bool hasManifest = File.Exists(Path.Combine(path, "manifest.json"))
+                    || File.Exists(Path.Combine(path, "catalog_manifest.json"));
+                bool hasCatalog = Directory.GetFiles(path, "catalog_*.catalog", SearchOption.TopDirectoryOnly).Length > 0;
+                bool hasRecords = Directory.GetFiles(path, "record_*.json", SearchOption.TopDirectoryOnly).Length > 0;
+                bool hasImagesFolder = Directory.Exists(Path.Combine(path, "images"));
+
+                return hasManifest || hasCatalog || hasRecords || hasImagesFolder;
+            }
+
+            if (IsTubRoot(inputPathWindows))
+            {
+                roots.Add(inputPathWindows);
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"입력 경로가 tub 루트로 확인되었습니다: {inputPathWindows}"
+                });
+            }
+
+            foreach (string child in Directory.GetDirectories(inputPathWindows, "*", SearchOption.TopDirectoryOnly))
+            {
+                if (!IsTubRoot(child))
+                {
+                    continue;
+                }
+
+                roots.Add(child);
+                progress?.Report(new ProgressReport
+                {
+                    Log = $"하위 tub 루트를 발견했습니다: {child}"
+                });
+            }
+
+            return roots
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static List<PilotFrameData> BuildFramesFromImagesOnly(
+            string tubPathWsl,
+            string tubPathWindows)
+        {
+            var frames = new List<PilotFrameData>();
+            string imagesFolder = Path.Combine(tubPathWindows, "images");
+            string searchFolder = Directory.Exists(imagesFolder) ? imagesFolder : tubPathWindows;
+
+            string[] images = Directory.GetFiles(searchFolder, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(path => path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                               || path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+                               || path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            for (int i = 0; i < images.Length; i++)
+            {
+                frames.Add(new PilotFrameData
+                {
+                    Index = i,
+                    TubPath = tubPathWsl,
+                    ImagePath = ToWslPathFromWindowsPath(images[i])
+                });
+            }
+
+            return frames;
+        }
+
+        private static string ResolveTubImagePath(
+            string tubPathWsl,
+            string tubPathWindows,
+            string imageValue,
+            int index)
+        {
+            List<string> candidates = new List<string>();
+            string imageValueTrimmed = imageValue?.Trim() ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(imageValueTrimmed))
+            {
+                if (imageValueTrimmed.StartsWith("/"))
+                {
+                    candidates.Add(imageValueTrimmed);
+                }
+                else if (Path.IsPathRooted(imageValueTrimmed))
+                {
+                    candidates.Add(ToWslPathFromWindowsPath(imageValueTrimmed));
+                }
+                else
+                {
+                    string relative = imageValueTrimmed.Replace('\\', '/');
+                    if (relative.StartsWith("images/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        candidates.Add(CombineWslPath(tubPathWsl, relative));
+                    }
+                    else
+                    {
+                        string imagesRelativeCandidate = CombineWslPath(CombineWslPath(tubPathWsl, "images"), relative);
+                        string tubRelativeCandidate = CombineWslPath(tubPathWsl, relative);
+
+                        candidates.Add(imagesRelativeCandidate);
+                        if (!string.Equals(imagesRelativeCandidate, tubRelativeCandidate, StringComparison.OrdinalIgnoreCase))
+                        {
+                            candidates.Add(tubRelativeCandidate);
+                        }
+                    }
+                }
+            }
+
+            foreach (string candidate in candidates)
+            {
+                string windowsCandidate = ToWindowsPathFromWslPath(candidate, GetDistroNameFromWslPath(tubPathWsl));
+                if (File.Exists(windowsCandidate))
+                {
+                    return candidate;
+                }
+            }
+
+            string imagesFolder = Path.Combine(tubPathWindows, "images");
+            if (Directory.Exists(imagesFolder))
+            {
+                string[] patterns =
+                {
+                    $"{index}_cam-image_array_.jpg",
+                    $"{index}_cam-image_array_.jpeg",
+                    $"{index}_cam-image_array_.png"
+                };
+
+                foreach (string pattern in patterns)
+                {
+                    string candidate = Path.Combine(imagesFolder, pattern);
+                    if (File.Exists(candidate))
+                    {
+                        return ToWslPathFromWindowsPath(candidate);
+                    }
+                }
+
+                string[] fallback = Directory.GetFiles(imagesFolder, $"{index}_*.*", SearchOption.TopDirectoryOnly)
+                    .Where(path => path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                                   || path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+                                   || path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+
+                if (fallback.Length > 0)
+                {
+                    return ToWslPathFromWindowsPath(fallback[0]);
+                }
+
+                string[] allImages = Directory.GetFiles(imagesFolder, "*.*", SearchOption.TopDirectoryOnly)
+                    .Where(path => path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                                   || path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+                                   || path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                if (index >= 0 && index < allImages.Length)
+                {
+                    return ToWslPathFromWindowsPath(allImages[index]);
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string? SafeGetStringFromKeys(JObject obj, params string[] keys)
+        {
+            foreach (string key in keys)
+            {
+                if (!obj.TryGetValue(key, out JToken? token) || token == null || token.Type == JTokenType.Null)
+                {
+                    continue;
+                }
+
+                if (token.Type == JTokenType.String)
+                {
+                    string? value = token.Value<string>();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        return value;
+                    }
+                }
+                else
+                {
+                    string value = token.ToString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        return value;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+
+        private static double? SafeGetDoubleFromKeys(JObject obj, params string[] keys)
+        {
+            foreach (string key in keys)
+            {
+                if (!obj.TryGetValue(key, out JToken? token) || token == null || token.Type == JTokenType.Null)
+                {
+                    continue;
+                }
+
+                if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+                {
+                    return token.Value<double>();
+                }
+
+                if (double.TryParse(token.ToString(), out double value))
+                {
+                    return value;
+                }
+            }
+
+            return null;
+        }
+
+        private static int? SafeGetIntFromKeys(JObject obj, params string[] keys)
+        {
+            foreach (string key in keys)
+            {
+                if (!obj.TryGetValue(key, out JToken? token) || token == null || token.Type == JTokenType.Null)
+                {
+                    continue;
+                }
+
+                if (token.Type == JTokenType.Integer)
+                {
+                    return token.Value<int>();
+                }
+
+                if (token.Type == JTokenType.Float)
+                {
+                    double value = token.Value<double>();
+                    if (value >= int.MinValue && value <= int.MaxValue && Math.Abs(value % 1) < double.Epsilon)
+                    {
+                        return Convert.ToInt32(value);
+                    }
+                }
+
+                if (int.TryParse(token.ToString(), out int result))
+                {
+                    return result;
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetDistroNameFromWslPath(string wslPath)
+        {
+            _ = wslPath;
+            AppSettings settings = LoadSettings();
+            return string.IsNullOrWhiteSpace(settings.WslDistroName)
+                ? "Ubuntu-22.04"
+                : settings.WslDistroName;
+        }
+
         public class PilotCardState
         {
             public string ModelName { get; set; } = string.Empty;
@@ -67,6 +624,21 @@ namespace Data_Manager
 
             public double? AngleError { get; set; }
             public double? ThrottleError { get; set; }
+
+            public string Mode { get; set; } = string.Empty;
+        }
+
+        public class PilotFrameData
+        {
+            public int Index { get; set; }
+            public string TubPath { get; set; } = string.Empty;
+            public string ImagePath { get; set; } = string.Empty;
+
+            public double? UserAngle { get; set; }
+            public double? UserThrottle { get; set; }
+
+            public double? PilotAngle { get; set; }
+            public double? PilotThrottle { get; set; }
 
             public string Mode { get; set; } = string.Empty;
         }
@@ -502,6 +1074,16 @@ namespace Data_Manager
                 return string.Empty;
             }
 
+            if (wslPath.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase))
+            {
+                return wslPath;
+            }
+
+            if (wslPath.Length >= 2 && wslPath[1] == ':')
+            {
+                return wslPath;
+            }
+
             if (wslPath.StartsWith("/mnt/", StringComparison.OrdinalIgnoreCase))
             {
                 string driveLetter = wslPath.Substring(5, 1).ToUpperInvariant();
@@ -523,6 +1105,12 @@ namespace Data_Manager
             if (string.IsNullOrWhiteSpace(windowsPath))
             {
                 return string.Empty;
+            }
+
+            if (windowsPath.StartsWith("/mnt/", StringComparison.OrdinalIgnoreCase)
+                || windowsPath.StartsWith("/home/", StringComparison.OrdinalIgnoreCase))
+            {
+                return windowsPath;
             }
 
             if (windowsPath.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase))
@@ -791,6 +1379,11 @@ namespace Data_Manager
             }
 
             string trimmed = tubPath.Trim();
+
+            if (trimmed.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase))
+            {
+                return ToWslPathFromWindowsPath(trimmed);
+            }
 
             if (trimmed.StartsWith("/mnt/", StringComparison.OrdinalIgnoreCase)
                 || trimmed.StartsWith("/home/", StringComparison.OrdinalIgnoreCase))
