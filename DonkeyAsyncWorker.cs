@@ -15,12 +15,36 @@ namespace Data_Manager
     // 무거운 작업은 이 클래스에서 비동기로 처리합니다.
     public static class DonkeyAsyncWorker
     {
+        private const string FallbackWslDistroName = "Ubuntu-22.04";
+        private const string FallbackCondaEnvName = "e2e_env";
+
         // 설정 데이터
         public class AppSettings
         {
-            public string WslDistroName { get; set; } = "Ubuntu-22.04";
-            public string CondaEnvName { get; set; } = "e2e_env";
+            public string WslDistroName { get; set; } = string.Empty;
+            public string CondaEnvName { get; set; } = FallbackCondaEnvName;
             public string MyCarPath { get; set; } = string.Empty;
+        }
+
+        public static async Task<string> GetPreferredWslDistroNameAsync(CancellationToken cancellationToken)
+        {
+            AppSettings settings = LoadSettings();
+            if (!string.IsNullOrWhiteSpace(settings.WslDistroName)
+                && await WslDistroExistsAsync(settings.WslDistroName, cancellationToken))
+            {
+                return settings.WslDistroName;
+            }
+
+            List<string> distros = await GetInstalledWslDistrosAsync(cancellationToken);
+            string? selected = distros.FirstOrDefault(name =>
+                name.Contains("Ubuntu", StringComparison.OrdinalIgnoreCase));
+
+            selected ??= distros.FirstOrDefault();
+            selected ??= FallbackWslDistroName;
+
+            settings.WslDistroName = selected;
+            SaveSettings(settings);
+            return selected;
         }
 
         public static async Task<OperationResult<string>> GetWslHomePathAsync(
@@ -28,6 +52,11 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(distroName))
+            {
+                distroName = await GetPreferredWslDistroNameAsync(cancellationToken);
+            }
+
             progress?.Report(new ProgressReport
             {
                 Log = "WSL HOME 경로를 확인합니다."
@@ -65,6 +94,11 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(distroName))
+            {
+                distroName = await GetPreferredWslDistroNameAsync(cancellationToken);
+            }
+
             if (string.IsNullOrWhiteSpace(tubPath))
             {
                 return new OperationResult<List<PilotFrameData>>
@@ -735,7 +769,7 @@ namespace Data_Manager
             _ = wslPath;
             AppSettings settings = LoadSettings();
             return string.IsNullOrWhiteSpace(settings.WslDistroName)
-                ? "Ubuntu-22.04"
+                ? FallbackWslDistroName
                 : settings.WslDistroName;
         }
 
@@ -746,8 +780,8 @@ namespace Data_Manager
             public string ModelType { get; set; } = string.Empty;
             public string DatabaseJsonPath { get; set; } = string.Empty;
 
-            public string WslDistroName { get; set; } = "Ubuntu-22.04";
-            public string CondaEnvName { get; set; } = "e2e_env";
+            public string WslDistroName { get; set; } = string.Empty;
+            public string CondaEnvName { get; set; } = FallbackCondaEnvName;
             public string MyCarPath { get; set; } = string.Empty;
 
             public List<string> TrainingTubPaths { get; set; } = new List<string>();
@@ -825,6 +859,11 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(distroName))
+            {
+                distroName = await GetPreferredWslDistroNameAsync(cancellationToken);
+            }
+
             AppSettings settings = LoadSettings();
             if (!string.IsNullOrWhiteSpace(settings.MyCarPath))
             {
@@ -871,6 +910,8 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            await EnsurePilotRuntimePathsAsync(cardState, progress, cancellationToken);
+
             progress?.Report(new ProgressReport
             {
                 Step = "database.json 읽는 중...",
@@ -1022,6 +1063,38 @@ namespace Data_Manager
             return new OperationResult<PilotCardState> { Success = true, Data = cardState };
         }
 
+        public static async Task EnsurePilotRuntimePathsAsync(
+            PilotCardState cardState,
+            IProgress<ProgressReport>? progress,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(cardState.WslDistroName))
+            {
+                cardState.WslDistroName = await GetPreferredWslDistroNameAsync(cancellationToken);
+            }
+
+            if (string.IsNullOrWhiteSpace(cardState.CondaEnvName))
+            {
+                AppSettings settings = LoadSettings();
+                cardState.CondaEnvName = string.IsNullOrWhiteSpace(settings.CondaEnvName)
+                    ? FallbackCondaEnvName
+                    : settings.CondaEnvName;
+            }
+
+            if (string.IsNullOrWhiteSpace(cardState.MyCarPath))
+            {
+                OperationResult<string> myCarResult = await FindMyCarPathInWslAsync(
+                    cardState.WslDistroName,
+                    progress,
+                    cancellationToken);
+
+                if (myCarResult.Success && !string.IsNullOrWhiteSpace(myCarResult.Data))
+                {
+                    cardState.MyCarPath = myCarResult.Data;
+                }
+            }
+        }
+
         public static async Task<OperationResult<List<TubDrivingRecord>>> LoadTubDrivingRecordsAsync(
             List<string> tubPaths,
             string distroName,
@@ -1118,6 +1191,8 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            await EnsurePilotRuntimePathsAsync(cardState, progress, cancellationToken);
+
             string scriptPath = await EnsurePythonScriptAsync(cardState, cancellationToken);
             if (string.IsNullOrWhiteSpace(scriptPath))
             {
@@ -1492,6 +1567,44 @@ namespace Data_Manager
             {
                 return new AppSettings();
             }
+        }
+
+        private static async Task<List<string>> GetInstalledWslDistrosAsync(CancellationToken cancellationToken)
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "wsl.exe",
+                Arguments = "-l -q",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            try
+            {
+                using var process = new Process { StartInfo = psi };
+                process.Start();
+                string output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+                await WaitForExitAsync(process, cancellationToken);
+
+                return output
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(line => line.Replace("\0", string.Empty, StringComparison.Ordinal).Trim())
+                    .Where(line => !string.IsNullOrWhiteSpace(line))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch
+            {
+                return new List<string>();
+            }
+        }
+
+        private static async Task<bool> WslDistroExistsAsync(string distroName, CancellationToken cancellationToken)
+        {
+            List<string> distros = await GetInstalledWslDistrosAsync(cancellationToken);
+            return distros.Any(name => string.Equals(name, distroName, StringComparison.OrdinalIgnoreCase));
         }
 
         private static void SaveSettings(AppSettings settings)
@@ -2029,13 +2142,27 @@ namespace Data_Manager
             string outputPath,
             string tubsArg)
         {
+            string envCandidates = string.Join(" ", new[]
+            {
+                cardState.CondaEnvName,
+                FallbackCondaEnvName,
+                "donkey",
+                "donkeycar",
+                "base"
+            }
+                .Where(env => !string.IsNullOrWhiteSpace(env))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(env => $"'{EscapeBash(env)}'"));
+
             string command =
                 "if [ -f \"$HOME/miniconda3/etc/profile.d/conda.sh\" ]; then " +
                 "source \"$HOME/miniconda3/etc/profile.d/conda.sh\"; " +
                 "elif [ -f \"$HOME/anaconda3/etc/profile.d/conda.sh\" ]; then " +
                 "source \"$HOME/anaconda3/etc/profile.d/conda.sh\"; " +
                 "else echo 'conda.sh를 찾을 수 없습니다.' >&2; exit 10; fi; " +
-                $"conda activate {cardState.CondaEnvName} || exit 11; " +
+                $"for env in {envCandidates}; do conda activate \"$env\" >/dev/null 2>&1 && SELECTED_CONDA_ENV=\"$env\" && break; done; " +
+                "if [ -z \"$SELECTED_CONDA_ENV\" ]; then echo 'usable conda env not found' >&2; exit 11; fi; " +
+                "echo \"conda env: $SELECTED_CONDA_ENV\"; " +
                 $"cd '{EscapeBash(cardState.MyCarPath)}' || exit 12; " +
                 $"python '{EscapeBash(scriptPath)}'" +
                 $" --model '{EscapeBash(modelPath)}'" +

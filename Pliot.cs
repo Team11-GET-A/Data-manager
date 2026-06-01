@@ -11,6 +11,9 @@ namespace Data_Manager
 {
     public partial class Pliot : Form
     {
+        private const int OverlayAlpha = 120;
+        private static readonly Color OverlayBackColor = Color.FromArgb(OverlayAlpha, 22, 26, 32);
+
         private readonly List<ModelListItem> _models = new List<ModelListItem>();
         private readonly List<DonkeyAsyncWorker.PilotFrameData> _frameList =
             new List<DonkeyAsyncWorker.PilotFrameData>();
@@ -32,22 +35,13 @@ namespace Data_Manager
             InitializePilotUi();
         }
 
+        #region Initialization
+
         private void InitializePilotUi()
         {
             cmbSpeed.SelectedIndex = 1;
-            pnlImageIndexOverlay.BackColor = Color.FromArgb(120, 22, 26, 32);
-            pnlThrottleOverlay.BackColor = Color.FromArgb(120, 22, 26, 32);
-            pnlAngleOverlay.BackColor = Color.FromArgb(120, 22, 26, 32);
-            lblImageIndexOverlay.BackColor = Color.Transparent;
-            lblUserThrottleTitle.BackColor = Color.Transparent;
-            lblUserThrottleValue.BackColor = Color.Transparent;
-            lblPilotThrottleTitle.BackColor = Color.Transparent;
-            lblPilotThrottleValue.BackColor = Color.Transparent;
-            lblUserAngleValue.BackColor = Color.Transparent;
-            lblPilotAngleValue.BackColor = Color.Transparent;
-            _playbackTimer = new System.Windows.Forms.Timer();
-            _playbackTimer.Interval = GetPlaybackInterval();
-            _playbackTimer.Tick += PlaybackTimer_Tick;
+            ApplyOverlayStyles();
+            ConfigurePlaybackTimer();
 
             btnModelLoad.Text = "모델 폴더 선택";
             btnModelLoad.Click += BtnModelLoad_Click;
@@ -85,6 +79,31 @@ namespace Data_Manager
             pnlThrottleOverlay.BringToFront();
             pnlAngleOverlay.BringToFront();
         }
+
+        private void ApplyOverlayStyles()
+        {
+            pnlImageIndexOverlay.BackColor = OverlayBackColor;
+            pnlThrottleOverlay.BackColor = OverlayBackColor;
+            pnlAngleOverlay.BackColor = OverlayBackColor;
+            lblImageIndexOverlay.BackColor = Color.Transparent;
+            lblUserThrottleTitle.BackColor = Color.Transparent;
+            lblUserThrottleValue.BackColor = Color.Transparent;
+            lblPilotThrottleTitle.BackColor = Color.Transparent;
+            lblPilotThrottleValue.BackColor = Color.Transparent;
+            lblUserAngleValue.BackColor = Color.Transparent;
+            lblPilotAngleValue.BackColor = Color.Transparent;
+        }
+
+        private void ConfigurePlaybackTimer()
+        {
+            _playbackTimer = new System.Windows.Forms.Timer();
+            _playbackTimer.Interval = GetPlaybackInterval();
+            _playbackTimer.Tick += PlaybackTimer_Tick;
+        }
+
+        #endregion
+
+        #region Model Discovery
 
         private async void BtnModelLoad_Click(object? sender, EventArgs e)
         {
@@ -125,7 +144,7 @@ namespace Data_Manager
         {
             DonkeyAsyncWorker.OperationResult<string> homeResult =
                 await DonkeyAsyncWorker.GetWslHomePathAsync(
-                    "Ubuntu-22.04",
+                    await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(CancellationToken.None),
                     null,
                     CancellationToken.None);
 
@@ -179,6 +198,10 @@ namespace Data_Manager
             return string.Equals(extension, ".h5", StringComparison.OrdinalIgnoreCase);
         }
 
+        #endregion
+
+        #region Overlay Setup
+
         private void ConfigureAngleOverlayLayout()
         {
             pnlAngleOverlay.Height = 130;
@@ -195,6 +218,7 @@ namespace Data_Manager
 
         private void EnsureImageOverlayParent()
         {
+            // PictureBox child controls can show the current image through transparent overlay backgrounds.
             MoveOverlayToPictureBox(pnlImageIndexOverlay);
             MoveOverlayToPictureBox(pnlThrottleOverlay);
             MoveOverlayToPictureBox(pnlAngleOverlay);
@@ -211,9 +235,13 @@ namespace Data_Manager
             overlay.Parent?.Controls.Remove(overlay);
             picPilotImage.Controls.Add(overlay);
             overlay.Location = location;
-            overlay.BackColor = Color.FromArgb(120, 22, 26, 32);
+            overlay.BackColor = OverlayBackColor;
             overlay.BringToFront();
         }
+
+        #endregion
+
+        #region Model Selection
 
         private void AddOrSelectModel(string modelName, string modelPath)
         {
@@ -395,6 +423,7 @@ namespace Data_Manager
                 ModelName = model.Name,
                 ModelPath = model.Path
             };
+            _cardState.WslDistroName = await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(token);
 
             lblSelectedModelName.Text = model.Name;
             lblSelectedModelPath.Text = model.Path;
@@ -469,6 +498,10 @@ namespace Data_Manager
             }
         }
 
+        #endregion
+
+        #region Tub And AI Data
+
         private async void BtnTubInput_Click(object? sender, EventArgs e)
         {
             if (_cardState == null)
@@ -484,11 +517,17 @@ namespace Data_Manager
                     ModelName = _selectedModel.Name,
                     ModelPath = _selectedModel.Path
                 };
+                _cardState.WslDistroName = await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(CancellationToken.None);
             }
 
             using FolderBrowserDialog dialog = new FolderBrowserDialog();
             dialog.Description = "tub 폴더 선택";
             dialog.ShowNewFolderButton = false;
+
+            if (string.IsNullOrWhiteSpace(_cardState.WslDistroName))
+            {
+                _cardState.WslDistroName = await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(CancellationToken.None);
+            }
 
             DonkeyAsyncWorker.OperationResult<string> homeResult =
                 await DonkeyAsyncWorker.GetWslHomePathAsync(
@@ -662,6 +701,7 @@ namespace Data_Manager
 
         private void MergeJudementRecords(List<DonkeyAsyncWorker.JudementRecord> records)
         {
+            // Prefer exact frame index, then fall back to image file name for regenerated judgment files.
             Dictionary<int, DonkeyAsyncWorker.JudementRecord> byIndex =
                 records.GroupBy(record => record.Index)
                     .ToDictionary(group => group.Key, group => group.Last());
@@ -693,6 +733,10 @@ namespace Data_Manager
             }
         }
 
+        #endregion
+
+        #region Model Cache
+
         private void CacheCurrentModelInfo()
         {
             if (_selectedModel == null || _cardState == null)
@@ -715,6 +759,7 @@ namespace Data_Manager
             _selectedModel.CardState = _cardState;
             _selectedModel.ModelType = _cardState.ModelType;
             _selectedModel.TubPath = _cardState.TrainingTubPaths.FirstOrDefault() ?? string.Empty;
+            // Cache loaded frames so switching back to a model does not parse the tub again.
             _selectedModel.Frames = _frameList.Select(CloneFrame).ToList();
             _selectedModel.CurrentFrameIndex = _currentFrameIndex;
             _selectedModel.IsLoaded = true;
@@ -735,6 +780,10 @@ namespace Data_Manager
                 Mode = frame.Mode
             };
         }
+
+        #endregion
+
+        #region Progress
 
         private static IProgress<DonkeyAsyncWorker.ProgressReport> CreateProgress(
             ProgressStatusForm progressForm)
@@ -764,6 +813,10 @@ namespace Data_Manager
                 progressForm.SetIndeterminate(report.IsIndeterminate);
             });
         }
+
+        #endregion
+
+        #region Navigation And Image Display
 
         private void ConfigureLocationTrackBar()
         {
@@ -812,6 +865,7 @@ namespace Data_Manager
                 return;
             }
 
+            // Jump directly to the clicked frame instead of waiting for TrackBar thumb animation.
             int channelWidth = Math.Max(1, trbLocation.ClientSize.Width);
             double ratio = Math.Max(0.0, Math.Min(1.0, e.X / (double)channelWidth));
             int targetValue = trbLocation.Minimum
@@ -947,6 +1001,10 @@ namespace Data_Manager
             return value.HasValue ? value.Value.ToString("0.00") : "-";
         }
 
+        #endregion
+
+        #region Playback
+
         private void BtnPlayPause_Click(object? sender, EventArgs e)
         {
             if (_isPlaying)
@@ -1035,6 +1093,10 @@ namespace Data_Manager
             };
         }
 
+        #endregion
+
+        #region Overlay Rendering
+
         private void PositionImageOverlays()
         {
             EnsureImageOverlayParent();
@@ -1110,6 +1172,10 @@ namespace Data_Manager
             graphics.FillEllipse(brush, endX - 5, endY - 5, 10, 10);
         }
 
+        #endregion
+
+        #region Form Utilities
+
         private void ResizeModelColumns()
         {
             int width = Math.Max(360, lvModelList.ClientSize.Width);
@@ -1126,6 +1192,10 @@ namespace Data_Manager
             _playbackTimer?.Dispose();
             DisposeCurrentImage();
         }
+
+        #endregion
+
+        #region Nested Types
 
         private sealed class ModelListItem
         {
@@ -1146,9 +1216,6 @@ namespace Data_Manager
                 new List<DonkeyAsyncWorker.PilotFrameData>();
         }
 
-        private void picPilotImage_Click(object sender, EventArgs e)
-        {
-
-        }
+        #endregion
     }
 }

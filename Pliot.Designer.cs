@@ -630,7 +630,6 @@ namespace Data_Manager
             picPilotImage.SizeMode = PictureBoxSizeMode.Zoom;
             picPilotImage.TabIndex = 0;
             picPilotImage.TabStop = false;
-            picPilotImage.Click += picPilotImage_Click;
             // 
             // pnlPilotHeader
             // 

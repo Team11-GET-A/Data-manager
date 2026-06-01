@@ -66,7 +66,7 @@ namespace Data_Manager
         {
             DonkeyAsyncWorker.OperationResult<string> homeResult =
                 await DonkeyAsyncWorker.GetWslHomePathAsync(
-                    "Ubuntu-22.04",
+                    await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(CancellationToken.None),
                     null,
                     CancellationToken.None);
 

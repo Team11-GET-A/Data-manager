@@ -2,7 +2,13 @@ using Data_Manager;
 
 string modelPath = args.Length > 0
     ? args[0]
-    : @"\\wsl.localhost\Ubuntu-22.04\home\cheon\mycar\models\model_20260531_001.h5";
+    : string.Empty;
+
+if (string.IsNullOrWhiteSpace(modelPath))
+{
+    Console.WriteLine("Usage: dotnet run --project Diagnostics\\PilotTubDiagnostic\\PilotTubDiagnostic.csproj -- <model-path>");
+    return 2;
+}
 
 var progress = new Progress<DonkeyAsyncWorker.ProgressReport>(report =>
 {
@@ -20,10 +26,10 @@ var progress = new Progress<DonkeyAsyncWorker.ProgressReport>(report =>
 var state = new DonkeyAsyncWorker.PilotCardState
 {
     ModelName = Path.GetFileNameWithoutExtension(modelPath),
-    ModelPath = modelPath,
-    MyCarPath = "/home/cheon/mycar",
-    WslDistroName = "Ubuntu-22.04"
+    ModelPath = modelPath
 };
+
+await DonkeyAsyncWorker.EnsurePilotRuntimePathsAsync(state, progress, CancellationToken.None);
 
 Console.WriteLine($"MODEL {state.ModelPath}");
 Console.WriteLine($"MODEL_EXISTS {File.Exists(state.ModelPath)}");

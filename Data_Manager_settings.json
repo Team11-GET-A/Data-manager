@@ -1,0 +1,5 @@
+{
+  "WslDistroName": "Ubuntu-26.04",
+  "CondaEnvName": "e2e_env",
+  "MyCarPath": ""
+}
