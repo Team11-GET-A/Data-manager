@@ -74,9 +74,7 @@ namespace Data_Manager
         {
             InitializeComponent();
 
-            // 트랙바로 프레임 이동을 처리합니다.
-            trbImageLocation.onValueChanged +=
-                TrbImageLocation_ValueChanged;
+            // TODO: 파일럿 카드 내부 트랙바 연결 시 이벤트를 등록합니다.
 
             flowLayoutPanel1.SizeChanged +=
                 (s, e) => UpdatePilotCardLayout();
@@ -595,13 +593,11 @@ namespace Data_Manager
             if (currentFrames.Count == 0)
             {
                 currentFrameIndex = -1;
-                ConfigureImageTrackBar();
                 UpdateFrameIndicator();
                 return;
             }
 
             currentFrameIndex = 0;
-            ConfigureImageTrackBar();
             ShowCurrentFrame(distroName, card);
         }
 
@@ -609,7 +605,6 @@ namespace Data_Manager
         {
             if (currentFrameIndex < 0 || currentFrameIndex >= currentFrames.Count)
             {
-                ConfigureImageTrackBar();
                 UpdateFrameIndicator();
                 return;
             }
@@ -627,63 +622,10 @@ namespace Data_Manager
 
         private void UpdateFrameIndicator()
         {
-            isTrackBarUpdating = true;
-
-            int total = currentFrames.Count;
-            int safeIndex = total > 0
-                ? Math.Max(0, Math.Min(currentFrameIndex, total - 1))
-                : 0;
-            int current = total > 0 ? safeIndex + 1 : 0;
-
-            trbImageLocation.RangeMin = 0;
-            trbImageLocation.RangeMax = total > 0 ? total - 1 : 0;
-            trbImageLocation.Value = total > 0
-                ? safeIndex
-                : 0;
-            trbImageLocation.Enabled = total > 0;
-
-            trbImageLocation.Text = $"{current}/{total}";
-
-            isTrackBarUpdating = false;
+            // TODO: 파일럿 카드 내부 트랙바/라벨과 연동할 때 현재 프레임 인덱스를 표시합니다.
         }
 
-        private void TrbImageLocation_ValueChanged(object? sender, int newValue)
-        {
-            if (isTrackBarUpdating || currentFrames.Count == 0)
-            {
-                return;
-            }
-
-            currentFrameIndex = newValue;
-            if (pendingModelCard != null)
-            {
-                ShowCurrentFrame(pendingModelState?.WslDistroName ?? "Ubuntu-22.04", pendingModelCard);
-            }
-        }
-
-        private void ConfigureImageTrackBar()
-        {
-            isTrackBarUpdating = true;
-
-            if (currentFrames.Count == 0)
-            {
-                trbImageLocation.RangeMin = 0;
-                trbImageLocation.RangeMax = 0;
-                trbImageLocation.Value = 0;
-                trbImageLocation.Enabled = false;
-                trbImageLocation.Text = "0/0";
-            }
-            else
-            {
-                trbImageLocation.RangeMin = 0;
-                trbImageLocation.RangeMax = currentFrames.Count - 1;
-                trbImageLocation.Value = 0;
-                trbImageLocation.Enabled = true;
-                trbImageLocation.Text = $"1/{currentFrames.Count}";
-            }
-
-            isTrackBarUpdating = false;
-        }
+        // TODO: 파일럿 카드 내부 트랙바 추가 후 이벤트와 범위 설정 로직을 구현합니다.
 
         // =====================================================
         // PANEL CAPTURE
