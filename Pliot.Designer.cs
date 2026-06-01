@@ -60,6 +60,7 @@ namespace Data_Manager
             btnNextImage = new Button();
             btnJumpNext5 = new Button();
             pnlImageHost = new Panel();
+            picPilotImage = new PictureBox();
             pnlAngleOverlay = new Panel();
             pnlAngleCenterLine = new Panel();
             lblUserAngleValue = new Label();
@@ -71,7 +72,6 @@ namespace Data_Manager
             lblPilotThrottleValue = new Label();
             pnlImageIndexOverlay = new Panel();
             lblImageIndexOverlay = new Label();
-            picPilotImage = new PictureBox();
             pnlPilotHeader = new Panel();
             btnGenerateJudement = new Button();
             btnPilotChart = new Button();
@@ -92,10 +92,11 @@ namespace Data_Manager
             ((System.ComponentModel.ISupportInitialize)trbLocation).BeginInit();
             pnlPlaybackControls.SuspendLayout();
             pnlImageHost.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)picPilotImage).BeginInit();
+            picPilotImage.SuspendLayout();
             pnlAngleOverlay.SuspendLayout();
             pnlThrottleOverlay.SuspendLayout();
             pnlImageIndexOverlay.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)picPilotImage).BeginInit();
             pnlPilotHeader.SuspendLayout();
             SuspendLayout();
             // 
@@ -462,6 +463,20 @@ namespace Data_Manager
             pnlImageHost.Size = new Size(1130, 767);
             pnlImageHost.TabIndex = 1;
             // 
+            // picPilotImage
+            // 
+            picPilotImage.BackColor = Color.FromArgb(35, 39, 44);
+            picPilotImage.Controls.Add(pnlAngleOverlay);
+            picPilotImage.Controls.Add(pnlThrottleOverlay);
+            picPilotImage.Controls.Add(pnlImageIndexOverlay);
+            picPilotImage.Dock = DockStyle.Fill;
+            picPilotImage.Location = new Point(0, 0);
+            picPilotImage.Name = "picPilotImage";
+            picPilotImage.Size = new Size(1130, 767);
+            picPilotImage.SizeMode = PictureBoxSizeMode.Zoom;
+            picPilotImage.TabIndex = 0;
+            picPilotImage.TabStop = false;
+            // 
             // pnlAngleOverlay
             // 
             pnlAngleOverlay.BackColor = Color.FromArgb(120, 22, 26, 32);
@@ -581,20 +596,6 @@ namespace Data_Manager
             lblImageIndexOverlay.Text = "123 / 3456";
             lblImageIndexOverlay.TextAlign = ContentAlignment.MiddleCenter;
             // 
-            // picPilotImage
-            // 
-            picPilotImage.BackColor = Color.FromArgb(35, 39, 44);
-            picPilotImage.Controls.Add(pnlAngleOverlay);
-            picPilotImage.Controls.Add(pnlThrottleOverlay);
-            picPilotImage.Controls.Add(pnlImageIndexOverlay);
-            picPilotImage.Dock = DockStyle.Fill;
-            picPilotImage.Location = new Point(0, 0);
-            picPilotImage.Name = "picPilotImage";
-            picPilotImage.Size = new Size(1130, 767);
-            picPilotImage.SizeMode = PictureBoxSizeMode.Zoom;
-            picPilotImage.TabIndex = 0;
-            picPilotImage.TabStop = false;
-            // 
             // pnlPilotHeader
             // 
             pnlPilotHeader.Controls.Add(btnGenerateJudement);
@@ -655,7 +656,7 @@ namespace Data_Manager
             lblTubPathTitle.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
             lblTubPathTitle.Location = new Point(0, 14);
             lblTubPathTitle.Name = "lblTubPathTitle";
-            lblTubPathTitle.Size = new Size(64, 20);
+            lblTubPathTitle.Size = new Size(58, 20);
             lblTubPathTitle.TabIndex = 0;
             lblTubPathTitle.Text = "모델명:";
             // 
@@ -667,7 +668,6 @@ namespace Data_Manager
             Controls.Add(splitMain);
             Font = new Font("맑은 고딕", 11.25F);
             Margin = new Padding(2);
-            MinimumSize = new Size(1100, 700);
             Name = "Pliot";
             Padding = new Padding(8);
             Text = "파일럿";
@@ -683,14 +683,16 @@ namespace Data_Manager
             pnlRight.ResumeLayout(false);
             pnlPilotCard.ResumeLayout(false);
             pnlTrackBar.ResumeLayout(false);
+            pnlTrackBar.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trbLocation).EndInit();
             pnlPlaybackControls.ResumeLayout(false);
             pnlImageHost.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)picPilotImage).EndInit();
+            picPilotImage.ResumeLayout(false);
             pnlAngleOverlay.ResumeLayout(false);
             pnlThrottleOverlay.ResumeLayout(false);
             pnlThrottleOverlay.PerformLayout();
             pnlImageIndexOverlay.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)picPilotImage).EndInit();
             pnlPilotHeader.ResumeLayout(false);
             pnlPilotHeader.PerformLayout();
             ResumeLayout(false);
