@@ -36,6 +36,7 @@ namespace AD_AI_LearningData_Editor
         private int selectedIntervalStartIndex = -1;
         private int selectedIntervalEndIndex = -1;
         private Font lblSetIntervalDesignerFont = null;
+        private ToolTip mainToolTip;
 
         protected override CreateParams CreateParams
         {
@@ -51,6 +52,8 @@ namespace AD_AI_LearningData_Editor
         {
             InitializeComponent();
             CaptureIntervalLabelDesignerFont();
+            mainToolTip = ToolTipProperty.CreateDefaultToolTip();
+            InitializeToolTips();
 
             IconProperty.SetAutoImageByWidthHeight(
                 btnOpnFolderList,
@@ -87,6 +90,8 @@ namespace AD_AI_LearningData_Editor
             );
 
 
+
+
             this.AutoScaleMode = AutoScaleMode.None;
 
             var materialSkinManager = MaterialSkinManager.Instance;
@@ -97,6 +102,8 @@ namespace AD_AI_LearningData_Editor
                 Primary.BlueGrey500, Accent.Red400,
                 TextShade.WHITE
             );
+
+
 
             InitializeVideoPlayer();
             UpdatePlayStopButtonState();
@@ -962,6 +969,55 @@ namespace AD_AI_LearningData_Editor
             {
                 btn.Enabled = true;
             }
+        }
+
+
+        private void InitializeToolTips()
+        {
+            SetToolTipByName("btnPlayStop", "슬라이드를 재생/정지");
+            SetToolTipByName("btnNxt1F", "1프레임 넘기기");
+            SetToolTipByName("btnPre1F", "1프레임 넘기기");
+            SetToolTipByName("btnNxt5F", "5프레임 넘기기");
+            SetToolTipByName("btnPre5F", "5프레임 넘기기");
+            SetToolTipByName("btnSpeedPopup", "재생 속도 조절");
+
+            SetToolTipByName("btnDel", "선택된 항목을 휴지통으로 이동");
+            SetToolTipByName("btnSetInterval", "현재 프레임을 구간으로 지정");
+            SetToolTipByName("btnSave", "새 폴더로 저장");
+
+            SetToolTipByName("btnContrastProperty", "명암 조절");
+            SetToolTipByName("btnColorProperty", "색상 필터");
+            SetToolTipByName("btnROI", "검게 칠하기");
+            SetToolTipByName("btnNoise", "노이즈 효과");
+            SetToolTipByName("btnMirror", "좌우 반전");
+            SetToolTipByName("btnMirrorY", "상하 반전");
+
+            SetToolTipByName("btnOpnFolderList", "돌아가기");
+            SetToolTipByName("btnOpnFileExplrr", "윈도우 파일 탐색기 열기");
+            SetToolTipByName("btnRemove", "선택된 항목을 제거");
+            SetToolTipByName("btnRestoration", "선택한 항목을 복원");
+        }
+
+        private void SetToolTipByName(string controlName, string text)
+        {
+            if (mainToolTip == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(controlName))
+            {
+                return;
+            }
+
+            Control control = this.Controls.Find(controlName, true).FirstOrDefault();
+
+            if (control == null)
+            {
+                return;
+            }
+
+            ToolTipProperty.Set(mainToolTip, control, text);
         }
 
         private void InitializeVideoPlayer()
@@ -2124,7 +2180,7 @@ namespace AD_AI_LearningData_Editor
 
             using (SaveFileDialog dialog = new SaveFileDialog())
             {
-                dialog.Title = "저장할 새 폴더 이름을 입력하세요.";
+                dialog.Title = "저장할 새 폴더의 이름을 입력하세요.";
                 dialog.InitialDirectory = GetBinFolder();
                 dialog.FileName = "새 폴더 이름";
                 dialog.Filter = "폴더 이름|*.*";
@@ -2142,26 +2198,26 @@ namespace AD_AI_LearningData_Editor
 
                 if (string.IsNullOrWhiteSpace(folderName))
                 {
-                    MessageBox.Show("생성할 폴더 이름을 입력해야 합니다.");
+                    MessageBox.Show("생성할 폴더의 이름을 입력해야 합니다.");
                     return;
                 }
 
                 char[] invalidChars = Path.GetInvalidFileNameChars();
                 if (folderName.IndexOfAny(invalidChars) >= 0)
                 {
-                    MessageBox.Show("폴더 이름에 사용할 수 없는 문자가 포함되어 있습니다.");
+                    MessageBox.Show("사용할 수 없는 문자가 포함되어 있습니다.");
                     return;
                 }
 
                 if (File.Exists(selectedFolder))
                 {
-                    MessageBox.Show("같은 이름의 파일이 이미 존재합니다. 다른 폴더 이름을 입력하세요.");
+                    MessageBox.Show("같은 이름의 파일이 이미 존재합니다.");
                     return;
                 }
 
                 if (string.Equals(selectedFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), uploadFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
                 {
-                    MessageBox.Show("UploadedFile 폴더 자체는 저장 대상 폴더로 사용할 수 없습니다.");
+                    MessageBox.Show("이 폴더에는 저장할 수 없습니다.");
                     return;
                 }
 
