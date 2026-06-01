@@ -15,6 +15,7 @@ namespace Data_Manager
 
         private List<string> selectedPaths = new List<string>();
         private List<string> copyTargetPaths = new List<string>();
+        private ToolTip AddFileToolTip;
 
         private HashSet<string> allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -38,6 +39,8 @@ namespace Data_Manager
         public frmAddFile()
         {
             InitializeComponent();
+            AddFileToolTip = propToolTip.CreateDefaultToolTip();
+            InitializeToolTips();
 
             IconProperty.SetAutoImageByWidthHeight(
                 btnSelctFile,
@@ -593,6 +596,38 @@ namespace Data_Manager
 
                 index++;
             }
+        }
+
+        private void InitializeToolTips()
+        {
+            SetToolTipByName("btnSelctFile", "파일 업로드하기");
+            SetToolTipByName("btnAddFile", "업로드된 파일을 프로그램에 추가");
+
+
+
+
+
+        }
+        private void SetToolTipByName(string controlName, string text)
+        {
+            if (AddFileToolTip == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(controlName))
+            {
+                return;
+            }
+
+            Control control = this.Controls.Find(controlName, true).FirstOrDefault();
+
+            if (control == null)
+            {
+                return;
+            }
+
+            propToolTip.Set(AddFileToolTip, control, text);
         }
 
         private void btnClose_Click(object sender, EventArgs e)

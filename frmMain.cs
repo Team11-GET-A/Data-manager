@@ -19,6 +19,8 @@ namespace AD_AI_LearningData_Editor
     {
         private System.Windows.Forms.Timer videoTimer;
         private DoubleBufferedPictureBox picVideoBox;
+        private ctrlAngleDicatoer angleIndicatorControl;
+        private ctrlThrottleGauge throttleGaugeControl;
         private List<string> slideImages = new List<string>();
         private int currentSlideIndex = 0;
         private ListViewItem lastHighlightedItem = null;
@@ -32,6 +34,7 @@ namespace AD_AI_LearningData_Editor
         private string mirrorYBackupFolderName = "MirrorYBackupFile";
         private Dictionary<string, DrivingInfo> drivingInfoCache = new Dictionary<string, DrivingInfo>(StringComparer.OrdinalIgnoreCase);
         private DateTime drivingInfoCacheTime = DateTime.MinValue;
+        private string drivingInfoCacheSignature = "";
         private List<int> intervalPointIndices = new List<int>();
         private int selectedIntervalStartIndex = -1;
         private int selectedIntervalEndIndex = -1;
@@ -52,7 +55,7 @@ namespace AD_AI_LearningData_Editor
         {
             InitializeComponent();
             CaptureIntervalLabelDesignerFont();
-            mainToolTip = ToolTipProperty.CreateDefaultToolTip();
+            mainToolTip = propToolTip.CreateDefaultToolTip();
             InitializeToolTips();
 
             IconProperty.SetAutoImageByWidthHeight(
@@ -106,6 +109,7 @@ namespace AD_AI_LearningData_Editor
 
 
             InitializeVideoPlayer();
+            InitializeDrivingVisualControls();
             UpdatePlayStopButtonState();
 
             btnNxt1F.Click += btnNxt1F_Click;
@@ -983,7 +987,7 @@ namespace AD_AI_LearningData_Editor
 
             SetToolTipByName("btnDel", "선택된 항목을 휴지통으로 이동");
             SetToolTipByName("btnSetInterval", "현재 프레임을 구간으로 지정");
-            SetToolTipByName("btnSave", "새 폴더로 저장");
+            SetToolTipByName("btnSave", "변경내용 저장");
 
             SetToolTipByName("btnContrastProperty", "명암 조절");
             SetToolTipByName("btnColorProperty", "색상 필터");
@@ -1017,7 +1021,132 @@ namespace AD_AI_LearningData_Editor
                 return;
             }
 
-            ToolTipProperty.Set(mainToolTip, control, text);
+            propToolTip.Set(mainToolTip, control, text);
+        }
+
+
+        private void InitializeDrivingVisualControls()
+        {
+            if (picVideoBox == null)
+            {
+                return;
+            }
+
+            angleIndicatorControl = new ctrlAngleDicatoer();
+            throttleGaugeControl = new ctrlThrottleGauge();
+
+            angleIndicatorControl.Name = "angleIndicatorControl";
+            throttleGaugeControl.Name = "throttleGaugeControl";
+
+            angleIndicatorControl.Cursor = Cursors.Hand;
+            throttleGaugeControl.Cursor = Cursors.Hand;
+
+            angleIndicatorControl.Click += VideoArea_Click;
+            throttleGaugeControl.Click += VideoArea_Click;
+
+            picVideoBox.Controls.Add(angleIndicatorControl);
+            picVideoBox.Controls.Add(throttleGaugeControl);
+
+            angleIndicatorControl.BringToFront();
+            throttleGaugeControl.BringToFront();
+
+            ConfigureDrivingVisualControlLayout();
+
+            picVideoBox.Resize += (s, e) =>
+            {
+                ConfigureDrivingVisualControlLayout();
+            };
+        }
+
+        private void ConfigureDrivingVisualControlLayout()
+        {
+            if (picVideoBox == null)
+            {
+                return;
+            }
+
+            Size parentSize = picVideoBox.ClientSize;
+
+            if (angleIndicatorControl != null)
+            {
+                angleIndicatorControl.Size = new Size(360, 155);
+
+                // BottomMargin: 슬라이드 화면 밑변에서 얼마나 위로 띄울지 결정.
+                int angleBottomMargin = 8;
+
+                // X는 중앙 정렬, Y는 하단 배치.
+                int angleX = (parentSize.Width - angleIndicatorControl.Width) / 2;
+                int angleY = parentSize.Height - angleIndicatorControl.Height - angleBottomMargin;
+
+                angleIndicatorControl.Location = new Point(
+                    Math.Max(0, angleX),
+                    Math.Max(0, angleY)
+                );
+
+                angleIndicatorControl.BringToFront();
+            }
+
+            if (throttleGaugeControl != null)
+            {
+                // ===== 쓰로틀 게이지 크기/위치 수정 위치 =====
+                // Size: 쓰로틀 게이지 전체 크기입니다. Width/Height를 바꾸면 게이지 크기가 바뀝니다.
+                throttleGaugeControl.Size = new Size(380, 95);
+
+                // RightMargin/TopMargin: 슬라이드 화면 오른쪽/위쪽에서 얼마나 떨어질지 결정합니다.
+                // 기본 배치를 오른쪽 위로 옮겨서 하단 중앙의 앵글 계기판과 겹치지 않게 했습니다.
+                int throttleRightMargin = 18;
+                int throttleTopMargin = 520;
+
+                int throttleX = parentSize.Width - throttleGaugeControl.Width - throttleRightMargin;
+                int throttleY = throttleTopMargin;
+
+                throttleGaugeControl.Location = new Point(
+                    Math.Max(0, throttleX),
+                    Math.Max(0, throttleY)
+                );
+
+                throttleGaugeControl.BringToFront();
+            }
+        }
+
+        private void UpdateDrivingVisualControls(string angleText, string throttleText)
+        {
+            double? angleValue = TryParseDoubleValue(angleText);
+            double? throttleValue = TryParseDoubleValue(throttleText);
+
+            if (angleIndicatorControl != null)
+            {
+                angleIndicatorControl.SetAngleValue(angleValue);
+            }
+
+            if (throttleGaugeControl != null)
+            {
+                throttleGaugeControl.SetThrottleValue(throttleValue);
+            }
+        }
+
+        private double? TryParseDoubleValue(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            if (double.TryParse(
+                text,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out double value))
+            {
+                return value;
+            }
+
+            if (double.TryParse(text, out value))
+            {
+                return value;
+            }
+
+            return null;
         }
 
         private void InitializeVideoPlayer()
@@ -1075,6 +1204,12 @@ namespace AD_AI_LearningData_Editor
             lstviewFileListD.Items.Clear();
             slideImages.Clear();
             currentSlideIndex = 0;
+
+            // 카탈로그/JSON 파일이 바뀌었거나 새 데이터셋을 다시 불러온 경우를 대비해
+            // angle/throttle 캐시를 비웁니다.
+            drivingInfoCache.Clear();
+            drivingInfoCacheSignature = "";
+            drivingInfoCacheTime = DateTime.MinValue;
 
             string targetFolder = GetUploadedFolder();
             DirectoryInfo di = new DirectoryInfo(targetFolder);
@@ -1219,6 +1354,8 @@ namespace AD_AI_LearningData_Editor
             {
                 speedBox.Text = throttle;
             }
+
+            UpdateDrivingVisualControls(angle, throttle);
         }
 
         private DrivingInfo FindDrivingInfoForImage(string imagePath)
@@ -1266,7 +1403,8 @@ namespace AD_AI_LearningData_Editor
             if (!Directory.Exists(uploadFolder))
             {
                 drivingInfoCache.Clear();
-                drivingInfoCacheTime = DateTime.Now;
+                drivingInfoCacheSignature = "";
+                drivingInfoCacheTime = DateTime.MinValue;
                 return;
             }
 
@@ -1274,20 +1412,23 @@ namespace AD_AI_LearningData_Editor
                 .Where(path =>
                     string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(Path.GetExtension(path), ".catalog", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(path => path)
+                .OrderBy(path => Path.GetFileName(path), new NaturalFileNameComparer())
+                .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            DateTime newestWriteTime = dataFiles
-                .Select(path => File.GetLastWriteTime(path))
-                .DefaultIfEmpty(DateTime.MinValue)
-                .Max();
+            string currentSignature = CreateDrivingInfoCacheSignature(dataFiles);
 
-            if (drivingInfoCache.Count > 0 && newestWriteTime <= drivingInfoCacheTime)
+            // 기존 코드는 파일 수정 시간이 오래된 데이터셋을 다시 복사했을 때
+            // 예전 캐시를 그대로 쓰는 경우가 생길 수 있었습니다.
+            // 이제는 파일명 + 수정시간 + 크기 조합이 바뀌면 반드시 다시 읽습니다.
+            if (drivingInfoCache.Count > 0 &&
+                string.Equals(currentSignature, drivingInfoCacheSignature, StringComparison.Ordinal))
             {
                 return;
             }
 
             drivingInfoCache.Clear();
+            drivingInfoCacheSignature = currentSignature;
 
             List<CatalogFormatInfo> manifestFormats = new List<CatalogFormatInfo>();
 
@@ -1323,7 +1464,36 @@ namespace AD_AI_LearningData_Editor
                 TryReadJsonRecordFile(jsonFile);
             }
 
-            drivingInfoCacheTime = newestWriteTime;
+            drivingInfoCacheTime = DateTime.Now;
+        }
+
+        private string CreateDrivingInfoCacheSignature(List<string> dataFiles)
+        {
+            if (dataFiles == null || dataFiles.Count == 0)
+            {
+                return "";
+            }
+
+            List<string> parts = new List<string>();
+
+            foreach (string path in dataFiles)
+            {
+                try
+                {
+                    FileInfo info = new FileInfo(path);
+                    parts.Add(
+                        info.FullName.ToLowerInvariant() +
+                        "|" + info.Length.ToString() +
+                        "|" + info.LastWriteTimeUtc.Ticks.ToString()
+                    );
+                }
+                catch
+                {
+                    parts.Add(path.ToLowerInvariant());
+                }
+            }
+
+            return string.Join("\n", parts);
         }
 
         private CatalogFormatInfo TryReadManifestFormat(string jsonFile)

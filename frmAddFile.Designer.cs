@@ -43,18 +43,16 @@
             // 
             pnlCopyFile.BorderStyle = BorderStyle.Fixed3D;
             pnlCopyFile.Controls.Add(lstviewCopyFile);
-            pnlCopyFile.Location = new Point(14, 88);
-            pnlCopyFile.Margin = new Padding(4, 4, 4, 4);
+            pnlCopyFile.Location = new Point(11, 66);
             pnlCopyFile.Name = "pnlCopyFile";
-            pnlCopyFile.Size = new Size(702, 629);
+            pnlCopyFile.Size = new Size(547, 473);
             pnlCopyFile.TabIndex = 0;
             // 
             // lstviewCopyFile
             // 
-            lstviewCopyFile.Location = new Point(-4, -1);
-            lstviewCopyFile.Margin = new Padding(4, 4, 4, 4);
+            lstviewCopyFile.Location = new Point(-3, -1);
             lstviewCopyFile.Name = "lstviewCopyFile";
-            lstviewCopyFile.Size = new Size(705, 629);
+            lstviewCopyFile.Size = new Size(549, 473);
             lstviewCopyFile.TabIndex = 5;
             lstviewCopyFile.UseCompatibleStateImageBehavior = false;
             // 
@@ -62,63 +60,57 @@
             // 
             pnlAddFile.BorderStyle = BorderStyle.Fixed3D;
             pnlAddFile.Controls.Add(lstviewAddFile);
-            pnlAddFile.Location = new Point(739, 88);
-            pnlAddFile.Margin = new Padding(4, 4, 4, 4);
+            pnlAddFile.Location = new Point(575, 66);
             pnlAddFile.Name = "pnlAddFile";
-            pnlAddFile.Size = new Size(706, 631);
+            pnlAddFile.Size = new Size(550, 474);
             pnlAddFile.TabIndex = 1;
             // 
             // lstviewAddFile
             // 
-            lstviewAddFile.Location = new Point(-1, -3);
-            lstviewAddFile.Margin = new Padding(4, 4, 4, 4);
+            lstviewAddFile.Location = new Point(-1, -2);
             lstviewAddFile.Name = "lstviewAddFile";
-            lstviewAddFile.Size = new Size(705, 629);
+            lstviewAddFile.Size = new Size(549, 473);
             lstviewAddFile.TabIndex = 4;
             lstviewAddFile.UseCompatibleStateImageBehavior = false;
             // 
             // txtbSelctFile
             // 
             txtbSelctFile.Font = new Font("맑은 고딕", 9F);
-            txtbSelctFile.Location = new Point(17, 35);
-            txtbSelctFile.Margin = new Padding(4, 4, 4, 4);
+            txtbSelctFile.Location = new Point(13, 26);
             txtbSelctFile.Multiline = true;
             txtbSelctFile.Name = "txtbSelctFile";
-            txtbSelctFile.Size = new Size(617, 40);
+            txtbSelctFile.Size = new Size(481, 31);
             txtbSelctFile.TabIndex = 2;
             // 
             // btnAddFile
             // 
-            btnAddFile.Location = new Point(1318, 728);
-            btnAddFile.Margin = new Padding(4, 4, 4, 4);
+            btnAddFile.Location = new Point(1057, 549);
             btnAddFile.Name = "btnAddFile";
-            btnAddFile.Size = new Size(116, 80);
+            btnAddFile.Size = new Size(60, 44);
             btnAddFile.TabIndex = 5;
             btnAddFile.UseVisualStyleBackColor = true;
             // 
             // btnSelctFile
             // 
             btnSelctFile.ImageAlign = ContentAlignment.BottomCenter;
-            btnSelctFile.Location = new Point(643, 24);
-            btnSelctFile.Margin = new Padding(4, 4, 4, 4);
+            btnSelctFile.Location = new Point(500, 18);
             btnSelctFile.Name = "btnSelctFile";
-            btnSelctFile.Size = new Size(71, 56);
+            btnSelctFile.Size = new Size(55, 40);
             btnSelctFile.TabIndex = 6;
             btnSelctFile.TextAlign = ContentAlignment.BottomCenter;
             btnSelctFile.UseVisualStyleBackColor = true;
             // 
             // frmAddFile
             // 
-            AutoScaleDimensions = new SizeF(9F, 20F);
+            AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1462, 825);
+            ClientSize = new Size(1137, 619);
             Controls.Add(btnSelctFile);
             Controls.Add(btnAddFile);
             Controls.Add(pnlAddFile);
             Controls.Add(txtbSelctFile);
             Controls.Add(pnlCopyFile);
             Location = new Point(200, 200);
-            Margin = new Padding(4, 4, 4, 4);
             Name = "frmAddFile";
             StartPosition = FormStartPosition.CenterParent;
             Text = "로컬 파일을 프로그램에 복사하여 업로드";

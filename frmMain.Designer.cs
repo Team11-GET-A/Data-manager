@@ -66,7 +66,6 @@
             pnlProperty = new Panel();
             crdProperty = new MaterialSkin.Controls.MaterialCard();
             btnMirrorY = new MaterialSkin.Controls.MaterialButton();
-            txtTempAngle = new TextBox();
             btnPre5F = new MaterialSkin.Controls.MaterialButton();
             btnOpnFolderList = new Button();
             pnlFolderList = new Panel();
@@ -95,7 +94,6 @@
             sdrSpeedController = new MaterialSkin.Controls.MaterialSlider();
             lblSpeedText = new Label();
             btnOpnFolderList2 = new Button();
-            txtTempSpeed = new TextBox();
             pnlROI.SuspendLayout();
             pnlContrastProperty.SuspendLayout();
             groupBox1.SuspendLayout();
@@ -549,16 +547,6 @@
             btnMirrorY.UseAccentColor = false;
             btnMirrorY.UseVisualStyleBackColor = true;
             // 
-            // txtTempAngle
-            // 
-            txtTempAngle.BackColor = Color.Lime;
-            txtTempAngle.Location = new Point(7, 753);
-            txtTempAngle.Multiline = true;
-            txtTempAngle.Name = "txtTempAngle";
-            txtTempAngle.Size = new Size(196, 173);
-            txtTempAngle.TabIndex = 7;
-            txtTempAngle.Text = "핸들";
-            // 
             // btnPre5F
             // 
             btnPre5F.AutoSize = false;
@@ -953,26 +941,14 @@
             btnOpnFolderList2.TabIndex = 11;
             btnOpnFolderList2.UseVisualStyleBackColor = true;
             // 
-            // txtTempSpeed
-            // 
-            txtTempSpeed.BackColor = Color.Lime;
-            txtTempSpeed.Location = new Point(239, 753);
-            txtTempSpeed.Multiline = true;
-            txtTempSpeed.Name = "txtTempSpeed";
-            txtTempSpeed.Size = new Size(196, 173);
-            txtTempSpeed.TabIndex = 18;
-            txtTempSpeed.Text = "속력 자리";
-            // 
             // frmMain
             // 
             AutoScaleDimensions = new SizeF(8F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = SystemColors.Control;
             ClientSize = new Size(1829, 1020);
-            Controls.Add(txtTempSpeed);
             Controls.Add(pnlContrastProperty);
             Controls.Add(pnlFolderList);
-            Controls.Add(txtTempAngle);
             Controls.Add(pnlVideo);
             Controls.Add(sdrSeekBar);
             Controls.Add(pnlCtrl);
@@ -999,7 +975,6 @@
             groupBox2.ResumeLayout(false);
             pnlSpeedPopup.ResumeLayout(false);
             ResumeLayout(false);
-            PerformLayout();
         }
 
         #endregion
@@ -1014,7 +989,6 @@
         private MaterialSkin.Controls.MaterialButton btnNoise;
         private Panel pnlProperty;
         private MaterialSkin.Controls.MaterialCard crdProperty;
-        private TextBox txtTempAngle;
         private MaterialSkin.Controls.MaterialButton btnPre5F;
         private Button btnOpnFolderList;
         private Panel pnlFolderList;
@@ -1069,6 +1043,5 @@
         private MaterialSkin.Controls.MaterialButton btnSetInterval;
         private Label lblSetInterval;
         private GroupBox groupBox2;
-        private TextBox txtTempSpeed;
     }
 }

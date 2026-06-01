@@ -2,7 +2,7 @@
 
 namespace AD_AI_LearningData_Editor
 {
-    public static class ToolTipProperty
+    public static class propToolTip
     {
         public static ToolTip CreateDefaultToolTip()
         {
