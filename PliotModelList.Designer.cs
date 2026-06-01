@@ -1,4 +1,4 @@
-﻿namespace Data_Manager
+namespace Data_Manager
 {
     partial class PliotModelList
     {
@@ -28,124 +28,154 @@
         /// </summary>
         private void InitializeComponent()
         {
-            panel1 = new Panel();
+            panelTop = new Panel();
+            btnModelLoad = new Button();
+            lblModelListTitle = new Label();
+            lvModelList = new ListView();
+            colNo = new ColumnHeader();
+            colName = new ColumnHeader();
+            colPath = new ColumnHeader();
+            panelBottom = new Panel();
             btnResetFilter = new Button();
             btnModelFliter = new Button();
             txtModelFilter = new TextBox();
-            lstModelList = new MaterialSkin.Controls.MaterialListBox();
-            panel2 = new Panel();
-            btnModelLoad = new Button();
-            panel3 = new Panel();
-            panel1.SuspendLayout();
-            panel2.SuspendLayout();
-            panel3.SuspendLayout();
+            panelTop.SuspendLayout();
+            panelBottom.SuspendLayout();
             SuspendLayout();
             // 
-            // panel1
+            // panelTop
             // 
-            panel1.Controls.Add(btnResetFilter);
-            panel1.Controls.Add(btnModelFliter);
-            panel1.Controls.Add(txtModelFilter);
-            panel1.Dock = DockStyle.Bottom;
-            panel1.Location = new Point(0, 695);
-            panel1.Name = "panel1";
-            panel1.Size = new Size(684, 66);
-            panel1.TabIndex = 0;
+            panelTop.Controls.Add(btnModelLoad);
+            panelTop.Controls.Add(lblModelListTitle);
+            panelTop.Dock = DockStyle.Top;
+            panelTop.Location = new Point(0, 0);
+            panelTop.Name = "panelTop";
+            panelTop.Padding = new Padding(12);
+            panelTop.Size = new Size(760, 64);
+            panelTop.TabIndex = 0;
+            // 
+            // btnModelLoad
+            // 
+            btnModelLoad.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnModelLoad.Location = new Point(620, 14);
+            btnModelLoad.Name = "btnModelLoad";
+            btnModelLoad.Size = new Size(128, 36);
+            btnModelLoad.TabIndex = 1;
+            btnModelLoad.Text = "불러오기";
+            btnModelLoad.UseVisualStyleBackColor = true;
+            // 
+            // lblModelListTitle
+            // 
+            lblModelListTitle.AutoSize = true;
+            lblModelListTitle.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
+            lblModelListTitle.Location = new Point(14, 20);
+            lblModelListTitle.Name = "lblModelListTitle";
+            lblModelListTitle.Size = new Size(138, 21);
+            lblModelListTitle.TabIndex = 0;
+            lblModelListTitle.Text = "모델 파일 선택";
+            // 
+            // lvModelList
+            // 
+            lvModelList.Columns.AddRange(new ColumnHeader[] { colNo, colName, colPath });
+            lvModelList.Dock = DockStyle.Fill;
+            lvModelList.FullRowSelect = true;
+            lvModelList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            lvModelList.Location = new Point(0, 64);
+            lvModelList.MultiSelect = false;
+            lvModelList.Name = "lvModelList";
+            lvModelList.Size = new Size(760, 529);
+            lvModelList.TabIndex = 1;
+            lvModelList.UseCompatibleStateImageBehavior = false;
+            lvModelList.View = View.Details;
+            // 
+            // colNo
+            // 
+            colNo.Text = "번호";
+            colNo.Width = 70;
+            // 
+            // colName
+            // 
+            colName.Text = "모델 이름";
+            colName.Width = 260;
+            // 
+            // colPath
+            // 
+            colPath.Text = "경로";
+            colPath.Width = 420;
+            // 
+            // panelBottom
+            // 
+            panelBottom.Controls.Add(btnResetFilter);
+            panelBottom.Controls.Add(btnModelFliter);
+            panelBottom.Controls.Add(txtModelFilter);
+            panelBottom.Dock = DockStyle.Bottom;
+            panelBottom.Location = new Point(0, 593);
+            panelBottom.Name = "panelBottom";
+            panelBottom.Padding = new Padding(12);
+            panelBottom.Size = new Size(760, 68);
+            panelBottom.TabIndex = 2;
             // 
             // btnResetFilter
             // 
-            btnResetFilter.Location = new Point(470, 16);
+            btnResetFilter.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnResetFilter.Location = new Point(548, 16);
             btnResetFilter.Name = "btnResetFilter";
-            btnResetFilter.Size = new Size(98, 34);
-            btnResetFilter.TabIndex = 2;
+            btnResetFilter.Size = new Size(96, 36);
+            btnResetFilter.TabIndex = 1;
             btnResetFilter.Text = "초기화";
             btnResetFilter.UseVisualStyleBackColor = true;
             // 
             // btnModelFliter
             // 
-            btnModelFliter.Location = new Point(574, 16);
+            btnModelFliter.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnModelFliter.Location = new Point(652, 16);
             btnModelFliter.Name = "btnModelFliter";
-            btnModelFliter.Size = new Size(98, 34);
-            btnModelFliter.TabIndex = 1;
+            btnModelFliter.Size = new Size(96, 36);
+            btnModelFliter.TabIndex = 2;
             btnModelFliter.Text = "검색";
             btnModelFliter.UseVisualStyleBackColor = true;
             // 
             // txtModelFilter
             // 
-            txtModelFilter.Font = new Font("맑은 고딕", 15F);
-            txtModelFilter.Location = new Point(12, 16);
+            txtModelFilter.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtModelFilter.Font = new Font("맑은 고딕", 13F);
+            txtModelFilter.Location = new Point(12, 18);
             txtModelFilter.Name = "txtModelFilter";
-            txtModelFilter.Size = new Size(452, 34);
+            txtModelFilter.Size = new Size(528, 31);
             txtModelFilter.TabIndex = 0;
-            // 
-            // lstModelList
-            // 
-            lstModelList.BackColor = Color.White;
-            lstModelList.BorderColor = Color.LightGray;
-            lstModelList.Depth = 0;
-            lstModelList.Dock = DockStyle.Fill;
-            lstModelList.Font = new Font("Microsoft Sans Serif", 16F, FontStyle.Regular, GraphicsUnit.Pixel);
-            lstModelList.Location = new Point(0, 0);
-            lstModelList.MouseState = MaterialSkin.MouseState.HOVER;
-            lstModelList.Name = "lstModelList";
-            lstModelList.SelectedIndex = -1;
-            lstModelList.SelectedItem = null;
-            lstModelList.Size = new Size(684, 653);
-            lstModelList.TabIndex = 0;
-            // 
-            // panel2
-            // 
-            panel2.Controls.Add(btnModelLoad);
-            panel2.Dock = DockStyle.Top;
-            panel2.Location = new Point(0, 0);
-            panel2.Name = "panel2";
-            panel2.Size = new Size(684, 42);
-            panel2.TabIndex = 1;
-            // 
-            // btnModelLoad
-            // 
-            btnModelLoad.Location = new Point(597, 8);
-            btnModelLoad.Name = "btnModelLoad";
-            btnModelLoad.Size = new Size(75, 23);
-            btnModelLoad.TabIndex = 0;
-            btnModelLoad.Text = "불러오기";
-            btnModelLoad.UseVisualStyleBackColor = true;
-            // 
-            // panel3
-            // 
-            panel3.Controls.Add(lstModelList);
-            panel3.Dock = DockStyle.Fill;
-            panel3.Location = new Point(0, 42);
-            panel3.Name = "panel3";
-            panel3.Size = new Size(684, 653);
-            panel3.TabIndex = 2;
             // 
             // PliotModelList
             // 
-            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleDimensions = new SizeF(9F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(684, 761);
-            Controls.Add(panel3);
-            Controls.Add(panel2);
-            Controls.Add(panel1);
+            ClientSize = new Size(760, 661);
+            Controls.Add(lvModelList);
+            Controls.Add(panelBottom);
+            Controls.Add(panelTop);
+            Font = new Font("맑은 고딕", 11.25F);
+            MinimumSize = new Size(640, 520);
             Name = "PliotModelList";
+            StartPosition = FormStartPosition.CenterParent;
             Text = "모델선택";
-            panel1.ResumeLayout(false);
-            panel1.PerformLayout();
-            panel2.ResumeLayout(false);
-            panel3.ResumeLayout(false);
+            panelTop.ResumeLayout(false);
+            panelTop.PerformLayout();
+            panelBottom.ResumeLayout(false);
+            panelBottom.PerformLayout();
             ResumeLayout(false);
         }
 
         #endregion
 
-        private Panel panel1;
+        private Panel panelTop;
+        private Button btnModelLoad;
+        private Label lblModelListTitle;
+        private ListView lvModelList;
+        private ColumnHeader colNo;
+        private ColumnHeader colName;
+        private ColumnHeader colPath;
+        private Panel panelBottom;
         private Button btnResetFilter;
         private Button btnModelFliter;
         private TextBox txtModelFilter;
-        private MaterialSkin.Controls.MaterialListBox lstModelList;
-        private Panel panel2;
-        private Button btnModelLoad;
-        private Panel panel3;
     }
 }

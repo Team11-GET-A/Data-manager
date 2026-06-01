@@ -1,274 +1,745 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.IO;
-using System.Text;
-using System.Windows.Forms;
-using MaterialSkin;
-using MaterialSkin.Controls;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace Data_Manager
 {
     public partial class Pliot : Form
     {
-        private int pilotCardCount = 0;
-
-        private const int CardGap = 5;
-
-        private const int MaxCards = 4;
-
-        private const int CardHeight = 552;
-
-        // =====================================================
-        // 데이터 변수
-        // =====================================================
-
-        private string selectedDataPath = "";
-
-        private List<CatalogRecord>
-            integratedCatalogList =
-            new List<CatalogRecord>();
-
-        private PilotCardControl? pendingModelCard;
-        private DonkeyAsyncWorker.PilotCardState? pendingModelState;
-        private CancellationTokenSource? modelLoadCts;
-
-        // 현재 선택된 tub 프레임 목록과 인덱스 상태
-        private readonly List<DonkeyAsyncWorker.PilotFrameData> currentFrames =
+        private readonly List<ModelListItem> _models = new List<ModelListItem>();
+        private readonly List<DonkeyAsyncWorker.PilotFrameData> _frameList =
             new List<DonkeyAsyncWorker.PilotFrameData>();
 
-        private int currentFrameIndex = -1;
-        private bool isTrackBarUpdating;
+        private ModelListItem? _selectedModel;
+        private DonkeyAsyncWorker.PilotCardState? _cardState;
+        private CancellationTokenSource? _loadCts;
+        private System.Windows.Forms.Timer? _playbackTimer;
 
-        // =====================================================
-        // 데이터 구조
-        // =====================================================
-
-        public class CatalogRecord
-        {
-            public string OriginalLine { get; set; }
-
-            public string SourceFilePath { get; set; }
-
-            public int LineIndex { get; set; }
-
-            public string ImageFileName { get; set; }
-
-            public string Angle { get; set; }
-
-            public string Throttle { get; set; }
-
-            public string Index { get; set; }
-        }
-
-        // =====================================================
-        // 생성자
-        // =====================================================
+        private int _currentFrameIndex;
+        private bool _isUpdatingTrackBar;
+        private bool _isPlaying;
+        private bool _isReversePlaying;
+        private double _playbackSpeed = 1.0;
 
         public Pliot()
         {
             InitializeComponent();
-
-            // TODO: 파일럿 카드 내부 트랙바 연결 시 이벤트를 등록합니다.
-
-            flowLayoutPanel1.SizeChanged +=
-                (s, e) => UpdatePilotCardLayout();
-
-            flowLayoutPanel1.Layout +=
-                (s, e) => UpdatePilotCardLayout();
-
-            Shown += Form2_Shown;
-
-            Resize += Form2_Resize;
+            InitializePilotUi();
         }
 
-        // =====================================================
-        // SHOWN
-        // =====================================================
-
-        private void Form2_Shown(
-            object sender,
-            EventArgs e)
+        private void InitializePilotUi()
         {
-            UpdatePilotCardLayout();
+            cmbSpeed.SelectedIndex = 1;
+            pnlImageIndexOverlay.BackColor = Color.FromArgb(120, 22, 26, 32);
+            pnlThrottleOverlay.BackColor = Color.FromArgb(120, 22, 26, 32);
+            pnlAngleOverlay.BackColor = Color.FromArgb(120, 22, 26, 32);
+            lblImageIndexOverlay.BackColor = Color.Transparent;
+            lblUserThrottleTitle.BackColor = Color.Transparent;
+            lblUserThrottleValue.BackColor = Color.Transparent;
+            lblPilotThrottleTitle.BackColor = Color.Transparent;
+            lblPilotThrottleValue.BackColor = Color.Transparent;
+            lblUserAngleValue.BackColor = Color.Transparent;
+            lblPilotAngleValue.BackColor = Color.Transparent;
+            _playbackTimer = new System.Windows.Forms.Timer();
+            _playbackTimer.Interval = GetPlaybackInterval();
+            _playbackTimer.Tick += PlaybackTimer_Tick;
+
+            btnModelLoad.Text = "모델 폴더 선택";
+            btnModelLoad.Click += BtnModelLoad_Click;
+            lvModelList.SelectedIndexChanged += LvModelList_SelectedIndexChanged;
+            lvModelList.DoubleClick += LvModelList_DoubleClick;
+            lvModelList.ItemActivate += LvModelList_ItemActivate;
+            lvModelList.SizeChanged += (s, e) => ResizeModelColumns();
+
+            btnTubInput.Click += BtnTubInput_Click;
+            btnGenerateJudement.Click += BtnGenerateJudement_Click;
+            trbLocation.ValueChanged += trbLocation_ValueChanged;
+            trbLocation.MouseDown += TrbLocation_MouseDown;
+            btnJumpPrev5.Click += (s, e) => MoveToFrame(_currentFrameIndex - 5);
+            btnPrevImage.Click += (s, e) => MoveToFrame(_currentFrameIndex - 1);
+            btnNextImage.Click += (s, e) => MoveToFrame(_currentFrameIndex + 1);
+            btnJumpNext5.Click += (s, e) => MoveToFrame(_currentFrameIndex + 5);
+            btnPlayPause.Click += BtnPlayPause_Click;
+            btnReversePlay.Click += BtnReversePlay_Click;
+            cmbSpeed.SelectedIndexChanged += CmbSpeed_SelectedIndexChanged;
+
+            pnlImageHost.Resize += (s, e) => PositionImageOverlays();
+            pnlAngleOverlay.Resize += (s, e) => ConfigureAngleOverlayLayout();
+            pnlAngleOverlay.Paint += PnlAngleOverlay_Paint;
+            FormClosed += Pliot_FormClosed;
+
+            ResizeModelColumns();
+            ConfigureLocationTrackBar();
+            ClearModelLabels();
+            DrawTubRequiredMessage();
+            ConfigureAngleOverlayLayout();
+            EnsureImageOverlayParent();
+            PositionImageOverlays();
+            picPilotImage.SendToBack();
+            pnlImageIndexOverlay.BringToFront();
+            pnlThrottleOverlay.BringToFront();
+            pnlAngleOverlay.BringToFront();
         }
 
-        // =====================================================
-        // RESIZE
-        // =====================================================
-
-        private void Form2_Resize(
-            object sender,
-            EventArgs e)
+        private async void BtnModelLoad_Click(object? sender, EventArgs e)
         {
-            UpdatePilotCardLayout();
-        }
+            using FolderBrowserDialog dialog = new FolderBrowserDialog();
+            dialog.Description = "모델 파일이 들어 있는 폴더 선택";
+            dialog.ShowNewFolderButton = false;
 
-        // =====================================================
-        // CARD ADD
-        // =====================================================
+            string initialDirectory = await GetWslHomeInitialDirectoryAsync();
+            if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
+            {
+                dialog.SelectedPath = initialDirectory;
+            }
 
-        private void BtnCardAdder_Click(
-            object sender,
-            EventArgs e)
-        {
-            if (
-                flowLayoutPanel1.Controls.Count
-                >= MaxCards)
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            int addedCount = AddModelsFromFolder(dialog.SelectedPath);
+            if (addedCount == 0)
             {
                 MessageBox.Show(
-                    "파일럿 카드는 최대 4개까지만 추가할 수 있습니다.");
-
+                    "선택한 폴더에서 모델 파일을 찾지 못했습니다.",
+                    "모델 파일",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
                 return;
             }
 
-            PilotCardControl card =
-                new PilotCardControl();
-
-            pilotCardCount++;
-
-            card.SetModelName(
-                $"테스트 모델 {pilotCardCount}");
-
-            card.SetAngles(
-                -15.2 + pilotCardCount * 2,
-                -12.6 + pilotCardCount * 1.5);
-
-            card.SetThrottles(
-                0.72 - (pilotCardCount * 0.1),
-                0.65 - (pilotCardCount * 0.05));
-
-            card.RemoveRequested +=
-                Card_RemoveRequested;
-
-            card.ModelSelectRequested +=
-                Card_ModelSelectRequested;
-
-            card.TubSelectRequested +=
-                Card_TubSelectRequested;
-
-            flowLayoutPanel1.Controls.Add(card);
-
-            BeginInvoke(
-                new Action(UpdatePilotCardLayout));
+            if (lvModelList.SelectedItems.Count == 0 && lvModelList.Items.Count > 0)
+            {
+                lvModelList.Items[^1].Selected = true;
+                lvModelList.Items[^1].Focused = true;
+            }
         }
 
-        // =====================================================
-        // REMOVE
-        // =====================================================
-
-        private void Card_RemoveRequested(
-            PilotCardControl card)
+        private static async Task<string> GetWslHomeInitialDirectoryAsync()
         {
-            flowLayoutPanel1.Controls.Remove(card);
+            DonkeyAsyncWorker.OperationResult<string> homeResult =
+                await DonkeyAsyncWorker.GetWslHomePathAsync(
+                    "Ubuntu-22.04",
+                    null,
+                    CancellationToken.None);
 
-            card.Dispose();
+            if (homeResult.Success && !string.IsNullOrWhiteSpace(homeResult.Data))
+            {
+                return homeResult.Data;
+            }
 
-            UpdatePilotCardLayout();
+            return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         }
 
-        // =====================================================
-        // MODEL SELECT
-        // =====================================================
-
-        private void Card_ModelSelectRequested(
-            PilotCardControl card)
+        public Task ReceiveSelectedModelFromPilotModelListAsync(string modelName, string modelPath)
         {
-            pendingModelCard = card;
+            AddOrSelectModel(modelName, modelPath);
+            if (_selectedModel == null)
+            {
+                return Task.CompletedTask;
+            }
 
-            PliotModelList modelList =
-                new PliotModelList();
+            return SelectModelAsync(_selectedModel);
+        }
 
-            // TODO: frmNewtrainer 폼의 리스트박스 존재 여부 확인 후 항목 복사
-            // if (/* frmNewtrainer 리스트박스에 항목 있음 */)
-            // {
-            //     modelList.LoadFromTrainerList();
-            // }
+        private int AddModelsFromFolder(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                return 0;
+            }
 
-            modelList.ModelSelected +=
-                (name, path) =>
+            string[] files = Directory.EnumerateFiles(folderPath, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(IsSupportedModelFile)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            int addedCount = 0;
+            foreach (string file in files)
+            {
+                if (AddModel(file))
                 {
-                    ApplySelectedModel(
-                        name,
-                        path,
-                        modelList);
-                };
+                    addedCount++;
+                }
+            }
 
-            modelList.Show(this);
+            ResizeModelColumns();
+            return addedCount;
         }
 
-        private void ApplySelectedModel(
-            string modelName,
-            string modelPath,
-            Form modelList)
+        private static bool IsSupportedModelFile(string filePath)
         {
-            if (pendingModelCard == null)
+            string extension = Path.GetExtension(filePath);
+            return string.Equals(extension, ".h5", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ConfigureAngleOverlayLayout()
+        {
+            pnlAngleOverlay.Height = 130;
+            pnlAngleOverlay.Width = Math.Max(420, pnlAngleOverlay.Width);
+            pnlAngleOverlay.Anchor = AnchorStyles.Bottom;
+            lblUserAngleValue.Dock = DockStyle.None;
+            lblPilotAngleValue.Dock = DockStyle.None;
+            lblUserAngleValue.Bounds = new Rectangle(14, pnlAngleOverlay.Height - 38, 132, 30);
+            lblPilotAngleValue.Bounds = new Rectangle(pnlAngleOverlay.Width - 146, pnlAngleOverlay.Height - 38, 132, 30);
+            lblUserAngleValue.TextAlign = ContentAlignment.MiddleLeft;
+            lblPilotAngleValue.TextAlign = ContentAlignment.MiddleRight;
+            pnlAngleCenterLine.Visible = false;
+        }
+
+        private void EnsureImageOverlayParent()
+        {
+            MoveOverlayToPictureBox(pnlImageIndexOverlay);
+            MoveOverlayToPictureBox(pnlThrottleOverlay);
+            MoveOverlayToPictureBox(pnlAngleOverlay);
+        }
+
+        private void MoveOverlayToPictureBox(Control overlay)
+        {
+            if (overlay.Parent == picPilotImage)
             {
                 return;
             }
 
-            pendingModelCard.SetModelFilePath(modelPath);
+            Point location = overlay.Location;
+            overlay.Parent?.Controls.Remove(overlay);
+            picPilotImage.Controls.Add(overlay);
+            overlay.Location = location;
+            overlay.BackColor = Color.FromArgb(120, 22, 26, 32);
+            overlay.BringToFront();
+        }
 
-            string? folderPath =
-                Path.GetDirectoryName(modelPath);
+        private void AddOrSelectModel(string modelName, string modelPath)
+        {
+            ModelListItem? existing = _models.FirstOrDefault(model =>
+                string.Equals(model.Path, modelPath, StringComparison.OrdinalIgnoreCase));
 
-            if (!string.IsNullOrWhiteSpace(folderPath))
+            if (existing == null)
             {
-                pendingModelCard.SetModelFolderPath(folderPath);
+                existing = new ModelListItem(modelName, modelPath);
+                _models.Add(existing);
+
+                ListViewItem item = new ListViewItem(_models.Count.ToString());
+                item.SubItems.Add(modelName);
+                item.SubItems.Add(modelPath);
+                item.Tag = existing;
+                lvModelList.Items.Add(item);
             }
 
-            pendingModelCard.SetModelName(modelName);
-
-            DonkeyAsyncWorker.PilotCardState cardState = new DonkeyAsyncWorker.PilotCardState
+            foreach (ListViewItem item in lvModelList.Items)
             {
-                ModelName = modelName,
-                ModelPath = modelPath
+                item.Selected = ReferenceEquals(item.Tag, existing);
+                item.Focused = item.Selected;
+            }
+
+            _selectedModel = existing;
+            ResizeModelColumns();
+        }
+
+        private bool AddModel(string modelPath)
+        {
+            string modelName = Path.GetFileNameWithoutExtension(modelPath);
+            if (_models.Any(model =>
+                string.Equals(model.Path, modelPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            ModelListItem model = new ModelListItem(modelName, modelPath);
+            _models.Add(model);
+
+            ListViewItem item = new ListViewItem(_models.Count.ToString());
+            item.SubItems.Add(modelName);
+            item.SubItems.Add(modelPath);
+            item.Tag = model;
+            lvModelList.Items.Add(item);
+            return true;
+        }
+
+        private void LvModelList_DoubleClick(object? sender, EventArgs e)
+        {
+            if (TryGetSelectedModel(out ModelListItem? model))
+            {
+                _ = SelectModelAsync(model!);
+            }
+        }
+
+        private async void LvModelList_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (!TryGetSelectedModel(out ModelListItem? model))
+            {
+                return;
+            }
+
+            await SelectModelAsync(model!);
+        }
+
+        private void LvModelList_ItemActivate(object? sender, EventArgs e)
+        {
+            if (TryGetSelectedModel(out ModelListItem? model))
+            {
+                _ = SelectModelAsync(model!);
+            }
+        }
+
+        private bool TryGetSelectedModel(out ModelListItem? model)
+        {
+            model = null;
+            if (lvModelList.SelectedItems.Count == 0)
+            {
+                return false;
+            }
+
+            model = lvModelList.SelectedItems[0].Tag as ModelListItem;
+            return model != null;
+        }
+
+        private async Task SelectModelAsync(ModelListItem model)
+        {
+            StopPlayback();
+            SaveCurrentModelViewState();
+            _selectedModel = model;
+            ApplyModelInfoToLabels(model);
+
+            if (model.IsLoaded)
+            {
+                RestoreCachedModel(model);
+                return;
+            }
+
+            await LoadSelectedModelAsync(model);
+        }
+
+        private void ApplyModelInfoToLabels(ModelListItem model)
+        {
+            lblSelectedModelName.Text = model.Name;
+            lblSelectedModelPath.Text = model.Path;
+            lblSelectedModelType.Text = string.IsNullOrWhiteSpace(model.ModelType) ? "-" : model.ModelType;
+            SetTubPathLabels(model.TubPath);
+        }
+
+        private void SetTubPathLabels(string? tubPath)
+        {
+            string displayPath = GetDisplayTubPath(tubPath);
+            lblSelectedTubPath.Text = displayPath;
+            lblTubPathValue.Text = displayPath;
+        }
+
+        private string GetDisplayTubPath(string? tubPath)
+        {
+            if (string.IsNullOrWhiteSpace(tubPath))
+            {
+                return "-";
+            }
+
+            string trimmed = tubPath.Trim();
+            if (trimmed.StartsWith("/mnt/", StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith("/home/", StringComparison.OrdinalIgnoreCase))
+            {
+                string distroName = _cardState?.WslDistroName ?? "Ubuntu-22.04";
+                string windowsPath = DonkeyAsyncWorker.ToWindowsPathFromWslPath(trimmed, distroName);
+                return string.IsNullOrWhiteSpace(windowsPath) ? trimmed : windowsPath;
+            }
+
+            return trimmed;
+        }
+
+        private void ClearModelLabels()
+        {
+            lblSelectedModelName.Text = "-";
+            lblSelectedModelPath.Text = "-";
+            lblSelectedModelType.Text = "-";
+            lblSelectedTubPath.Text = "-";
+            lblTubPathValue.Text = "-";
+            lblImageIndexOverlay.Text = "0 / 0";
+            lblCurrentIndex.Text = "0";
+            lblUserThrottleValue.Text = "-";
+            lblPilotThrottleValue.Text = "-";
+            lblUserAngleValue.Text = "-";
+            lblPilotAngleValue.Text = "-";
+        }
+
+        private void SaveCurrentModelViewState()
+        {
+            if (_selectedModel != null)
+            {
+                _selectedModel.CurrentFrameIndex = _currentFrameIndex;
+            }
+        }
+
+        private void RestoreCachedModel(ModelListItem model)
+        {
+            _cardState = model.CardState;
+            _frameList.Clear();
+            _frameList.AddRange(model.Frames.Select(CloneFrame));
+            _currentFrameIndex = Math.Max(0, Math.Min(model.CurrentFrameIndex, Math.Max(0, _frameList.Count - 1)));
+            ApplyModelInfoToLabels(model);
+            ConfigureLocationTrackBar();
+            ShowCurrentFrame();
+        }
+
+        private async Task LoadSelectedModelAsync(ModelListItem model)
+        {
+            _loadCts?.Cancel();
+            _loadCts = new CancellationTokenSource();
+            CancellationToken token = _loadCts.Token;
+
+            _cardState = new DonkeyAsyncWorker.PilotCardState
+            {
+                ModelName = model.Name,
+                ModelPath = model.Path
             };
 
-            pendingModelState = cardState;
-            _ = ReceiveSelectedModelFromPilotModelListAsync(modelName, modelPath);
-
-            pendingModelCard = null;
-
-            modelList.Close();
-        }
-
-        private void Card_TubSelectRequested(PilotCardControl card)
-        {
-            _ = SelectTubFolderAndConnectAsync(card);
-        }
-
-        private Task SelectTubFolderAndConnectAsync(
-            PilotCardControl card)
-        {
-            return SelectTubFolderAndConnectCoreAsync(card);
-        }
-
-        public async Task ReceiveSelectedModelFromPilotModelListAsync(
-            string modelName,
-            string modelPath)
-        {
-            if (pendingModelCard == null)
-            {
-                return;
-            }
-
-            modelLoadCts?.Cancel();
-            modelLoadCts = new CancellationTokenSource();
-            CancellationToken token = modelLoadCts.Token;
+            lblSelectedModelName.Text = model.Name;
+            lblSelectedModelPath.Text = model.Path;
+            lblSelectedModelType.Text = "-";
+            lblSelectedTubPath.Text = "-";
+            lblTubPathValue.Text = "-";
 
             using ProgressStatusForm progressForm = new ProgressStatusForm();
             progressForm.SetTitle("모델 데이터 연결 중...");
             progressForm.SetIndeterminate(true);
-            progressForm.CancelRequested += () => modelLoadCts?.Cancel();
+            progressForm.CancelRequested += () => _loadCts?.Cancel();
             progressForm.Show(this);
 
-            var progress = new Progress<DonkeyAsyncWorker.ProgressReport>(report =>
+            IProgress<DonkeyAsyncWorker.ProgressReport> progress = CreateProgress(progressForm);
+
+            try
+            {
+                DonkeyAsyncWorker.OperationResult<string> myCarResult =
+                    await DonkeyAsyncWorker.FindMyCarPathInWslAsync(
+                        _cardState.WslDistroName,
+                        progress,
+                        token);
+
+                if (!myCarResult.Success || string.IsNullOrWhiteSpace(myCarResult.Data))
+                {
+                    throw new InvalidOperationException(myCarResult.ErrorMessage);
+                }
+
+                _cardState.MyCarPath = myCarResult.Data;
+
+                DonkeyAsyncWorker.OperationResult<DonkeyAsyncWorker.PilotCardState> modelResult =
+                    await DonkeyAsyncWorker.LoadModelInfoFromDatabaseAsync(
+                        _cardState,
+                        progress,
+                        token);
+
+                if (!modelResult.Success || modelResult.Data == null)
+                {
+                    throw new InvalidOperationException(modelResult.ErrorMessage);
+                }
+
+                _cardState = modelResult.Data;
+                CacheCurrentModelInfo();
+                ApplyModelInfoToLabels(model);
+
+                string tubPath = _cardState.TrainingTubPaths.FirstOrDefault() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(tubPath))
+                {
+                    _frameList.Clear();
+                    ConfigureLocationTrackBar();
+                    DrawTubRequiredMessage();
+                    CacheCurrentModelFrames();
+                    progressForm.MarkCompleted("모델 정보 연결 완료, tub 데이터는 별도 입력이 필요합니다.");
+                    return;
+                }
+
+                await LoadTubFramesAsync(tubPath, progress, token);
+                await LoadAndMergeJudementAsync(progress, token);
+                ConfigureLocationTrackBar();
+                MoveToFrame(0);
+                CacheCurrentModelFrames();
+                progressForm.MarkCompleted("모델 데이터 연결 완료");
+            }
+            catch (OperationCanceledException)
+            {
+                progressForm.MarkCanceled("작업이 취소되었습니다.");
+            }
+            catch (Exception ex)
+            {
+                progressForm.MarkFailed($"오류: {ex.Message}");
+                MessageBox.Show(ex.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async void BtnTubInput_Click(object? sender, EventArgs e)
+        {
+            if (_cardState == null)
+            {
+                if (_selectedModel == null)
+                {
+                    MessageBox.Show("먼저 모델을 선택해 주세요.", "TUB 입력", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                _cardState = new DonkeyAsyncWorker.PilotCardState
+                {
+                    ModelName = _selectedModel.Name,
+                    ModelPath = _selectedModel.Path
+                };
+            }
+
+            using FolderBrowserDialog dialog = new FolderBrowserDialog();
+            dialog.Description = "tub 폴더 선택";
+            dialog.ShowNewFolderButton = false;
+
+            DonkeyAsyncWorker.OperationResult<string> homeResult =
+                await DonkeyAsyncWorker.GetWslHomePathAsync(
+                    _cardState.WslDistroName,
+                    null,
+                    CancellationToken.None);
+
+            if (homeResult.Success && !string.IsNullOrWhiteSpace(homeResult.Data))
+            {
+                dialog.SelectedPath = homeResult.Data;
+            }
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            string selectedPathWsl = DonkeyAsyncWorker.ToWslPathFromWindowsPath(dialog.SelectedPath);
+            _cardState.TrainingTubPaths = new List<string> { selectedPathWsl };
+            CacheCurrentModelInfo();
+            SetTubPathLabels(selectedPathWsl);
+
+            using ProgressStatusForm progressForm = new ProgressStatusForm();
+            progressForm.SetTitle("tub 데이터 연결 중...");
+            progressForm.SetIndeterminate(true);
+            progressForm.Show(this);
+
+            IProgress<DonkeyAsyncWorker.ProgressReport> progress = CreateProgress(progressForm);
+
+            try
+            {
+                await LoadTubFramesAsync(selectedPathWsl, progress, CancellationToken.None);
+                await LoadAndMergeJudementAsync(progress, CancellationToken.None);
+                ConfigureLocationTrackBar();
+                MoveToFrame(0);
+                CacheCurrentModelFrames();
+                progressForm.MarkCompleted("tub 데이터 연결 완료");
+            }
+            catch (Exception ex)
+            {
+                progressForm.MarkFailed($"오류: {ex.Message}");
+                MessageBox.Show(ex.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async void BtnGenerateJudement_Click(object? sender, EventArgs e)
+        {
+            if (_cardState == null || _selectedModel == null)
+            {
+                MessageBox.Show("먼저 모델을 선택해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (_cardState.TrainingTubPaths == null || _cardState.TrainingTubPaths.Count == 0)
+            {
+                MessageBox.Show("먼저 TUB 데이터를 연결해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using ProgressStatusForm progressForm = new ProgressStatusForm();
+            progressForm.SetTitle("AI 판단 데이터 생성 중...");
+            progressForm.SetIndeterminate(true);
+            progressForm.Show(this);
+
+            IProgress<DonkeyAsyncWorker.ProgressReport> progress = CreateProgress(progressForm);
+
+            try
+            {
+                DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> result =
+                    await DonkeyAsyncWorker.GenerateJudementAsync(
+                        _cardState,
+                        progress,
+                        CancellationToken.None);
+
+                if (!result.Success || result.Data == null)
+                {
+                    progressForm.MarkFailed(result.ErrorMessage);
+                    MessageBox.Show(result.ErrorMessage, "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                _cardState.JudementRecords = result.Data;
+                MergeJudementRecords(result.Data);
+                ShowCurrentFrame();
+                CacheCurrentModelFrames();
+                progressForm.MarkCompleted("AI 판단 데이터 생성 완료");
+            }
+            catch (Exception ex)
+            {
+                progressForm.MarkFailed($"오류: {ex.Message}");
+                MessageBox.Show(ex.Message, "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async Task LoadTubFramesAsync(
+            string tubPath,
+            IProgress<DonkeyAsyncWorker.ProgressReport> progress,
+            CancellationToken token)
+        {
+            if (_cardState == null)
+            {
+                return;
+            }
+
+            DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.PilotFrameData>> tubResult =
+                await DonkeyAsyncWorker.ParseSingleTubFolderAsync(
+                    tubPath,
+                    _cardState.WslDistroName,
+                    progress,
+                    token);
+
+            if ((!tubResult.Success || tubResult.Data == null || tubResult.Data.Count == 0)
+                && tubPath.StartsWith("/", StringComparison.Ordinal))
+            {
+                string windowsTubPath = DonkeyAsyncWorker.ToWindowsPathFromWslPath(
+                    tubPath,
+                    _cardState.WslDistroName);
+
+                if (!string.IsNullOrWhiteSpace(windowsTubPath)
+                    && !string.Equals(windowsTubPath, tubPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    progress.Report(new DonkeyAsyncWorker.ProgressReport
+                    {
+                        Log = $"Windows tub 寃쎈줈濡? ?ъ떆 ?쎄린: {windowsTubPath}"
+                    });
+
+                    tubResult = await DonkeyAsyncWorker.ParseSingleTubFolderAsync(
+                        windowsTubPath,
+                        _cardState.WslDistroName,
+                        progress,
+                        token);
+                }
+            }
+
+            _frameList.Clear();
+            if (!tubResult.Success || tubResult.Data == null || tubResult.Data.Count == 0)
+            {
+                ConfigureLocationTrackBar();
+                DrawTubRequiredMessage();
+                return;
+            }
+
+            _frameList.AddRange(tubResult.Data);
+            _currentFrameIndex = 0;
+        }
+
+        private async Task LoadAndMergeJudementAsync(
+            IProgress<DonkeyAsyncWorker.ProgressReport> progress,
+            CancellationToken token)
+        {
+            if (_cardState == null || _frameList.Count == 0)
+            {
+                return;
+            }
+
+            DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> result =
+                await DonkeyAsyncWorker.CheckOrLoadJudementAsync(_cardState, progress, token);
+
+            if (!result.Success || result.Data == null || result.Data.Count == 0)
+            {
+                progress.Report(new DonkeyAsyncWorker.ProgressReport
+                {
+                    Log = "AI 판단 데이터가 아직 없습니다. 생성 버튼을 눌러 생성하세요."
+                });
+                return;
+            }
+
+            _cardState.JudementRecords = result.Data;
+            MergeJudementRecords(result.Data);
+        }
+
+        private void MergeJudementRecords(List<DonkeyAsyncWorker.JudementRecord> records)
+        {
+            Dictionary<int, DonkeyAsyncWorker.JudementRecord> byIndex =
+                records.GroupBy(record => record.Index)
+                    .ToDictionary(group => group.Key, group => group.Last());
+
+            Dictionary<string, DonkeyAsyncWorker.JudementRecord> byImage =
+                records.Where(record => !string.IsNullOrWhiteSpace(record.ImagePath))
+                    .GroupBy(record => Path.GetFileName(record.ImagePath), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (DonkeyAsyncWorker.PilotFrameData frame in _frameList)
+            {
+                DonkeyAsyncWorker.JudementRecord? match = null;
+                if (!byIndex.TryGetValue(frame.Index, out match))
+                {
+                    string fileName = Path.GetFileName(frame.ImagePath);
+                    if (!string.IsNullOrWhiteSpace(fileName))
+                    {
+                        byImage.TryGetValue(fileName, out match);
+                    }
+                }
+
+                if (match == null)
+                {
+                    continue;
+                }
+
+                frame.PilotAngle = match.PilotAngle;
+                frame.PilotThrottle = match.PilotThrottle;
+            }
+        }
+
+        private void CacheCurrentModelInfo()
+        {
+            if (_selectedModel == null || _cardState == null)
+            {
+                return;
+            }
+
+            _selectedModel.CardState = _cardState;
+            _selectedModel.ModelType = _cardState.ModelType;
+            _selectedModel.TubPath = _cardState.TrainingTubPaths.FirstOrDefault() ?? string.Empty;
+        }
+
+        private void CacheCurrentModelFrames()
+        {
+            if (_selectedModel == null || _cardState == null)
+            {
+                return;
+            }
+
+            _selectedModel.CardState = _cardState;
+            _selectedModel.ModelType = _cardState.ModelType;
+            _selectedModel.TubPath = _cardState.TrainingTubPaths.FirstOrDefault() ?? string.Empty;
+            _selectedModel.Frames = _frameList.Select(CloneFrame).ToList();
+            _selectedModel.CurrentFrameIndex = _currentFrameIndex;
+            _selectedModel.IsLoaded = true;
+            ApplyModelInfoToLabels(_selectedModel);
+        }
+
+        private static DonkeyAsyncWorker.PilotFrameData CloneFrame(DonkeyAsyncWorker.PilotFrameData frame)
+        {
+            return new DonkeyAsyncWorker.PilotFrameData
+            {
+                Index = frame.Index,
+                TubPath = frame.TubPath,
+                ImagePath = frame.ImagePath,
+                UserAngle = frame.UserAngle,
+                UserThrottle = frame.UserThrottle,
+                PilotAngle = frame.PilotAngle,
+                PilotThrottle = frame.PilotThrottle,
+                Mode = frame.Mode
+            };
+        }
+
+        private static IProgress<DonkeyAsyncWorker.ProgressReport> CreateProgress(
+            ProgressStatusForm progressForm)
+        {
+            return new Progress<DonkeyAsyncWorker.ProgressReport>(report =>
             {
                 if (!string.IsNullOrWhiteSpace(report.Title))
                 {
@@ -292,556 +763,392 @@ namespace Data_Manager
 
                 progressForm.SetIndeterminate(report.IsIndeterminate);
             });
-
-            try
-            {
-                await LoadPilotCardFromSelectedModelAsync(
-                    pendingModelCard,
-                    modelName,
-                    modelPath,
-                    progress,
-                    token);
-
-                progressForm.MarkCompleted("모델 데이터 연결 완료");
-            }
-            catch (OperationCanceledException)
-            {
-                progressForm.MarkCanceled("작업이 취소되었습니다.");
-            }
-            catch (Exception ex)
-            {
-                progressForm.MarkFailed($"오류: {ex.Message}");
-                MessageBox.Show(ex.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
         }
 
-        private async Task LoadPilotCardFromSelectedModelAsync(
-            PilotCardControl card,
-            string modelName,
-            string modelPath,
-            IProgress<DonkeyAsyncWorker.ProgressReport> progress,
-            CancellationToken token)
+        private void ConfigureLocationTrackBar()
         {
-            DonkeyAsyncWorker.PilotCardState cardState = new DonkeyAsyncWorker.PilotCardState
-            {
-                ModelName = modelName,
-                ModelPath = modelPath
-            };
+            _isUpdatingTrackBar = true;
 
-            progress.Report(new DonkeyAsyncWorker.ProgressReport
+            if (_frameList.Count == 0)
             {
-                Step = "저장된 mycar 경로 확인 중...",
-                Log = "설정 파일에서 mycar 경로를 확인합니다.",
-                IsIndeterminate = true
-            });
-
-            DonkeyAsyncWorker.OperationResult<string> myCarResult =
-                await DonkeyAsyncWorker.FindMyCarPathInWslAsync(
-                    cardState.WslDistroName,
-                    progress,
-                    token);
-
-            if (!myCarResult.Success || string.IsNullOrWhiteSpace(myCarResult.Data))
-            {
-                throw new InvalidOperationException(myCarResult.ErrorMessage);
+                trbLocation.Minimum = 0;
+                trbLocation.Maximum = 0;
+                trbLocation.Value = 0;
+                trbLocation.Enabled = false;
+                lblCurrentIndex.Text = "0";
+                _isUpdatingTrackBar = false;
+                return;
             }
 
-            cardState.MyCarPath = myCarResult.Data;
+            _currentFrameIndex = Math.Max(0, Math.Min(_currentFrameIndex, _frameList.Count - 1));
+            trbLocation.Minimum = 0;
+            trbLocation.Maximum = _frameList.Count - 1;
+            trbLocation.SmallChange = 1;
+            trbLocation.LargeChange = Math.Max(1, _frameList.Count / 20);
+            trbLocation.TickFrequency = Math.Max(1, _frameList.Count / 20);
+            trbLocation.Value = _currentFrameIndex;
+            trbLocation.Enabled = true;
+            lblCurrentIndex.Text = (_currentFrameIndex + 1).ToString();
 
-            DonkeyAsyncWorker.OperationResult<DonkeyAsyncWorker.PilotCardState> modelResult =
-                await DonkeyAsyncWorker.LoadModelInfoFromDatabaseAsync(
-                    cardState,
-                    progress,
-                    token);
-
-            if (!modelResult.Success || modelResult.Data == null)
-            {
-                throw new InvalidOperationException(modelResult.ErrorMessage);
-            }
-
-            cardState = modelResult.Data;
-
-            progress.Report(new DonkeyAsyncWorker.ProgressReport
-            {
-                Step = "tub 데이터 파싱 중...",
-                Log = "학습 tub 데이터를 비동기로 파싱합니다.",
-                IsIndeterminate = true
-            });
-
-            DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.PilotFrameData>> tubResult =
-                await DonkeyAsyncWorker.ParseSingleTubFolderAsync(
-                    cardState.TrainingTubPaths.FirstOrDefault() ?? string.Empty,
-                    cardState.WslDistroName,
-                    progress,
-                    token);
-
-            await InvokeAsync(() =>
-            {
-                if (!tubResult.Success || tubResult.Data == null || tubResult.Data.Count == 0)
-                {
-                    cardState.IsTubConnected = false;
-                    DrawTubRequiredMessage(card.GetDrivePictureBox());
-                    SetFrameList(new List<DonkeyAsyncWorker.PilotFrameData>(), cardState.WslDistroName, card);
-                    return;
-                }
-
-                cardState.IsTubConnected = true;
-                SetFrameList(tubResult.Data, cardState.WslDistroName, card);
-            });
-
-            DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> judementResult =
-                await DonkeyAsyncWorker.CheckOrLoadJudementAsync(
-                    cardState,
-                    progress,
-                    token);
-
-            if (!judementResult.Success)
-            {
-                progress.Report(new DonkeyAsyncWorker.ProgressReport
-                {
-                    Log = "AI 판단 데이터가 아직 없습니다. 생성 버튼을 눌러 생성하세요."
-                });
-            }
-
-            pendingModelState = cardState;
+            _isUpdatingTrackBar = false;
         }
 
-        private async Task SelectTubFolderAndConnectCoreAsync(PilotCardControl card)
+        private void trbLocation_ValueChanged(object? sender, EventArgs e)
         {
-            using FolderBrowserDialog dialog = new FolderBrowserDialog();
-            dialog.Description = "tub 폴더 선택";
-
-            DonkeyAsyncWorker.OperationResult<string> homeResult =
-                await DonkeyAsyncWorker.GetWslHomePathAsync(
-                    pendingModelState?.WslDistroName ?? "Ubuntu-22.04",
-                    null,
-                    CancellationToken.None);
-
-            if (homeResult.Success && !string.IsNullOrWhiteSpace(homeResult.Data))
-            {
-                dialog.SelectedPath = homeResult.Data;
-            }
-
-            if (dialog.ShowDialog() != DialogResult.OK)
+            if (_isUpdatingTrackBar || _frameList.Count == 0)
             {
                 return;
             }
 
-            if (pendingModelState == null)
+            _currentFrameIndex = trbLocation.Value;
+            ShowCurrentFrame();
+            CacheCurrentModelFrames();
+        }
+
+        private void TrbLocation_MouseDown(object? sender, MouseEventArgs e)
+        {
+            if (_frameList.Count == 0 || e.Button != MouseButtons.Left)
             {
-                pendingModelState = new DonkeyAsyncWorker.PilotCardState
-                {
-                    ModelName = card.GetModelName(),
-                    ModelPath = card.GetModelFilePath()
-                };
-            }
-
-            pendingModelState.TrainingTubPaths = new List<string>
-            {
-                DonkeyAsyncWorker.ToWslPathFromWindowsPath(dialog.SelectedPath)
-            };
-
-            using ProgressStatusForm progressForm = new ProgressStatusForm();
-            progressForm.SetTitle("tub 데이터 연결 중...");
-            progressForm.SetIndeterminate(true);
-            progressForm.Show(this);
-
-            var progress = new Progress<DonkeyAsyncWorker.ProgressReport>(report =>
-            {
-                if (!string.IsNullOrWhiteSpace(report.Step))
-                {
-                    progressForm.SetStep(report.Step);
-                }
-
-                if (!string.IsNullOrWhiteSpace(report.Log))
-                {
-                    progressForm.AppendLog(report.Log);
-                }
-
-                progressForm.SetIndeterminate(report.IsIndeterminate);
-            });
-
-            string selectedPathWsl =
-                DonkeyAsyncWorker.ToWslPathFromWindowsPath(dialog.SelectedPath);
-
-            DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.PilotFrameData>> tubResult =
-                await DonkeyAsyncWorker.ParseSingleTubFolderAsync(
-                    selectedPathWsl,
-                    pendingModelState.WslDistroName,
-                    progress,
-                    CancellationToken.None);
-
-            if (!tubResult.Success || tubResult.Data == null || tubResult.Data.Count == 0)
-            {
-                DrawTubRequiredMessage(card.GetDrivePictureBox());
-                SetFrameList(new List<DonkeyAsyncWorker.PilotFrameData>(), pendingModelState.WslDistroName, card);
-                progressForm.MarkFailed("tub 데이터를 찾지 못했습니다.");
                 return;
             }
 
-            pendingModelState.IsTubConnected = true;
-            pendingModelState.TrainingTubPaths = new List<string>
-            {
-                selectedPathWsl
-            };
+            int channelWidth = Math.Max(1, trbLocation.ClientSize.Width);
+            double ratio = Math.Max(0.0, Math.Min(1.0, e.X / (double)channelWidth));
+            int targetValue = trbLocation.Minimum
+                + (int)Math.Round((trbLocation.Maximum - trbLocation.Minimum) * ratio);
 
-            SetFrameList(tubResult.Data, pendingModelState.WslDistroName, card);
-            card.SetTubFolderPath(pendingModelState.TrainingTubPaths.FirstOrDefault() ?? string.Empty);
-            progressForm.MarkCompleted("tub 데이터 연결 완료");
+            MoveToFrame(targetValue);
         }
 
-        private async Task InvokeAsync(Action action)
+        private void MoveToFrame(int newIndex)
         {
-            if (InvokeRequired)
+            if (_frameList.Count == 0)
             {
-                await Task.Run(() => Invoke(action));
+                StopPlayback();
+                ShowCurrentFrame();
                 return;
             }
 
-            action();
+            int boundedIndex = Math.Max(0, Math.Min(newIndex, _frameList.Count - 1));
+            _currentFrameIndex = boundedIndex;
+            ShowCurrentFrame();
+            SaveCurrentModelViewState();
+
+            if ((_isPlaying && boundedIndex == _frameList.Count - 1)
+                || (_isReversePlaying && boundedIndex == 0))
+            {
+                StopPlayback();
+            }
         }
 
-        private void ShowImageInPictureBox(
-            PictureBox pictureBox,
-            string imagePath,
-            string distroName)
+        private void ShowCurrentFrame()
         {
-            pictureBox.SizeMode = PictureBoxSizeMode.Zoom;
-
-            if (pictureBox.Image != null)
+            if (_frameList.Count == 0)
             {
-                pictureBox.Image.Dispose();
-                pictureBox.Image = null;
+                lblImageIndexOverlay.Text = "0 / 0";
+                lblCurrentIndex.Text = "0";
+                lblUserThrottleValue.Text = "-";
+                lblPilotThrottleValue.Text = "-";
+                lblUserAngleValue.Text = "-";
+                lblPilotAngleValue.Text = "-";
+                DrawTubRequiredMessage();
+                ConfigureLocationTrackBar();
+                pnlAngleOverlay.Invalidate();
+                return;
             }
+
+            _currentFrameIndex = Math.Max(0, Math.Min(_currentFrameIndex, _frameList.Count - 1));
+            DonkeyAsyncWorker.PilotFrameData frame = _frameList[_currentFrameIndex];
+
+            ShowImageInPictureBox(frame.ImagePath);
+            PositionImageOverlays();
+            lblImageIndexOverlay.Text = $"{_currentFrameIndex + 1} / {_frameList.Count}";
+            lblCurrentIndex.Text = (_currentFrameIndex + 1).ToString();
+            lblUserThrottleValue.Text = FormatNullable(frame.UserThrottle);
+            lblPilotThrottleValue.Text = FormatNullable(frame.PilotThrottle);
+            lblUserAngleValue.Text = FormatNullable(frame.UserAngle);
+            lblPilotAngleValue.Text = FormatNullable(frame.PilotAngle);
+            pnlAngleOverlay.Invalidate();
+
+            _isUpdatingTrackBar = true;
+            trbLocation.Value = _currentFrameIndex;
+            _isUpdatingTrackBar = false;
+        }
+
+        private void ShowImageInPictureBox(string imagePath)
+        {
+            DisposeCurrentImage();
 
             if (string.IsNullOrWhiteSpace(imagePath))
             {
-                DrawImageMissingMessage(pictureBox);
+                DrawImageMissingMessage();
                 return;
             }
 
+            string distroName = _cardState?.WslDistroName ?? "Ubuntu-22.04";
             string windowsPath = DonkeyAsyncWorker.ToWindowsPathFromWslPath(imagePath, distroName);
             if (!File.Exists(windowsPath))
             {
-                DrawImageMissingMessage(pictureBox);
+                DrawImageMissingMessage();
                 return;
             }
 
-            using (var stream = new FileStream(windowsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            using (var image = Image.FromStream(stream))
-            {
-                pictureBox.Image = new Bitmap(image);
-            }
+            using FileStream stream = new FileStream(windowsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using Image image = Image.FromStream(stream);
+            picPilotImage.Image = new Bitmap(image);
+            picPilotImage.SendToBack();
         }
 
-        private void DrawTubRequiredMessage(PictureBox pictureBox)
+        private void DrawTubRequiredMessage()
         {
-            if (pictureBox.Image != null)
-            {
-                pictureBox.Image.Dispose();
-                pictureBox.Image = null;
-            }
+            DrawMessageImage("tub 데이터 필요");
+        }
 
-            Bitmap bmp = new Bitmap(pictureBox.Width, pictureBox.Height);
+        private void DrawImageMissingMessage()
+        {
+            DrawMessageImage("이미지 없음");
+        }
+
+        private void DrawMessageImage(string text)
+        {
+            DisposeCurrentImage();
+
+            int width = Math.Max(320, picPilotImage.Width);
+            int height = Math.Max(180, picPilotImage.Height);
+            Bitmap bmp = new Bitmap(width, height);
+
             using (Graphics g = Graphics.FromImage(bmp))
-            using (Font font = new Font("맑은 고딕", 16, FontStyle.Bold))
-            using (Brush brush = new SolidBrush(Color.Gray))
+            using (Font font = new Font("맑은 고딕", 18, FontStyle.Bold))
+            using (Brush brush = new SolidBrush(Color.Gainsboro))
             {
-                g.Clear(Color.LightGray);
-                string text = "tub 데이터 필요";
+                g.Clear(Color.FromArgb(35, 39, 44));
                 SizeF size = g.MeasureString(text, font);
-                float x = (bmp.Width - size.Width) / 2;
-                float y = (bmp.Height - size.Height) / 2;
+                float x = (width - size.Width) / 2;
+                float y = (height - size.Height) / 2;
                 g.DrawString(text, font, brush, x, y);
             }
 
-            pictureBox.Image = bmp;
+            picPilotImage.Image = bmp;
+            picPilotImage.SendToBack();
         }
 
-        private void DrawImageMissingMessage(PictureBox pictureBox)
+        private void DisposeCurrentImage()
         {
-            if (pictureBox.Image != null)
+            if (picPilotImage.Image != null)
             {
-                pictureBox.Image.Dispose();
-                pictureBox.Image = null;
+                Image oldImage = picPilotImage.Image;
+                picPilotImage.Image = null;
+                oldImage.Dispose();
             }
-
-            Bitmap bmp = new Bitmap(pictureBox.Width, pictureBox.Height);
-            using (Graphics g = Graphics.FromImage(bmp))
-            using (Font font = new Font("맑은 고딕", 16, FontStyle.Bold))
-            using (Brush brush = new SolidBrush(Color.Gray))
-            {
-                g.Clear(Color.LightGray);
-                string text = "이미지 없음";
-                SizeF size = g.MeasureString(text, font);
-                float x = (bmp.Width - size.Width) / 2;
-                float y = (bmp.Height - size.Height) / 2;
-                g.DrawString(text, font, brush, x, y);
-            }
-
-            pictureBox.Image = bmp;
         }
 
-        private void SetFrameList(
-            List<DonkeyAsyncWorker.PilotFrameData> frames,
-            string distroName,
-            PilotCardControl card)
+        private static string FormatNullable(double? value)
         {
-            currentFrames.Clear();
-            currentFrames.AddRange(frames);
+            return value.HasValue ? value.Value.ToString("0.00") : "-";
+        }
 
-            if (currentFrames.Count == 0)
+        private void BtnPlayPause_Click(object? sender, EventArgs e)
+        {
+            if (_isPlaying)
             {
-                currentFrameIndex = -1;
-                UpdateFrameIndicator();
+                StopPlayback();
                 return;
             }
 
-            currentFrameIndex = 0;
-            ShowCurrentFrame(distroName, card);
+            _isPlaying = true;
+            _isReversePlaying = false;
+            btnPlayPause.Text = "Ⅱ";
+            btnReversePlay.Text = "◀";
+            StartPlaybackTimer();
         }
 
-        private void ShowCurrentFrame(string distroName, PilotCardControl card)
+        private void BtnReversePlay_Click(object? sender, EventArgs e)
         {
-            if (currentFrameIndex < 0 || currentFrameIndex >= currentFrames.Count)
+            if (_isReversePlaying)
             {
-                UpdateFrameIndicator();
+                StopPlayback();
                 return;
             }
 
-            DonkeyAsyncWorker.PilotFrameData frame =
-                currentFrames[currentFrameIndex];
-
-            ShowImageInPictureBox(
-                card.GetDrivePictureBox(),
-                frame.ImagePath,
-                distroName);
-
-            UpdateFrameIndicator();
+            _isReversePlaying = true;
+            _isPlaying = false;
+            btnReversePlay.Text = "Ⅱ";
+            btnPlayPause.Text = "▶";
+            StartPlaybackTimer();
         }
 
-        private void UpdateFrameIndicator()
+        private void PlaybackTimer_Tick(object? sender, EventArgs e)
         {
-            // TODO: 파일럿 카드 내부 트랙바/라벨과 연동할 때 현재 프레임 인덱스를 표시합니다.
+            if (_frameList.Count == 0)
+            {
+                StopPlayback();
+                return;
+            }
+
+            MoveToFrame(_isReversePlaying ? _currentFrameIndex - 1 : _currentFrameIndex + 1);
         }
 
-        // TODO: 파일럿 카드 내부 트랙바 추가 후 이벤트와 범위 설정 로직을 구현합니다.
-
-        // =====================================================
-        // PANEL CAPTURE
-        // =====================================================
-
-        // =====================================================
-        // CARD LAYOUT
-        // =====================================================
-
-        private void UpdatePilotCardLayout()
+        private void CmbSpeed_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            int count =
-                flowLayoutPanel1.Controls.Count;
+            string selected = cmbSpeed.SelectedItem?.ToString() ?? "1.0x";
+            string numeric = selected.Replace("x", string.Empty);
+            if (!double.TryParse(numeric, out _playbackSpeed))
+            {
+                _playbackSpeed = 1.0;
+            }
 
-            if (count == 0)
+            if (_playbackTimer != null)
+            {
+                _playbackTimer.Interval = GetPlaybackInterval();
+            }
+        }
+
+        private void StartPlaybackTimer()
+        {
+            if (_frameList.Count == 0 || _playbackTimer == null)
+            {
+                StopPlayback();
+                return;
+            }
+
+            _playbackTimer.Interval = GetPlaybackInterval();
+            _playbackTimer.Start();
+        }
+
+        private void StopPlayback()
+        {
+            _playbackTimer?.Stop();
+            _isPlaying = false;
+            _isReversePlaying = false;
+            btnPlayPause.Text = "▶";
+            btnReversePlay.Text = "◀";
+        }
+
+        private int GetPlaybackInterval()
+        {
+            return _playbackSpeed switch
+            {
+                0.5 => 300,
+                2.0 => 75,
+                3.0 => 50,
+                _ => 150
+            };
+        }
+
+        private void PositionImageOverlays()
+        {
+            EnsureImageOverlayParent();
+
+            int hostWidth = picPilotImage.ClientSize.Width;
+            int hostHeight = picPilotImage.ClientSize.Height;
+
+            ConfigureAngleOverlayLayout();
+            pnlImageIndexOverlay.Location = new Point(12, 12);
+            pnlThrottleOverlay.Location = new Point(
+                12,
+                Math.Max(82, (hostHeight - pnlThrottleOverlay.Height) / 2));
+
+            pnlAngleOverlay.Location = new Point(
+                Math.Max(12, (hostWidth - pnlAngleOverlay.Width) / 2),
+                Math.Max(12, hostHeight - (pnlAngleOverlay.Height * 2) - 18));
+
+            picPilotImage.SendToBack();
+            pnlImageIndexOverlay.BringToFront();
+            pnlThrottleOverlay.BringToFront();
+            pnlAngleOverlay.BringToFront();
+            pnlAngleOverlay.Invalidate();
+        }
+
+        private void PnlAngleOverlay_Paint(object? sender, PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            int centerX = pnlAngleOverlay.Width / 2;
+            int centerY = 74;
+            int length = Math.Min(185, Math.Max(130, pnlAngleOverlay.Width / 2 - 34));
+
+            using Pen centerPen = new Pen(Color.FromArgb(190, Color.Gainsboro), 3);
+            using Pen axisPen = new Pen(Color.FromArgb(90, Color.White), 2);
+            using Pen userPen = new Pen(Color.Lime, 6);
+            using Pen pilotPen = new Pen(Color.DeepSkyBlue, 6);
+            using Brush titleBrush = new SolidBrush(Color.White);
+            using Font titleFont = new Font("맑은 고딕", 9F, FontStyle.Bold);
+
+            e.Graphics.DrawLine(centerPen, centerX, 18, centerX, centerY + 18);
+            e.Graphics.DrawLine(axisPen, centerX - length, centerY, centerX + length, centerY);
+            e.Graphics.DrawString("User Angle", titleFont, titleBrush, 14, 12);
+            e.Graphics.DrawString("AI Angle", titleFont, titleBrush, pnlAngleOverlay.Width - 82, 12);
+            DrawAngleLine(e.Graphics, userPen, centerX, centerY, length, GetCurrentAngleValue(true));
+            DrawAngleLine(e.Graphics, pilotPen, centerX, centerY, length, GetCurrentAngleValue(false));
+        }
+
+        private double? GetCurrentAngleValue(bool userAngle)
+        {
+            if (_frameList.Count == 0 || _currentFrameIndex < 0 || _currentFrameIndex >= _frameList.Count)
+            {
+                return null;
+            }
+
+            DonkeyAsyncWorker.PilotFrameData frame = _frameList[_currentFrameIndex];
+            return userAngle ? frame.UserAngle : frame.PilotAngle;
+        }
+
+        private static void DrawAngleLine(Graphics graphics, Pen pen, int centerX, int centerY, int length, double? angle)
+        {
+            if (!angle.HasValue)
             {
                 return;
             }
 
-            int availableWidth =
-                flowLayoutPanel1.ClientSize.Width -
-                flowLayoutPanel1.Padding.Left -
-                flowLayoutPanel1.Padding.Right;
+            double clamped = Math.Max(-1.0, Math.Min(1.0, angle.Value));
+            double radians = clamped * Math.PI / 3.0;
+            int endX = centerX + (int)(Math.Sin(radians) * length);
+            int endY = centerY - (int)(Math.Cos(radians) * length);
 
-            int totalGap =
-                CardGap * (count - 1);
-
-            int cardWidth =
-                (availableWidth - totalGap) / count;
-
-            int availableHeight =
-                flowLayoutPanel1.ClientSize.Height -
-                flowLayoutPanel1.Padding.Top -
-                flowLayoutPanel1.Padding.Bottom;
-
-            int cardHeight =
-                availableHeight;
-
-            foreach (Control control
-                in flowLayoutPanel1.Controls)
-            {
-                control.Margin =
-                    new Padding(0, 0, CardGap, 0);
-
-                control.Size =
-                    new Size(cardWidth, cardHeight);
-            }
-
-            if (
-                flowLayoutPanel1.Controls.Count > 0)
-            {
-                flowLayoutPanel1.Controls[^1]
-                    .Margin = new Padding(0);
-            }
+            graphics.DrawLine(pen, centerX, centerY, endX, endY);
+            using Brush brush = new SolidBrush(pen.Color);
+            graphics.FillEllipse(brush, endX - 5, endY - 5, 10, 10);
         }
 
-        // =====================================================
-        // LOAD DATA BUTTON
-        // =====================================================
-
-        private void btnLoadData1_Click(
-            object sender,
-            EventArgs e)
+        private void ResizeModelColumns()
         {
-            using (FolderBrowserDialog fbd =
-                new FolderBrowserDialog())
-            {
-                fbd.Description =
-                    "mycar/data 폴더 선택";
-
-                if (
-                    fbd.ShowDialog() ==
-                    DialogResult.OK)
-                {
-                    selectedDataPath =
-                        fbd.SelectedPath;
-
-                    integratedCatalogList.Clear();
-
-                    string[] catalogFiles =
-                        Directory.GetFiles(
-                            selectedDataPath,
-                            "catalog_*.catalog");
-
-                    Array.Sort(catalogFiles);
-
-                    foreach (
-                        string catalogPath
-                        in catalogFiles)
-                    {
-                        string[] lines =
-                            File.ReadAllLines(
-                                catalogPath);
-
-                        for (
-                            int i = 0;
-                            i < lines.Length;
-                            i++)
-                        {
-                            string line =
-                                lines[i];
-
-                            if (
-                                string.IsNullOrWhiteSpace(
-                                    line))
-                            {
-                                continue;
-                            }
-
-                            CatalogRecord record =
-                                new CatalogRecord()
-                                {
-                                    OriginalLine =
-                                        line,
-
-                                    SourceFilePath =
-                                        catalogPath,
-
-                                    LineIndex =
-                                        i,
-
-                                    ImageFileName =
-                                        ExtractJsonValue(
-                                            line,
-                                            "cam/image_array"),
-
-                                    Angle =
-                                        ExtractJsonValue(
-                                            line,
-                                            "user/angle"),
-
-                                    Throttle =
-                                        ExtractJsonValue(
-                                            line,
-                                            "user/throttle"),
-
-                                    Index =
-                                        ExtractJsonValue(
-                                            line,
-                                            "_index")
-                                };
-
-                            integratedCatalogList
-                                .Add(record);
-                        }
-                    }
-
-                    MessageBox.Show(
-                        $"총 {integratedCatalogList.Count}개 프레임 로드 완료");
-                }
-            }
+            int width = Math.Max(360, lvModelList.ClientSize.Width);
+            colModelNo.Width = Math.Max(45, width / 8);
+            colModelName.Width = Math.Max(120, width * 3 / 8);
+            colModelPath.Width = Math.Max(160, width - colModelNo.Width - colModelName.Width - 8);
         }
 
-        // =====================================================
-        // JSON VALUE
-        // =====================================================
-
-        private string ExtractJsonValue(
-            string json,
-            string key)
+        private void Pliot_FormClosed(object? sender, FormClosedEventArgs e)
         {
-            try
+            _loadCts?.Cancel();
+            _loadCts?.Dispose();
+            _playbackTimer?.Stop();
+            _playbackTimer?.Dispose();
+            DisposeCurrentImage();
+        }
+
+        private sealed class ModelListItem
+        {
+            public ModelListItem(string name, string path)
             {
-                string searchKey =
-                    $"\"{key}\":";
-
-                int startIdx =
-                    json.IndexOf(searchKey);
-
-                if (startIdx == -1)
-                    return "";
-
-                startIdx +=
-                    searchKey.Length;
-
-                while (
-                    startIdx < json.Length &&
-                    json[startIdx] == ' ')
-                {
-                    startIdx++;
-                }
-
-                if (json[startIdx] == '"')
-                {
-                    startIdx++;
-
-                    int endIdx =
-                        json.IndexOf(
-                            '"',
-                            startIdx);
-
-                    return json.Substring(
-                        startIdx,
-                        endIdx - startIdx);
-                }
-                else
-                {
-                    int endIdx =
-                        json.IndexOfAny(
-                            new char[]
-                            {
-                                ',',
-                                '}'
-                            },
-                            startIdx);
-
-                    return json.Substring(
-                        startIdx,
-                        endIdx - startIdx)
-                        .Trim();
-                }
+                Name = name;
+                Path = path;
             }
-            catch
-            {
-                return "";
-            }
+
+            public string Name { get; }
+            public string Path { get; }
+            public string ModelType { get; set; } = string.Empty;
+            public string TubPath { get; set; } = string.Empty;
+            public int CurrentFrameIndex { get; set; }
+            public bool IsLoaded { get; set; }
+            public DonkeyAsyncWorker.PilotCardState? CardState { get; set; }
+            public List<DonkeyAsyncWorker.PilotFrameData> Frames { get; set; } =
+                new List<DonkeyAsyncWorker.PilotFrameData>();
+        }
+
+        private void picPilotImage_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }

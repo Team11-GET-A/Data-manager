@@ -86,6 +86,38 @@ namespace Data_Manager
                 ? ToWindowsPathFromWslPath(normalizedTubPath, distroName)
                 : normalizedTubPath;
 
+            tubPathWindows = ResolveExistingWindowsPath(tubPathWindows);
+
+            if (!Directory.Exists(tubPathWindows) && !isWslPathInput)
+            {
+                string normalizedWindowsPath = normalizedTubPath.Replace('/', '\\');
+                normalizedWindowsPath = ResolveExistingWindowsPath(normalizedWindowsPath);
+                if (Directory.Exists(normalizedWindowsPath))
+                {
+                    tubPathWindows = normalizedWindowsPath;
+                    tubPathWsl = ToWslPathFromWindowsPath(normalizedWindowsPath);
+                }
+            }
+
+            if (!Directory.Exists(tubPathWindows))
+            {
+                string resolvedWindowsPath = ResolveExistingWslWindowsPath(tubPathWindows, distroName);
+                if (!string.Equals(resolvedWindowsPath, tubPathWindows, StringComparison.OrdinalIgnoreCase))
+                {
+                    progress?.Report(new ProgressReport
+                    {
+                        Log = $"WSL Windows 寃쎈줈 蹂댁젙: {tubPathWindows} -> {resolvedWindowsPath}"
+                    });
+                    tubPathWindows = resolvedWindowsPath;
+                    tubPathWsl = ToWslPathFromWindowsPath(resolvedWindowsPath);
+                }
+            }
+
+            if (Directory.Exists(tubPathWindows))
+            {
+                tubPathWsl = ToWslPathFromWindowsPath(tubPathWindows);
+            }
+
             progress?.Report(new ProgressReport
             {
                 Log = $"tub 경로 입력: {tubPath}"
@@ -178,6 +210,15 @@ namespace Data_Manager
                         rootWsl,
                         tubRoot,
                         catalogFiles,
+                        progress,
+                        cancellationToken);
+                }
+
+                if (rootFrames.Count == 0)
+                {
+                    rootFrames = await ParseRecordJsonFilesAsFramesAsync(
+                        rootWsl,
+                        tubRoot,
                         progress,
                         cancellationToken);
                 }
@@ -303,6 +344,81 @@ namespace Data_Manager
             {
                 Log = $"catalog record 수: {frames.Count}, 이미지 연결 성공: {resolvedCount}, 실패: {unresolvedCount}"
             });
+
+            return frames;
+        }
+
+        private static async Task<List<PilotFrameData>> ParseRecordJsonFilesAsFramesAsync(
+            string tubPathWsl,
+            string tubPathWindows,
+            IProgress<ProgressReport>? progress,
+            CancellationToken cancellationToken)
+        {
+            var frames = new List<PilotFrameData>();
+            var recordFiles = new List<string>();
+
+            recordFiles.AddRange(Directory.EnumerateFiles(tubPathWindows, "record_*.json", SearchOption.TopDirectoryOnly));
+
+            string recordsFolder = Path.Combine(tubPathWindows, "records");
+            if (Directory.Exists(recordsFolder))
+            {
+                recordFiles.AddRange(Directory.EnumerateFiles(recordsFolder, "record_*.json", SearchOption.AllDirectories));
+            }
+
+            recordFiles = recordFiles
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (recordFiles.Count == 0)
+            {
+                return frames;
+            }
+
+            progress?.Report(new ProgressReport
+            {
+                Log = $"record_*.json 파일 {recordFiles.Count}개를 파싱합니다."
+            });
+
+            int fallbackIndex = 0;
+            foreach (string recordFile in recordFiles)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                JObject? obj;
+                try
+                {
+                    string json = await File.ReadAllTextAsync(recordFile, cancellationToken);
+                    obj = JObject.Parse(json);
+                }
+                catch (Exception ex)
+                {
+                    progress?.Report(new ProgressReport
+                    {
+                        Log = $"record JSON 파싱 실패: {recordFile}, {ex.Message}"
+                    });
+                    continue;
+                }
+
+                int index = SafeGetIntFromKeys(obj, "_index", "index", "record/index") ?? fallbackIndex;
+                string imageValue = SafeGetStringFromKeys(obj, "cam/image_array", "cam/image_array_path", "image", "image_path", "img") ?? string.Empty;
+                double? userAngle = SafeGetDoubleFromKeys(obj, "user/angle", "user/steering", "angle", "steering");
+                double? userThrottle = SafeGetDoubleFromKeys(obj, "user/throttle", "throttle");
+                string mode = SafeGetStringFromKeys(obj, "user/mode", "mode") ?? string.Empty;
+                string imagePath = ResolveTubImagePath(tubPathWsl, tubPathWindows, imageValue, index);
+
+                frames.Add(new PilotFrameData
+                {
+                    Index = index,
+                    TubPath = tubPathWsl,
+                    ImagePath = imagePath,
+                    UserAngle = userAngle,
+                    UserThrottle = userThrottle,
+                    Mode = mode
+                });
+
+                fallbackIndex++;
+            }
 
             return frames;
         }
@@ -489,7 +605,8 @@ namespace Data_Manager
         {
             foreach (string key in keys)
             {
-                if (!obj.TryGetValue(key, out JToken? token) || token == null || token.Type == JTokenType.Null)
+                JToken? token = FindTokenByKey(obj, key);
+                if (token == null || token.Type == JTokenType.Null)
                 {
                     continue;
                 }
@@ -520,7 +637,8 @@ namespace Data_Manager
         {
             foreach (string key in keys)
             {
-                if (!obj.TryGetValue(key, out JToken? token) || token == null || token.Type == JTokenType.Null)
+                JToken? token = FindTokenByKey(obj, key);
+                if (token == null || token.Type == JTokenType.Null)
                 {
                     continue;
                 }
@@ -543,7 +661,8 @@ namespace Data_Manager
         {
             foreach (string key in keys)
             {
-                if (!obj.TryGetValue(key, out JToken? token) || token == null || token.Type == JTokenType.Null)
+                JToken? token = FindTokenByKey(obj, key);
+                if (token == null || token.Type == JTokenType.Null)
                 {
                     continue;
                 }
@@ -565,6 +684,46 @@ namespace Data_Manager
                 if (int.TryParse(token.ToString(), out int result))
                 {
                     return result;
+                }
+            }
+
+            return null;
+        }
+
+        private static JToken? FindTokenByKey(JObject obj, string key)
+        {
+            if (obj.TryGetValue(key, out JToken? directToken))
+            {
+                return directToken;
+            }
+
+            if (key.Contains('/'))
+            {
+                JToken? nestedToken = obj;
+                foreach (string segment in key.Split('/', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (nestedToken is JObject nestedObject
+                        && nestedObject.TryGetValue(segment, StringComparison.OrdinalIgnoreCase, out JToken? childToken))
+                    {
+                        nestedToken = childToken;
+                        continue;
+                    }
+
+                    nestedToken = null;
+                    break;
+                }
+
+                if (nestedToken != null)
+                {
+                    return nestedToken;
+                }
+            }
+
+            foreach (JProperty property in obj.DescendantsAndSelf().OfType<JObject>().SelectMany(o => o.Properties()))
+            {
+                if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return property.Value;
                 }
             }
 
@@ -981,7 +1140,9 @@ namespace Data_Manager
             });
 
             string tubsArg = string.Join(";", cardState.TrainingTubPaths ?? new List<string>());
-            string command = BuildPythonCommand(cardState, scriptPath, judementPath, tubsArg);
+            string modelPathForWsl = ToWslPathFromWindowsPath(cardState.ModelPath);
+            string outputPathForWsl = ToWslPathFromWindowsPath(judementPath);
+            string command = BuildPythonCommand(cardState, scriptPath, modelPathForWsl, outputPathForWsl, tubsArg);
 
             OperationResult<string> runResult = await RunWslCommandAsync(cardState.WslDistroName, command, progress, cancellationToken);
             if (!runResult.Success)
@@ -1074,7 +1235,8 @@ namespace Data_Manager
                 return string.Empty;
             }
 
-            if (wslPath.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase))
+            if (wslPath.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase)
+                || wslPath.StartsWith("\\\\wsl$\\", StringComparison.OrdinalIgnoreCase))
             {
                 return wslPath;
             }
@@ -1087,7 +1249,9 @@ namespace Data_Manager
             if (wslPath.StartsWith("/mnt/", StringComparison.OrdinalIgnoreCase))
             {
                 string driveLetter = wslPath.Substring(5, 1).ToUpperInvariant();
-                string rest = wslPath.Substring(6).Replace('/', '\\');
+                string rest = wslPath.Length > 6
+                    ? wslPath.Substring(6).TrimStart('/').Replace('/', '\\')
+                    : string.Empty;
                 return $"{driveLetter}:\\{rest}".TrimEnd('\\');
             }
 
@@ -1107,15 +1271,21 @@ namespace Data_Manager
                 return string.Empty;
             }
 
+            windowsPath = windowsPath.Trim();
+
             if (windowsPath.StartsWith("/mnt/", StringComparison.OrdinalIgnoreCase)
                 || windowsPath.StartsWith("/home/", StringComparison.OrdinalIgnoreCase))
             {
                 return windowsPath;
             }
 
-            if (windowsPath.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase))
+            if (windowsPath.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase)
+                || windowsPath.StartsWith("\\\\wsl$\\", StringComparison.OrdinalIgnoreCase))
             {
-                string trimmed = windowsPath.Substring("\\\\wsl.localhost\\".Length);
+                string prefix = windowsPath.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase)
+                    ? "\\\\wsl.localhost\\"
+                    : "\\\\wsl$\\";
+                string trimmed = windowsPath.Substring(prefix.Length);
                 int separatorIndex = trimmed.IndexOf('\\');
                 if (separatorIndex < 0)
                 {
@@ -1129,11 +1299,139 @@ namespace Data_Manager
             if (windowsPath.Length >= 2 && windowsPath[1] == ':')
             {
                 string drive = char.ToLowerInvariant(windowsPath[0]).ToString();
-                string rest = windowsPath.Substring(2).TrimStart('\\').Replace('\\', '/');
+                string rest = windowsPath.Substring(2).TrimStart('\\', '/').Replace('\\', '/');
                 return $"/mnt/{drive}/{rest}".TrimEnd('/');
             }
 
             return windowsPath.Replace('\\', '/');
+        }
+
+        private static string ResolveExistingWslWindowsPath(string windowsPath, string distroName)
+        {
+            if (string.IsNullOrWhiteSpace(windowsPath) || Directory.Exists(windowsPath))
+            {
+                return windowsPath;
+            }
+
+            string prefix = windowsPath.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase)
+                ? "\\\\wsl.localhost\\"
+                : windowsPath.StartsWith("\\\\wsl$\\", StringComparison.OrdinalIgnoreCase)
+                    ? "\\\\wsl$\\"
+                    : string.Empty;
+
+            if (string.IsNullOrEmpty(prefix))
+            {
+                return windowsPath;
+            }
+
+            string trimmed = windowsPath.Substring(prefix.Length);
+            int separatorIndex = trimmed.IndexOf('\\');
+            if (separatorIndex < 0)
+            {
+                return windowsPath;
+            }
+
+            string rest = trimmed.Substring(separatorIndex + 1);
+            foreach (string candidateDistro in GetWslDistroAliasCandidates(distroName))
+            {
+                string candidate = prefix + candidateDistro + "\\" + rest;
+                if (Directory.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return windowsPath;
+        }
+
+        public static string ResolveExistingWindowsPath(string windowsPath)
+        {
+            if (string.IsNullOrWhiteSpace(windowsPath) || Directory.Exists(windowsPath))
+            {
+                return windowsPath;
+            }
+
+            string root = Path.GetPathRoot(windowsPath) ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                return windowsPath;
+            }
+
+            string relative = windowsPath.Substring(root.Length);
+            string[] parts = relative.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+            string current = root;
+
+            foreach (string part in parts)
+            {
+                string direct = Path.Combine(current, part);
+                if (Directory.Exists(direct) || File.Exists(direct))
+                {
+                    current = direct;
+                    continue;
+                }
+
+                string? matched = FindMatchingPathSegment(current, part);
+                if (string.IsNullOrWhiteSpace(matched))
+                {
+                    return windowsPath;
+                }
+
+                current = matched;
+            }
+
+            return Directory.Exists(current) || File.Exists(current)
+                ? current
+                : windowsPath;
+        }
+
+        private static string? FindMatchingPathSegment(string parentPath, string expectedName)
+        {
+            if (!Directory.Exists(parentPath))
+            {
+                return null;
+            }
+
+            string expectedKey = NormalizePathSegmentKey(expectedName);
+            foreach (string candidate in Directory.EnumerateFileSystemEntries(parentPath))
+            {
+                string candidateName = Path.GetFileName(candidate);
+                if (string.Equals(candidateName, expectedName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(candidateName, expectedName.Replace('_', ' '), StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(candidateName, expectedName.Replace(' ', '_'), StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(NormalizePathSegmentKey(candidateName), expectedKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        private static string NormalizePathSegmentKey(string value)
+        {
+            return value
+                .Replace("_", string.Empty, StringComparison.Ordinal)
+                .Replace(" ", string.Empty, StringComparison.Ordinal)
+                .Replace("-", string.Empty, StringComparison.Ordinal);
+        }
+
+        private static IEnumerable<string> GetWslDistroAliasCandidates(string distroName)
+        {
+            string[] candidates =
+            {
+                distroName,
+                "Ubuntu-22.04",
+                "Ubuntu-24.04",
+                "Ubuntu",
+                "Ubuntu22.04",
+                "Ubuntu24.04",
+                "ub22",
+                "ub24"
+            };
+
+            return candidates
+                .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
         }
 
         public static string CombineWslPath(string basePath, string relativePath)
@@ -1343,32 +1641,59 @@ namespace Data_Manager
                 return results;
             }
 
-            if (tubsToken.Type == JTokenType.Array)
+            AddTubPathTokens(tubsToken, results);
+            return results
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => path.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static void AddTubPathTokens(JToken token, List<string> results)
+        {
+            if (token.Type == JTokenType.String)
             {
-                foreach (JToken token in tubsToken)
+                AddTubPathString(token.Value<string>(), results);
+                return;
+            }
+
+            if (token.Type == JTokenType.Array)
+            {
+                foreach (JToken child in token)
                 {
-                    string value = token.Type == JTokenType.String ? token.Value<string>() ?? string.Empty : token.ToString();
-                    if (!string.IsNullOrWhiteSpace(value))
-                    {
-                        results.Add(value.Trim());
-                    }
+                    AddTubPathTokens(child, results);
                 }
 
-                return results;
+                return;
             }
 
-            if (tubsToken.Type == JTokenType.Object)
+            if (token.Type == JTokenType.Object)
             {
-                return results;
+                foreach (JProperty property in token.Children<JProperty>())
+                {
+                    AddTubPathTokens(property.Value, results);
+                }
+
+                return;
             }
 
-            string text = tubsToken.Type == JTokenType.String ? tubsToken.Value<string>() ?? string.Empty : tubsToken.ToString();
-            if (!string.IsNullOrWhiteSpace(text))
+            return;
+        }
+
+        private static void AddTubPathString(string? value, List<string> results)
+        {
+            if (string.IsNullOrWhiteSpace(value))
             {
-                results.Add(text.Trim());
+                return;
             }
 
-            return results;
+            string trimmed = value.Trim();
+            if (trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            results.Add(trimmed);
         }
 
         private static string NormalizeTubPath(string tubPath, string? carPathFromConfig, string myCarPath)
@@ -1378,9 +1703,10 @@ namespace Data_Manager
                 return string.Empty;
             }
 
-            string trimmed = tubPath.Trim();
+            string trimmed = tubPath.Trim().Trim('"');
 
-            if (trimmed.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase))
+            if (trimmed.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith("\\\\wsl$\\", StringComparison.OrdinalIgnoreCase))
             {
                 return ToWslPathFromWindowsPath(trimmed);
             }
@@ -1398,6 +1724,17 @@ namespace Data_Manager
 
             string basePath = string.IsNullOrWhiteSpace(carPathFromConfig) ? myCarPath : carPathFromConfig;
 
+            if (trimmed.StartsWith("\\", StringComparison.Ordinal) && !trimmed.StartsWith("\\\\", StringComparison.Ordinal))
+            {
+                string baseWindowsPath = basePath.Trim();
+                if (baseWindowsPath.Length >= 2 && baseWindowsPath[1] == ':')
+                {
+                    return ToWslPathFromWindowsPath(baseWindowsPath.Substring(0, 2) + trimmed);
+                }
+            }
+
+            basePath = NormalizeBaseTubPath(basePath, myCarPath);
+
             if (trimmed.StartsWith("./"))
             {
                 string relative = trimmed.Substring(2);
@@ -1410,6 +1747,33 @@ namespace Data_Manager
             }
 
             return trimmed;
+        }
+
+        private static string NormalizeBaseTubPath(string basePath, string fallbackMyCarPath)
+        {
+            string normalizedBasePath = string.IsNullOrWhiteSpace(basePath)
+                ? fallbackMyCarPath
+                : basePath.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalizedBasePath))
+            {
+                return string.Empty;
+            }
+
+            if (normalizedBasePath.StartsWith("/mnt/", StringComparison.OrdinalIgnoreCase)
+                || normalizedBasePath.StartsWith("/home/", StringComparison.OrdinalIgnoreCase))
+            {
+                return normalizedBasePath;
+            }
+
+            if (normalizedBasePath.StartsWith("\\\\wsl.localhost\\", StringComparison.OrdinalIgnoreCase)
+                || normalizedBasePath.StartsWith("\\\\wsl$\\", StringComparison.OrdinalIgnoreCase)
+                || (normalizedBasePath.Length >= 2 && normalizedBasePath[1] == ':'))
+            {
+                return ToWslPathFromWindowsPath(normalizedBasePath);
+            }
+
+            return normalizedBasePath.Replace('\\', '/');
         }
 
         private static bool TryLoadFromRecordJson(
@@ -1652,11 +2016,8 @@ namespace Data_Manager
                 Directory.CreateDirectory(windowsLogFolder);
             }
 
-            if (!File.Exists(windowsScriptPath))
-            {
-                string script = BuildPythonScript();
-                await File.WriteAllTextAsync(windowsScriptPath, script, cancellationToken);
-            }
+            string script = BuildPythonScript();
+            await File.WriteAllTextAsync(windowsScriptPath, script, cancellationToken);
 
             return scriptPath;
         }
@@ -1664,6 +2025,7 @@ namespace Data_Manager
         private static string BuildPythonCommand(
             PilotCardState cardState,
             string scriptPath,
+            string modelPath,
             string outputPath,
             string tubsArg)
         {
@@ -1676,12 +2038,13 @@ namespace Data_Manager
                 $"conda activate {cardState.CondaEnvName} || exit 11; " +
                 $"cd '{EscapeBash(cardState.MyCarPath)}' || exit 12; " +
                 $"python '{EscapeBash(scriptPath)}'" +
-                $" --model '{EscapeBash(cardState.ModelPath)}'" +
+                $" --model '{EscapeBash(modelPath)}'" +
                 $" --model-name '{EscapeBash(cardState.ModelName)}'" +
                 $" --model-type '{EscapeBash(cardState.ModelType)}'" +
                 $" --tubs '{EscapeBash(tubsArg)}'" +
                 $" --output '{EscapeBash(outputPath)}'" +
-                $" --car-path '{EscapeBash(cardState.MyCarPath)}'";
+                $" --car-path '{EscapeBash(cardState.MyCarPath)}'" +
+                " --batch-size 6";
 
             return command;
         }
@@ -1693,6 +2056,7 @@ namespace Data_Manager
             sb.AppendLine("import json");
             sb.AppendLine("import os");
             sb.AppendLine("import sys");
+            sb.AppendLine("import time");
             sb.AppendLine("from datetime import datetime");
             sb.AppendLine("import numpy as np");
             sb.AppendLine("from PIL import Image");
@@ -1708,6 +2072,7 @@ namespace Data_Manager
             sb.AppendLine("    parser.add_argument('--image-w', type=int, default=160)");
             sb.AppendLine("    parser.add_argument('--image-h', type=int, default=120)");
             sb.AppendLine("    parser.add_argument('--image-depth', type=int, default=3)");
+            sb.AppendLine("    parser.add_argument('--batch-size', type=int, default=6)");
             sb.AppendLine("    return parser.parse_args()");
             sb.AppendLine("");
             sb.AppendLine("def parse_tubs(tubs_arg):");
@@ -1759,6 +2124,17 @@ namespace Data_Manager
             sb.AppendLine("            value = obj.get(key)");
             sb.AppendLine("            if value is not None:");
             sb.AppendLine("                return value");
+            sb.AppendLine("        if '/' in key:");
+            sb.AppendLine("            current = obj");
+            sb.AppendLine("            found = True");
+            sb.AppendLine("            for part in key.split('/'):");
+            sb.AppendLine("                if isinstance(current, dict) and part in current:");
+            sb.AppendLine("                    current = current.get(part)");
+            sb.AppendLine("                else:");
+            sb.AppendLine("                    found = False");
+            sb.AppendLine("                    break");
+            sb.AppendLine("            if found and current is not None:");
+            sb.AppendLine("                return current");
             sb.AppendLine("    return None");
             sb.AppendLine("");
             sb.AppendLine("def resolve_image_path(tub_path, value):");
@@ -1766,7 +2142,17 @@ namespace Data_Manager
             sb.AppendLine("        return ''");
             sb.AppendLine("    if value.startswith('/'):");
             sb.AppendLine("        return value");
-            sb.AppendLine("    return os.path.join(tub_path, value)");
+            sb.AppendLine("    candidates = []");
+            sb.AppendLine("    normalized = value.replace('\\\\', '/')");
+            sb.AppendLine("    if normalized.startswith('images/'):");
+            sb.AppendLine("        candidates.append(os.path.join(tub_path, normalized))");
+            sb.AppendLine("    else:");
+            sb.AppendLine("        candidates.append(os.path.join(tub_path, 'images', normalized))");
+            sb.AppendLine("        candidates.append(os.path.join(tub_path, normalized))");
+            sb.AppendLine("    for candidate in candidates:");
+            sb.AppendLine("        if os.path.exists(candidate):");
+            sb.AppendLine("            return candidate");
+            sb.AppendLine("    return candidates[0] if candidates else ''");
             sb.AppendLine("");
             sb.AppendLine("def load_records_from_catalog(tub_path):");
             sb.AppendLine("    records = []");
@@ -1813,6 +2199,47 @@ namespace Data_Manager
             sb.AppendLine("        return float(pred[0]), float(pred[1])");
             sb.AppendLine("    return float(pred[0]), 0.0");
             sb.AppendLine("");
+            sb.AppendLine("def predict_batch(model, image_arrs):");
+            sb.AppendLine("    if not image_arrs:");
+            sb.AppendLine("        return []");
+            sb.AppendLine("    input_arr = np.asarray(image_arrs)");
+            sb.AppendLine("    pred = model.predict(input_arr, verbose=0)");
+            sb.AppendLine("    results = []");
+            sb.AppendLine("    if isinstance(pred, list):");
+            sb.AppendLine("        angles = pred[0]");
+            sb.AppendLine("        throttles = pred[1] if len(pred) > 1 else None");
+            sb.AppendLine("        for i in range(len(image_arrs)):");
+            sb.AppendLine("            angle = float(np.asarray(angles[i]).reshape(-1)[0])");
+            sb.AppendLine("            throttle = float(np.asarray(throttles[i]).reshape(-1)[0]) if throttles is not None else 0.0");
+            sb.AppendLine("            results.append((angle, throttle))");
+            sb.AppendLine("        return results");
+            sb.AppendLine("    for row in pred:");
+            sb.AppendLine("        row = np.asarray(row).reshape(-1)");
+            sb.AppendLine("        if len(row) >= 2:");
+            sb.AppendLine("            results.append((float(row[0]), float(row[1])))");
+            sb.AppendLine("        else:");
+            sb.AppendLine("            results.append((float(row[0]), 0.0))");
+            sb.AppendLine("    return results");
+            sb.AppendLine("");
+            sb.AppendLine("def append_result(results, tub, idx, obj, image_path, angle, throttle):");
+            sb.AppendLine("    user_angle = extract_value(obj, ['user/angle', 'angle', 'steering'])");
+            sb.AppendLine("    user_throttle = extract_value(obj, ['user/throttle', 'throttle'])");
+            sb.AppendLine("    mode = extract_value(obj, ['user/mode', 'mode'])");
+            sb.AppendLine("    angle_error = None if user_angle is None else angle - float(user_angle)");
+            sb.AppendLine("    throttle_error = None if user_throttle is None else throttle - float(user_throttle)");
+            sb.AppendLine("    results.append({");
+            sb.AppendLine("        'index': int(idx),");
+            sb.AppendLine("        'tub_path': tub,");
+            sb.AppendLine("        'image_path': image_path,");
+            sb.AppendLine("        'user_angle': user_angle,");
+            sb.AppendLine("        'user_throttle': user_throttle,");
+            sb.AppendLine("        'pilot_angle': angle,");
+            sb.AppendLine("        'pilot_throttle': throttle,");
+            sb.AppendLine("        'angle_error': angle_error,");
+            sb.AppendLine("        'throttle_error': throttle_error,");
+            sb.AppendLine("        'mode': mode or ''");
+            sb.AppendLine("    })");
+            sb.AppendLine("");
             sb.AppendLine("def main():");
             sb.AppendLine("    args = parse_args()");
             sb.AppendLine("    tubs = parse_tubs(args.tubs)");
@@ -1821,35 +2248,49 @@ namespace Data_Manager
             sb.AppendLine("        sys.exit(1)");
             sb.AppendLine("    model = load_model(args.model)");
             sb.AppendLine("    results = []");
+            sb.AppendLine("    batch_size = max(1, min(6, int(args.batch_size)))");
+            sb.AppendLine("    last_report_at = time.monotonic()");
+            sb.AppendLine("    processed_count = 0");
+            sb.AppendLine("    skipped_count = 0");
+            sb.AppendLine("    total_count = 0");
+            sb.AppendLine("    def report_progress(force=False):");
+            sb.AppendLine("        nonlocal last_report_at");
+            sb.AppendLine("        now = time.monotonic()");
+            sb.AppendLine("        if force or now - last_report_at >= 5:");
+            sb.AppendLine("            print(f'progress: completed={processed_count}, skipped={skipped_count}, total={total_count}', flush=True)");
+            sb.AppendLine("            last_report_at = now");
             sb.AppendLine("    for tub in tubs:");
             sb.AppendLine("        record_files = collect_records(tub)");
             sb.AppendLine("        records = load_records_from_files(record_files)");
             sb.AppendLine("        if not records:");
             sb.AppendLine("            records = load_records_from_catalog(tub)");
+            sb.AppendLine("        total_count += len(records)");
+            sb.AppendLine("        print(f'tub records: {tub} -> {len(records)}', flush=True)");
+            sb.AppendLine("        batch_meta = []");
+            sb.AppendLine("        batch_images = []");
             sb.AppendLine("        for idx, obj in records:");
             sb.AppendLine("            image_value = extract_value(obj, ['cam/image_array', 'image', 'image_path', 'img', 'cam/image_array_path'])");
             sb.AppendLine("            image_path = resolve_image_path(tub, image_value)");
             sb.AppendLine("            if not image_path or not os.path.exists(image_path):");
+            sb.AppendLine("                skipped_count += 1");
+            sb.AppendLine("                report_progress()");
             sb.AppendLine("                continue");
             sb.AppendLine("            image_arr = image_to_array(image_path, args.image_w, args.image_h)");
-            sb.AppendLine("            angle, throttle = predict_model(model, image_arr)");
-            sb.AppendLine("            user_angle = extract_value(obj, ['user/angle', 'angle', 'steering'])");
-            sb.AppendLine("            user_throttle = extract_value(obj, ['user/throttle', 'throttle'])");
-            sb.AppendLine("            mode = extract_value(obj, ['user/mode', 'mode'])");
-            sb.AppendLine("            angle_error = None if user_angle is None else angle - float(user_angle)");
-            sb.AppendLine("            throttle_error = None if user_throttle is None else throttle - float(user_throttle)");
-            sb.AppendLine("            results.append({");
-            sb.AppendLine("                'index': int(idx),");
-            sb.AppendLine("                'tub_path': tub,");
-            sb.AppendLine("                'image_path': image_path,");
-            sb.AppendLine("                'user_angle': user_angle,");
-            sb.AppendLine("                'user_throttle': user_throttle,");
-            sb.AppendLine("                'pilot_angle': angle,");
-            sb.AppendLine("                'pilot_throttle': throttle,");
-            sb.AppendLine("                'angle_error': angle_error,");
-            sb.AppendLine("                'throttle_error': throttle_error,");
-            sb.AppendLine("                'mode': mode or ''");
-            sb.AppendLine("            })");
+            sb.AppendLine("            batch_images.append(image_arr)");
+            sb.AppendLine("            batch_meta.append((tub, idx, obj, image_path))");
+            sb.AppendLine("            if len(batch_images) >= batch_size:");
+            sb.AppendLine("                for meta, pred in zip(batch_meta, predict_batch(model, batch_images)):");
+            sb.AppendLine("                    append_result(results, meta[0], meta[1], meta[2], meta[3], pred[0], pred[1])");
+            sb.AppendLine("                    processed_count += 1");
+            sb.AppendLine("                report_progress()");
+            sb.AppendLine("                batch_images = []");
+            sb.AppendLine("                batch_meta = []");
+            sb.AppendLine("        if batch_images:");
+            sb.AppendLine("            for meta, pred in zip(batch_meta, predict_batch(model, batch_images)):");
+            sb.AppendLine("                append_result(results, meta[0], meta[1], meta[2], meta[3], pred[0], pred[1])");
+            sb.AppendLine("                processed_count += 1");
+            sb.AppendLine("            report_progress()");
+            sb.AppendLine("    report_progress(True)");
             sb.AppendLine("    output = {");
             sb.AppendLine("        'model_name': args.model_name,");
             sb.AppendLine("        'model_path': args.model,");

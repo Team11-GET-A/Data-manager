@@ -1,99 +1,132 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace Data_Manager
 {
     public partial class PliotModelList : Form
     {
-        // 전체 모델 목록 및 필터 적용 후 표시 목록
-        private readonly List<ModelListItem> allModels = new List<ModelListItem>();
-        private readonly List<ModelListItem> visibleModels = new List<ModelListItem>();
+        private readonly List<ModelListItem> _allModels = new List<ModelListItem>();
+        private readonly List<ModelListItem> _visibleModels = new List<ModelListItem>();
 
-        // 마지막으로 불러온 폴더 (필터 초기화 시 재로드용)
-        private string? lastLoadedFolderPath;
-
-        // 모델 이름과 파일 경로를 함께 전달합니다.
         public event Action<string, string>? ModelSelected;
 
         public PliotModelList()
         {
             InitializeComponent();
-            btnModelFliter.Text = "검색";
-            btnResetFilter.Text = "초기화";
-            btnModelLoad.Text = "불러오기";
             btnModelFliter.Click += BtnModelFliter_Click;
             btnResetFilter.Click += BtnResetFilter_Click;
             btnModelLoad.Click += BtnModelLoad_Click;
-            lstModelList.DoubleClick += LstModelList_DoubleClick;
-            lstModelList.KeyDown += LstModelList_KeyDown;
+            lvModelList.DoubleClick += LvModelList_DoubleClick;
+            lvModelList.KeyDown += LvModelList_KeyDown;
+            lvModelList.SizeChanged += (s, e) => ResizeColumns();
             KeyPreview = true;
             KeyDown += PliotModelList_KeyDown;
+            ResizeColumns();
         }
 
-        // frmNewtrainer 리스트박스에서 모델을 가져오는 진입점
         public void LoadFromTrainerList()
         {
-            allModels.Clear();
-
-            // TODO: frmNewtrainer의 리스트박스에서 항목을 복사해 allModels에 채우기
-            // 예: allModels.Add(new ModelListItem("모델명", "모델경로", 원본아이템));
-
+            _allModels.Clear();
             ApplyFilter(txtModelFilter.Text);
         }
 
-        // 모델 폴더 선택 후 h5 파일 목록 로드
         private async void BtnModelLoad_Click(object? sender, EventArgs e)
         {
-            using (var dialog = new OpenFileDialog())
+            using OpenFileDialog dialog = new OpenFileDialog();
+            dialog.Title = "모델 파일 선택";
+            dialog.Filter = "Model Files (*.h5;*.keras;*.tflite)|*.h5;*.keras;*.tflite|All Files (*.*)|*.*";
+            dialog.Multiselect = false;
+
+            string initialDirectory = await GetWslHomeInitialDirectoryAsync();
+            if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
             {
-                dialog.Title = "모델 파일 선택";
-                dialog.Filter = "Model Files (*.h5;*.keras;*.tflite)|*.h5;*.keras;*.tflite|All Files (*.*)|*.*";
-
-                DonkeyAsyncWorker.OperationResult<string> homeResult =
-                    await DonkeyAsyncWorker.GetWslHomePathAsync(
-                        "Ubuntu-22.04",
-                        null,
-                        CancellationToken.None);
-
-                if (homeResult.Success && !string.IsNullOrWhiteSpace(homeResult.Data))
-                {
-                    dialog.InitialDirectory = homeResult.Data;
-                }
-
-                if (dialog.ShowDialog() != DialogResult.OK)
-                {
-                    return;
-                }
-
-                string folderPath = Path.GetDirectoryName(dialog.FileName) ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(folderPath))
-                {
-                    LoadModelsFromFolder(folderPath);
-                }
+                dialog.InitialDirectory = initialDirectory;
             }
-        }
-
-        // 필터 초기화 및 마지막 폴더 재로드 (파일 갱신 반영)
-        private void BtnResetFilter_Click(object? sender, EventArgs e)
-        {
-            if (string.IsNullOrWhiteSpace(lastLoadedFolderPath)
-                || !Directory.Exists(lastLoadedFolderPath))
+            else
             {
-                ApplyFilter(string.Empty);
+                dialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            }
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
                 return;
             }
 
-            LoadModelsFromFolder(lastLoadedFolderPath);
+            AddModelFile(dialog.FileName);
+            ApplyFilter(txtModelFilter.Text);
+            SelectModelByPath(dialog.FileName);
+        }
+
+        private static async Task<string> GetWslHomeInitialDirectoryAsync()
+        {
+            DonkeyAsyncWorker.OperationResult<string> homeResult =
+                await DonkeyAsyncWorker.GetWslHomePathAsync(
+                    "Ubuntu-22.04",
+                    null,
+                    CancellationToken.None);
+
+            return homeResult.Success ? homeResult.Data ?? string.Empty : string.Empty;
+        }
+
+        private void AddModelFile(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                return;
+            }
+
+            string extension = Path.GetExtension(filePath);
+            if (!IsSupportedModelExtension(extension))
+            {
+                return;
+            }
+
+            if (_allModels.Any(model =>
+                string.Equals(model.Path, filePath, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            string name = Path.GetFileNameWithoutExtension(filePath);
+            _allModels.Add(new ModelListItem(name, filePath));
+        }
+
+        private static bool IsSupportedModelExtension(string extension)
+        {
+            return string.Equals(extension, ".h5", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".keras", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".tflite", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void BtnResetFilter_Click(object? sender, EventArgs e)
+        {
+            txtModelFilter.Clear();
+            ApplyFilter(string.Empty);
+        }
+
+        private void BtnModelFliter_Click(object? sender, EventArgs e)
+        {
+            ApplyFilter(txtModelFilter.Text);
         }
 
         private void PliotModelList_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
             {
-                btnModelFliter.PerformClick();
+                if (lvModelList.Focused && lvModelList.SelectedItems.Count > 0)
+                {
+                    RaiseSelectedModel();
+                }
+                else
+                {
+                    ApplyFilter(txtModelFilter.Text);
+                }
+
                 e.Handled = true;
                 e.SuppressKeyPress = true;
                 return;
@@ -101,87 +134,91 @@ namespace Data_Manager
 
             if (e.KeyCode == Keys.Escape)
             {
-                btnResetFilter.PerformClick();
+                BtnResetFilter_Click(sender, EventArgs.Empty);
                 e.Handled = true;
                 e.SuppressKeyPress = true;
             }
         }
 
-        private void LstModelList_KeyDown(object? sender, KeyEventArgs e)
+        private void LvModelList_KeyDown(object? sender, KeyEventArgs e)
         {
+            if (e.KeyCode == Keys.Enter)
+            {
+                RaiseSelectedModel();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                return;
+            }
+
             if (e.KeyCode != Keys.Tab)
             {
                 return;
             }
 
-            SelectNextControl(
-                lstModelList,
-                !e.Shift,
-                true,
-                true,
-                true);
-
+            SelectNextControl(lvModelList, !e.Shift, true, true, true);
             e.Handled = true;
             e.SuppressKeyPress = true;
         }
 
-        // 현재 입력값으로 필터 적용
-        private void BtnModelFliter_Click(object? sender, EventArgs e)
+        private void LvModelList_DoubleClick(object? sender, EventArgs e)
         {
-            ApplyFilter(txtModelFilter.Text);
+            RaiseSelectedModel();
         }
 
-        // 모델 선택 후 호출(더블클릭)
-        private void LstModelList_DoubleClick(object? sender, EventArgs e)
+        private void RaiseSelectedModel()
         {
-            if (lstModelList.SelectedIndex < 0 || lstModelList.SelectedIndex >= visibleModels.Count)
+            if (lvModelList.SelectedItems.Count == 0)
             {
                 return;
             }
 
-            ModelListItem model = visibleModels[lstModelList.SelectedIndex];
+            if (lvModelList.SelectedItems[0].Tag is not ModelListItem model)
+            {
+                return;
+            }
 
             ModelSelected?.Invoke(model.Name, model.Path);
         }
 
-        // 필터 문자열을 기준으로 리스트 표시 갱신
         private void ApplyFilter(string? filterText)
         {
             string normalizedFilter = (filterText ?? string.Empty).Trim();
+            _visibleModels.Clear();
+            lvModelList.Items.Clear();
 
-            lstModelList.Items.Clear();
-            visibleModels.Clear();
-
-            foreach (ModelListItem model in allModels)
+            foreach (ModelListItem model in _allModels)
             {
                 if (!IsMatch(model, normalizedFilter))
                 {
                     continue;
                 }
 
-                visibleModels.Add(model);
-                lstModelList.Items.Add(new MaterialSkin.MaterialListBoxItem(model.DisplayText));
+                _visibleModels.Add(model);
+                ListViewItem item = new ListViewItem(_visibleModels.Count.ToString());
+                item.SubItems.Add(model.Name);
+                item.SubItems.Add(model.Path);
+                item.Tag = model;
+                lvModelList.Items.Add(item);
             }
+
+            ResizeColumns();
         }
 
-        // 선택한 폴더 내 h5 파일을 목록으로 로드
-        private void LoadModelsFromFolder(string folderPath)
+        private void SelectModelByPath(string filePath)
         {
-            allModels.Clear();
-            lastLoadedFolderPath = folderPath;
-
-            foreach (string file in Directory.EnumerateFiles(folderPath, "*.h5"))
+            foreach (ListViewItem item in lvModelList.Items)
             {
-                string name = Path.GetFileNameWithoutExtension(file);
-
-                // TODO: 다른 열/속성 파싱 구조 확정 후 ModelListItem에 추가
-                allModels.Add(new ModelListItem(name, file, null));
+                if (item.Tag is ModelListItem model
+                    && string.Equals(model.Path, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    item.Selected = true;
+                    item.Focused = true;
+                    item.EnsureVisible();
+                    break;
+                }
             }
-
-            ApplyFilter(txtModelFilter.Text);
         }
 
-        // 현재는 이름 열만 필터링 대상으로 사용
         private static bool IsMatch(ModelListItem model, string normalizedFilter)
         {
             if (string.IsNullOrWhiteSpace(normalizedFilter))
@@ -189,28 +226,28 @@ namespace Data_Manager
                 return true;
             }
 
-            return model.Name.Contains(normalizedFilter, StringComparison.OrdinalIgnoreCase);
+            return model.Name.Contains(normalizedFilter, StringComparison.OrdinalIgnoreCase)
+                || model.Path.Contains(normalizedFilter, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ResizeColumns()
+        {
+            int width = Math.Max(600, lvModelList.ClientSize.Width);
+            colNo.Width = Math.Max(50, width / 8);
+            colName.Width = Math.Max(160, width * 3 / 8);
+            colPath.Width = Math.Max(240, width - colNo.Width - colName.Width - 8);
         }
 
         private sealed class ModelListItem
         {
-            public ModelListItem(string name, string path, object? source)
+            public ModelListItem(string name, string path)
             {
                 Name = name;
                 Path = path;
-                SourceItem = source;
             }
 
-            // 이름 열 (현재 필터 기준)
             public string Name { get; }
-
-            // 모델 경로
             public string Path { get; }
-
-            // 원본 항목 보관 (추후 매핑용)
-            public object? SourceItem { get; }
-
-            public string DisplayText => Name;
         }
     }
 }
