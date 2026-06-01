@@ -3,12 +3,15 @@ using Data_Manager;
 string modelPath = args.Length > 0
     ? args[0]
     : string.Empty;
+bool generateJudement = args.Any(arg => string.Equals(arg, "--generate", StringComparison.OrdinalIgnoreCase));
 
 if (string.IsNullOrWhiteSpace(modelPath))
 {
-    Console.WriteLine("Usage: dotnet run --project Diagnostics\\PilotTubDiagnostic\\PilotTubDiagnostic.csproj -- <model-path>");
+    Console.WriteLine("Usage: dotnet run --project Diagnostics\\PilotTubDiagnostic\\PilotTubDiagnostic.csproj -- <model-path> [--generate]");
     return 2;
 }
+
+modelPath = args.First(arg => !string.Equals(arg, "--generate", StringComparison.OrdinalIgnoreCase));
 
 var progress = new Progress<DonkeyAsyncWorker.ProgressReport>(report =>
 {
@@ -65,6 +68,17 @@ foreach (string tubPath in state.TrainingTubPaths)
     Console.WriteLine($"PARSE_SUCCESS {parseResult.Success}");
     Console.WriteLine($"FRAME_COUNT {parseResult.Data?.Count ?? 0}");
     Console.WriteLine($"PARSE_ERROR {parseResult.ErrorMessage}");
+}
+
+if (generateJudement)
+{
+    DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> judementResult =
+        await DonkeyAsyncWorker.GenerateJudementAsync(state, progress, CancellationToken.None);
+
+    Console.WriteLine($"JUDEMENT_SUCCESS {judementResult.Success}");
+    Console.WriteLine($"JUDEMENT_COUNT {judementResult.Data?.Count ?? 0}");
+    Console.WriteLine($"JUDEMENT_PATH {state.JudementJsonPath}");
+    Console.WriteLine($"JUDEMENT_ERROR {judementResult.ErrorMessage}");
 }
 
 return 0;

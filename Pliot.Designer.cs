@@ -50,9 +50,7 @@ namespace Data_Manager
             pnlRight = new Panel();
             pnlPilotCard = new Panel();
             pnlTrackBar = new Panel();
-            lblCurrentIndex = new Label();
             trbLocation = new TrackBar();
-            lblTrackTitle = new Label();
             pnlPlaybackControls = new Panel();
             btnJumpPrev5 = new Button();
             btnPrevImage = new Button();
@@ -61,7 +59,6 @@ namespace Data_Manager
             btnReversePlay = new Button();
             btnNextImage = new Button();
             btnJumpNext5 = new Button();
-            lblPlaybackTitle = new Label();
             pnlImageHost = new Panel();
             pnlAngleOverlay = new Panel();
             pnlAngleCenterLine = new Panel();
@@ -77,6 +74,7 @@ namespace Data_Manager
             picPilotImage = new PictureBox();
             pnlPilotHeader = new Panel();
             btnGenerateJudement = new Button();
+            btnPilotChart = new Button();
             btnTubInput = new Button();
             lblTubPathValue = new Label();
             lblTubPathTitle = new Label();
@@ -344,45 +342,22 @@ namespace Data_Manager
             // 
             // pnlTrackBar
             // 
-            pnlTrackBar.Controls.Add(lblCurrentIndex);
             pnlTrackBar.Controls.Add(trbLocation);
-            pnlTrackBar.Controls.Add(lblTrackTitle);
             pnlTrackBar.Dock = DockStyle.Bottom;
-            pnlTrackBar.Location = new Point(12, 687);
+            pnlTrackBar.Location = new Point(12, 701);
             pnlTrackBar.Name = "pnlTrackBar";
-            pnlTrackBar.Size = new Size(1130, 71);
+            pnlTrackBar.Size = new Size(1130, 57);
             pnlTrackBar.TabIndex = 2;
-            // 
-            // lblCurrentIndex
-            // 
-            lblCurrentIndex.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            lblCurrentIndex.Font = new Font("맑은 고딕", 10F);
-            lblCurrentIndex.Location = new Point(1071, 28);
-            lblCurrentIndex.Name = "lblCurrentIndex";
-            lblCurrentIndex.Size = new Size(56, 30);
-            lblCurrentIndex.TabIndex = 2;
-            lblCurrentIndex.Text = "0";
-            lblCurrentIndex.TextAlign = ContentAlignment.MiddleRight;
             // 
             // trbLocation
             // 
             trbLocation.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             trbLocation.Enabled = false;
-            trbLocation.Location = new Point(110, 25);
+            trbLocation.Location = new Point(0, 7);
             trbLocation.Maximum = 0;
             trbLocation.Name = "trbLocation";
-            trbLocation.Size = new Size(955, 45);
+            trbLocation.Size = new Size(1130, 45);
             trbLocation.TabIndex = 1;
-            // 
-            // lblTrackTitle
-            // 
-            lblTrackTitle.AutoSize = true;
-            lblTrackTitle.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            lblTrackTitle.Location = new Point(0, 4);
-            lblTrackTitle.Name = "lblTrackTitle";
-            lblTrackTitle.Size = new Size(84, 19);
-            lblTrackTitle.TabIndex = 0;
-            lblTrackTitle.Text = "인덱스 이동";
             // 
             // pnlPlaybackControls
             // 
@@ -393,7 +368,6 @@ namespace Data_Manager
             pnlPlaybackControls.Controls.Add(btnReversePlay);
             pnlPlaybackControls.Controls.Add(btnNextImage);
             pnlPlaybackControls.Controls.Add(btnJumpNext5);
-            pnlPlaybackControls.Controls.Add(lblPlaybackTitle);
             pnlPlaybackControls.Dock = DockStyle.Bottom;
             pnlPlaybackControls.Location = new Point(12, 758);
             pnlPlaybackControls.Name = "pnlPlaybackControls";
@@ -404,7 +378,7 @@ namespace Data_Manager
             // 
             btnJumpPrev5.Anchor = AnchorStyles.Top;
             btnJumpPrev5.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
-            btnJumpPrev5.Location = new Point(118, 28);
+            btnJumpPrev5.Location = new Point(118, 20);
             btnJumpPrev5.Name = "btnJumpPrev5";
             btnJumpPrev5.Size = new Size(116, 36);
             btnJumpPrev5.TabIndex = 1;
@@ -415,7 +389,7 @@ namespace Data_Manager
             // 
             btnPrevImage.Anchor = AnchorStyles.Top;
             btnPrevImage.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
-            btnPrevImage.Location = new Point(246, 28);
+            btnPrevImage.Location = new Point(246, 20);
             btnPrevImage.Name = "btnPrevImage";
             btnPrevImage.Size = new Size(116, 36);
             btnPrevImage.TabIndex = 2;
@@ -426,7 +400,7 @@ namespace Data_Manager
             // 
             btnPlayPause.Anchor = AnchorStyles.Top;
             btnPlayPause.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
-            btnPlayPause.Location = new Point(374, 28);
+            btnPlayPause.Location = new Point(374, 20);
             btnPlayPause.Name = "btnPlayPause";
             btnPlayPause.Size = new Size(116, 36);
             btnPlayPause.TabIndex = 3;
@@ -440,7 +414,7 @@ namespace Data_Manager
             cmbSpeed.Font = new Font("맑은 고딕", 12F);
             cmbSpeed.FormattingEnabled = true;
             cmbSpeed.Items.AddRange(new object[] { "0.5x", "1.0x", "2.0x", "3.0x" });
-            cmbSpeed.Location = new Point(502, 31);
+            cmbSpeed.Location = new Point(502, 23);
             cmbSpeed.Name = "cmbSpeed";
             cmbSpeed.Size = new Size(126, 29);
             cmbSpeed.TabIndex = 4;
@@ -449,7 +423,7 @@ namespace Data_Manager
             // 
             btnReversePlay.Anchor = AnchorStyles.Top;
             btnReversePlay.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
-            btnReversePlay.Location = new Point(640, 28);
+            btnReversePlay.Location = new Point(640, 20);
             btnReversePlay.Name = "btnReversePlay";
             btnReversePlay.Size = new Size(116, 36);
             btnReversePlay.TabIndex = 5;
@@ -460,7 +434,7 @@ namespace Data_Manager
             // 
             btnNextImage.Anchor = AnchorStyles.Top;
             btnNextImage.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
-            btnNextImage.Location = new Point(768, 28);
+            btnNextImage.Location = new Point(768, 20);
             btnNextImage.Name = "btnNextImage";
             btnNextImage.Size = new Size(116, 36);
             btnNextImage.TabIndex = 6;
@@ -471,22 +445,12 @@ namespace Data_Manager
             // 
             btnJumpNext5.Anchor = AnchorStyles.Top;
             btnJumpNext5.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
-            btnJumpNext5.Location = new Point(896, 28);
+            btnJumpNext5.Location = new Point(896, 20);
             btnJumpNext5.Name = "btnJumpNext5";
             btnJumpNext5.Size = new Size(116, 36);
             btnJumpNext5.TabIndex = 7;
             btnJumpNext5.Text = "5 >>";
             btnJumpNext5.UseVisualStyleBackColor = true;
-            // 
-            // lblPlaybackTitle
-            // 
-            lblPlaybackTitle.AutoSize = true;
-            lblPlaybackTitle.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            lblPlaybackTitle.Location = new Point(0, 4);
-            lblPlaybackTitle.Name = "lblPlaybackTitle";
-            lblPlaybackTitle.Size = new Size(84, 19);
-            lblPlaybackTitle.TabIndex = 0;
-            lblPlaybackTitle.Text = "재생 컨트롤";
             // 
             // pnlImageHost
             // 
@@ -634,6 +598,7 @@ namespace Data_Manager
             // pnlPilotHeader
             // 
             pnlPilotHeader.Controls.Add(btnGenerateJudement);
+            pnlPilotHeader.Controls.Add(btnPilotChart);
             pnlPilotHeader.Controls.Add(btnTubInput);
             pnlPilotHeader.Controls.Add(lblTubPathValue);
             pnlPilotHeader.Controls.Add(lblTubPathTitle);
@@ -653,6 +618,16 @@ namespace Data_Manager
             btnGenerateJudement.Text = "AI 판단 생성";
             btnGenerateJudement.UseVisualStyleBackColor = true;
             // 
+            // btnPilotChart
+            // 
+            btnPilotChart.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnPilotChart.Location = new Point(736, 8);
+            btnPilotChart.Name = "btnPilotChart";
+            btnPilotChart.Size = new Size(126, 36);
+            btnPilotChart.TabIndex = 4;
+            btnPilotChart.Text = "Chart";
+            btnPilotChart.UseVisualStyleBackColor = true;
+            // 
             // btnTubInput
             // 
             btnTubInput.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -669,9 +644,9 @@ namespace Data_Manager
             lblTubPathValue.Font = new Font("맑은 고딕", 11F);
             lblTubPathValue.Location = new Point(90, 12);
             lblTubPathValue.Name = "lblTubPathValue";
-            lblTubPathValue.Size = new Size(772, 28);
+            lblTubPathValue.Size = new Size(640, 28);
             lblTubPathValue.TabIndex = 1;
-            lblTubPathValue.Text = "/mnt/c/Users/cheon/OneDrive/Desktop/프로젝트/data";
+            lblTubPathValue.Text = "model_20260531_001";
             lblTubPathValue.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // lblTubPathTitle
@@ -680,9 +655,9 @@ namespace Data_Manager
             lblTubPathTitle.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
             lblTubPathTitle.Location = new Point(0, 14);
             lblTubPathTitle.Name = "lblTubPathTitle";
-            lblTubPathTitle.Size = new Size(78, 20);
+            lblTubPathTitle.Size = new Size(64, 20);
             lblTubPathTitle.TabIndex = 0;
-            lblTubPathTitle.Text = "TUB 경로:";
+            lblTubPathTitle.Text = "모델명:";
             // 
             // Pliot
             // 
@@ -708,10 +683,8 @@ namespace Data_Manager
             pnlRight.ResumeLayout(false);
             pnlPilotCard.ResumeLayout(false);
             pnlTrackBar.ResumeLayout(false);
-            pnlTrackBar.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trbLocation).EndInit();
             pnlPlaybackControls.ResumeLayout(false);
-            pnlPlaybackControls.PerformLayout();
             pnlImageHost.ResumeLayout(false);
             pnlAngleOverlay.ResumeLayout(false);
             pnlThrottleOverlay.ResumeLayout(false);
@@ -748,6 +721,7 @@ namespace Data_Manager
         private Panel pnlPilotCard;
         private Panel pnlPilotHeader;
         private Button btnGenerateJudement;
+        private Button btnPilotChart;
         private Button btnTubInput;
         private Label lblTubPathValue;
         private Label lblTubPathTitle;
@@ -765,9 +739,7 @@ namespace Data_Manager
         private Panel pnlAngleCenterLine;
         private Label lblPilotAngleValue;
         private Panel pnlTrackBar;
-        private Label lblCurrentIndex;
         private TrackBar trbLocation;
-        private Label lblTrackTitle;
         private Panel pnlPlaybackControls;
         private Button btnJumpPrev5;
         private Button btnPrevImage;
@@ -776,6 +748,5 @@ namespace Data_Manager
         private Button btnReversePlay;
         private Button btnNextImage;
         private Button btnJumpNext5;
-        private Label lblPlaybackTitle;
     }
 }

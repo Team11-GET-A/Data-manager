@@ -43,15 +43,15 @@ namespace Data_Manager
             ApplyOverlayStyles();
             ConfigurePlaybackTimer();
 
+            // Keep event wiring in one place so Designer files stay focused on layout only.
             btnModelLoad.Text = "모델 폴더 선택";
             btnModelLoad.Click += BtnModelLoad_Click;
             lvModelList.SelectedIndexChanged += LvModelList_SelectedIndexChanged;
-            lvModelList.DoubleClick += LvModelList_DoubleClick;
-            lvModelList.ItemActivate += LvModelList_ItemActivate;
             lvModelList.SizeChanged += (s, e) => ResizeModelColumns();
 
             btnTubInput.Click += BtnTubInput_Click;
             btnGenerateJudement.Click += BtnGenerateJudement_Click;
+            btnPilotChart.Click += BtnPilotChart_Click;
             trbLocation.ValueChanged += trbLocation_ValueChanged;
             trbLocation.MouseDown += TrbLocation_MouseDown;
             btnJumpPrev5.Click += (s, e) => MoveToFrame(_currentFrameIndex - 5);
@@ -111,7 +111,7 @@ namespace Data_Manager
             dialog.Description = "모델 파일이 들어 있는 폴더 선택";
             dialog.ShowNewFolderButton = false;
 
-            string initialDirectory = await GetWslHomeInitialDirectoryAsync();
+            string initialDirectory = await GetModelFolderInitialDirectoryAsync();
             if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
             {
                 dialog.SelectedPath = initialDirectory;
@@ -140,20 +140,32 @@ namespace Data_Manager
             }
         }
 
-        private static async Task<string> GetWslHomeInitialDirectoryAsync()
+        private static async Task<string> GetModelFolderInitialDirectoryAsync()
         {
-            DonkeyAsyncWorker.OperationResult<string> homeResult =
-                await DonkeyAsyncWorker.GetWslHomePathAsync(
-                    await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(CancellationToken.None),
+            // Ubuntu-22.04의 mycar 폴더를 찾으면 모델 선택 시작 위치로 사용합니다.
+            // WSL/mycar를 찾지 못하면 현재 실행 폴더로 되돌립니다.
+            string currentDirectory = Environment.CurrentDirectory;
+            string distroName = await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(CancellationToken.None);
+            DonkeyAsyncWorker.OperationResult<string> myCarResult =
+                await DonkeyAsyncWorker.FindMyCarPathInWslAsync(
+                    distroName,
                     null,
                     CancellationToken.None);
 
-            if (homeResult.Success && !string.IsNullOrWhiteSpace(homeResult.Data))
+            if (myCarResult.Success && !string.IsNullOrWhiteSpace(myCarResult.Data))
             {
-                return homeResult.Data;
+                string windowsMyCarPath = DonkeyAsyncWorker.ToWindowsPathFromWslPath(
+                    myCarResult.Data,
+                    distroName);
+                if (Directory.Exists(windowsMyCarPath))
+                {
+                    return windowsMyCarPath;
+                }
             }
 
-            return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Directory.Exists(currentDirectory)
+                ? currentDirectory
+                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         }
 
         public Task ReceiveSelectedModelFromPilotModelListAsync(string modelName, string modelPath)
@@ -204,6 +216,7 @@ namespace Data_Manager
 
         private void ConfigureAngleOverlayLayout()
         {
+            // Paint로 그리는 앵글 선이 라벨 배치에 잘리지 않도록 고정 크기 오버레이로 유지합니다.
             pnlAngleOverlay.Height = 130;
             pnlAngleOverlay.Width = Math.Max(420, pnlAngleOverlay.Width);
             pnlAngleOverlay.Anchor = AnchorStyles.Bottom;
@@ -290,14 +303,6 @@ namespace Data_Manager
             return true;
         }
 
-        private void LvModelList_DoubleClick(object? sender, EventArgs e)
-        {
-            if (TryGetSelectedModel(out ModelListItem? model))
-            {
-                _ = SelectModelAsync(model!);
-            }
-        }
-
         private async void LvModelList_SelectedIndexChanged(object? sender, EventArgs e)
         {
             if (!TryGetSelectedModel(out ModelListItem? model))
@@ -306,14 +311,6 @@ namespace Data_Manager
             }
 
             await SelectModelAsync(model!);
-        }
-
-        private void LvModelList_ItemActivate(object? sender, EventArgs e)
-        {
-            if (TryGetSelectedModel(out ModelListItem? model))
-            {
-                _ = SelectModelAsync(model!);
-            }
         }
 
         private bool TryGetSelectedModel(out ModelListItem? model)
@@ -349,6 +346,7 @@ namespace Data_Manager
             lblSelectedModelName.Text = model.Name;
             lblSelectedModelPath.Text = model.Path;
             lblSelectedModelType.Text = string.IsNullOrWhiteSpace(model.ModelType) ? "-" : model.ModelType;
+            lblTubPathValue.Text = model.Name;
             SetTubPathLabels(model.TubPath);
         }
 
@@ -356,7 +354,6 @@ namespace Data_Manager
         {
             string displayPath = GetDisplayTubPath(tubPath);
             lblSelectedTubPath.Text = displayPath;
-            lblTubPathValue.Text = displayPath;
         }
 
         private string GetDisplayTubPath(string? tubPath)
@@ -386,7 +383,6 @@ namespace Data_Manager
             lblSelectedTubPath.Text = "-";
             lblTubPathValue.Text = "-";
             lblImageIndexOverlay.Text = "0 / 0";
-            lblCurrentIndex.Text = "0";
             lblUserThrottleValue.Text = "-";
             lblPilotThrottleValue.Text = "-";
             lblUserAngleValue.Text = "-";
@@ -414,6 +410,7 @@ namespace Data_Manager
 
         private async Task LoadSelectedModelAsync(ModelListItem model)
         {
+            // Each model owns its cached card/frame state; switching models should not reparse loaded tubs.
             _loadCts?.Cancel();
             _loadCts = new CancellationTokenSource();
             CancellationToken token = _loadCts.Token;
@@ -429,7 +426,7 @@ namespace Data_Manager
             lblSelectedModelPath.Text = model.Path;
             lblSelectedModelType.Text = "-";
             lblSelectedTubPath.Text = "-";
-            lblTubPathValue.Text = "-";
+            lblTubPathValue.Text = model.Name;
 
             using ProgressStatusForm progressForm = new ProgressStatusForm();
             progressForm.SetTitle("모델 데이터 연결 중...");
@@ -620,6 +617,36 @@ namespace Data_Manager
                 progressForm.MarkFailed($"오류: {ex.Message}");
                 MessageBox.Show(ex.Message, "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void BtnPilotChart_Click(object? sender, EventArgs e)
+        {
+            // The chart needs both recorded tub values and AI judgment values to compare the two lines.
+            if (_selectedModel == null)
+            {
+                MessageBox.Show("먼저 모델을 선택해 주세요.", "Chart", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (_frameList.Count == 0)
+            {
+                MessageBox.Show("먼저 TUB 데이터를 연결해 주세요.", "Chart", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            bool hasAiJudement = _frameList.Any(frame =>
+                frame.PilotAngle.HasValue || frame.PilotThrottle.HasValue);
+            if (!hasAiJudement)
+            {
+                MessageBox.Show("AI 판단 데이터를 먼저 생성하거나 불러와 주세요.", "Chart", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            List<DonkeyAsyncWorker.PilotFrameData> chartFrames =
+                _frameList.Select(CloneFrame).ToList();
+
+            using PliotChart chart = new PliotChart(_selectedModel.Name, chartFrames);
+            chart.ShowDialog(this);
         }
 
         private async Task LoadTubFramesAsync(
@@ -828,7 +855,6 @@ namespace Data_Manager
                 trbLocation.Maximum = 0;
                 trbLocation.Value = 0;
                 trbLocation.Enabled = false;
-                lblCurrentIndex.Text = "0";
                 _isUpdatingTrackBar = false;
                 return;
             }
@@ -841,7 +867,6 @@ namespace Data_Manager
             trbLocation.TickFrequency = Math.Max(1, _frameList.Count / 20);
             trbLocation.Value = _currentFrameIndex;
             trbLocation.Enabled = true;
-            lblCurrentIndex.Text = (_currentFrameIndex + 1).ToString();
 
             _isUpdatingTrackBar = false;
         }
@@ -900,7 +925,6 @@ namespace Data_Manager
             if (_frameList.Count == 0)
             {
                 lblImageIndexOverlay.Text = "0 / 0";
-                lblCurrentIndex.Text = "0";
                 lblUserThrottleValue.Text = "-";
                 lblPilotThrottleValue.Text = "-";
                 lblUserAngleValue.Text = "-";
@@ -917,7 +941,6 @@ namespace Data_Manager
             ShowImageInPictureBox(frame.ImagePath);
             PositionImageOverlays();
             lblImageIndexOverlay.Text = $"{_currentFrameIndex + 1} / {_frameList.Count}";
-            lblCurrentIndex.Text = (_currentFrameIndex + 1).ToString();
             lblUserThrottleValue.Text = FormatNullable(frame.UserThrottle);
             lblPilotThrottleValue.Text = FormatNullable(frame.PilotThrottle);
             lblUserAngleValue.Text = FormatNullable(frame.UserAngle);

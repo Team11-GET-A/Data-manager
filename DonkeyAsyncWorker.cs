@@ -30,16 +30,14 @@ namespace Data_Manager
         {
             AppSettings settings = LoadSettings();
             if (!string.IsNullOrWhiteSpace(settings.WslDistroName)
+                && IsUbuntu2204DistroName(settings.WslDistroName)
                 && await WslDistroExistsAsync(settings.WslDistroName, cancellationToken))
             {
                 return settings.WslDistroName;
             }
 
             List<string> distros = await GetInstalledWslDistrosAsync(cancellationToken);
-            string? selected = distros.FirstOrDefault(name =>
-                name.Contains("Ubuntu", StringComparison.OrdinalIgnoreCase));
-
-            selected ??= distros.FirstOrDefault();
+            string? selected = distros.FirstOrDefault(IsUbuntu2204DistroName);
             selected ??= FallbackWslDistroName;
 
             settings.WslDistroName = selected;
@@ -768,9 +766,9 @@ namespace Data_Manager
         {
             _ = wslPath;
             AppSettings settings = LoadSettings();
-            return string.IsNullOrWhiteSpace(settings.WslDistroName)
-                ? FallbackWslDistroName
-                : settings.WslDistroName;
+            return IsUbuntu2204DistroName(settings.WslDistroName)
+                ? settings.WslDistroName
+                : FallbackWslDistroName;
         }
 
         public class PilotCardState
@@ -1093,6 +1091,11 @@ namespace Data_Manager
                     cardState.MyCarPath = myCarResult.Data;
                 }
             }
+
+            if (string.IsNullOrWhiteSpace(cardState.MyCarPath))
+            {
+                throw new InvalidOperationException("WSL Ubuntu-22.04에서 mycar 폴더를 찾지 못했습니다.");
+            }
         }
 
         public static async Task<OperationResult<List<TubDrivingRecord>>> LoadTubDrivingRecordsAsync(
@@ -1214,10 +1217,33 @@ namespace Data_Manager
                 IsIndeterminate = true
             });
 
-            string tubsArg = string.Join(";", cardState.TrainingTubPaths ?? new List<string>());
+            // DB에는 Windows/WSL 경로가 섞여 저장될 수 있으므로 Python에 넘기기 전에 실제 경로로 정규화합니다.
+            List<string> resolvedTubPaths = (cardState.TrainingTubPaths ?? new List<string>())
+                .Select(path => ResolveTubPathForPython(path, cardState.WslDistroName))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            string tubsArg = string.Join(";", resolvedTubPaths);
             string modelPathForWsl = ToWslPathFromWindowsPath(cardState.ModelPath);
             string outputPathForWsl = ToWslPathFromWindowsPath(judementPath);
-            string command = BuildPythonCommand(cardState, scriptPath, modelPathForWsl, outputPathForWsl, tubsArg);
+            string pythonPath = await FindJudementPythonAsync(cardState, progress, cancellationToken);
+            if (string.IsNullOrWhiteSpace(pythonPath))
+            {
+                return new OperationResult<List<JudementRecord>>
+                {
+                    Success = false,
+                    ErrorMessage = "AI 판단에 사용할 Python 환경을 찾지 못했습니다. tensorflow 또는 donkeycar, numpy, pillow가 필요합니다."
+                };
+            }
+
+            string command = BuildPythonCommand(cardState, scriptPath, modelPathForWsl, outputPathForWsl, tubsArg, pythonPath);
+
+            progress?.Report(new ProgressReport
+            {
+                Step = "WSL Python 실행 중...",
+                Log = $"Python 판단 생성 실행: python={pythonPath}, model={modelPathForWsl}, output={outputPathForWsl}",
+                IsIndeterminate = true
+            });
 
             OperationResult<string> runResult = await RunWslCommandAsync(cardState.WslDistroName, command, progress, cancellationToken);
             if (!runResult.Success)
@@ -1256,12 +1282,16 @@ namespace Data_Manager
             var psi = new ProcessStartInfo
             {
                 FileName = "wsl.exe",
-                Arguments = $"-d {distroName} bash -lc \"{command}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            psi.ArgumentList.Add("-d");
+            psi.ArgumentList.Add(distroName);
+            psi.ArgumentList.Add("bash");
+            psi.ArgumentList.Add("-lc");
+            psi.ArgumentList.Add(command);
 
             using var process = new Process { StartInfo = psi };
             var outputBuilder = new StringBuilder();
@@ -1494,19 +1524,34 @@ namespace Data_Manager
         {
             string[] candidates =
             {
-                distroName,
+                IsUbuntu2204DistroName(distroName) ? distroName : FallbackWslDistroName,
                 "Ubuntu-22.04",
-                "Ubuntu-24.04",
-                "Ubuntu",
                 "Ubuntu22.04",
-                "Ubuntu24.04",
-                "ub22",
-                "ub24"
+                "Ubuntu_22.04",
+                "Ubuntu-22",
+                "ub22"
             };
 
             return candidates
                 .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
                 .Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static bool IsUbuntu2204DistroName(string? distroName)
+        {
+            if (string.IsNullOrWhiteSpace(distroName))
+            {
+                return false;
+            }
+
+            string normalized = distroName
+                .Trim()
+                .Replace("_", string.Empty, StringComparison.Ordinal)
+                .Replace("-", string.Empty, StringComparison.Ordinal)
+                .Replace(" ", string.Empty, StringComparison.Ordinal)
+                .ToLowerInvariant();
+
+            return normalized is "ubuntu2204" or "ubuntu22";
         }
 
         public static string CombineWslPath(string basePath, string relativePath)
@@ -2135,36 +2180,146 @@ namespace Data_Manager
             return scriptPath;
         }
 
-        private static string BuildPythonCommand(
+        private static async Task<string> FindJudementPythonAsync(
             PilotCardState cardState,
-            string scriptPath,
-            string modelPath,
-            string outputPath,
-            string tubsArg)
+            IProgress<ProgressReport>? progress,
+            CancellationToken cancellationToken)
         {
-            string envCandidates = string.Join(" ", new[]
+            string homePath = GetHomePathFromMyCarPath(cardState.MyCarPath);
+            // 사용자별 shell 초기화에 의존하지 않도록 실제 python 실행 파일을 직접 검사합니다.
+            List<string> candidates = BuildPythonCandidates(homePath, cardState);
+
+            foreach (string pythonPath in candidates)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string windowsPythonPath = ToWindowsPathFromWslPath(pythonPath, cardState.WslDistroName);
+                if (!File.Exists(windowsPythonPath))
+                {
+                    continue;
+                }
+
+                string probeCommand =
+                    $"'{EscapeBash(pythonPath)}' -c 'import importlib.util as u; ok=(u.find_spec(\"tensorflow\") is not None or u.find_spec(\"donkeycar\") is not None) and u.find_spec(\"numpy\") is not None and u.find_spec(\"PIL\") is not None; raise SystemExit(0 if ok else 1)'";
+
+                OperationResult<string> result = await RunWslCommandAsync(
+                    cardState.WslDistroName,
+                    probeCommand,
+                    null,
+                    cancellationToken);
+
+                progress?.Report(new ProgressReport
+                {
+                    Log = result.Success
+                        ? $"AI Python 환경 선택: {pythonPath}"
+                        : $"AI Python 후보 제외: {pythonPath}"
+                });
+
+                if (result.Success)
+                {
+                    return pythonPath;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string ResolveTubPathForPython(string tubPath, string distroName)
+        {
+            if (string.IsNullOrWhiteSpace(tubPath))
+            {
+                return string.Empty;
+            }
+
+            // UNC 경로와 Windows에서 보이는 실제 폴더명을 먼저 보정한 뒤 Python용 WSL 경로로 변환합니다.
+            string trimmed = tubPath.Trim();
+            string windowsPath = trimmed.StartsWith("/", StringComparison.Ordinal)
+                ? ToWindowsPathFromWslPath(trimmed, distroName)
+                : trimmed;
+
+            string resolvedWindowsPath = ResolveExistingWindowsPath(windowsPath);
+            if (Directory.Exists(resolvedWindowsPath))
+            {
+                return ToWslPathFromWindowsPath(resolvedWindowsPath);
+            }
+
+            return trimmed.StartsWith("/", StringComparison.Ordinal)
+                ? trimmed
+                : ToWslPathFromWindowsPath(trimmed);
+        }
+
+        private static List<string> BuildPythonCandidates(string homePath, PilotCardState cardState)
+        {
+            var candidates = new List<string>();
+            string[] preferredEnvNames =
             {
                 cardState.CondaEnvName,
                 FallbackCondaEnvName,
                 "donkey",
                 "donkeycar",
                 "base"
-            }
-                .Where(env => !string.IsNullOrWhiteSpace(env))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(env => $"'{EscapeBash(env)}'"));
+            };
 
+            // 자주 쓰는 환경 이름을 먼저 확인하고, 실제 Conda env 폴더 목록을 뒤에 추가합니다.
+            foreach (string envName in preferredEnvNames.Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                candidates.Add(CombineWslPath(CombineWslPath(CombineWslPath(homePath, "miniconda3/envs"), envName), "bin/python"));
+                candidates.Add(CombineWslPath(CombineWslPath(CombineWslPath(homePath, "anaconda3/envs"), envName), "bin/python"));
+            }
+
+            candidates.Add(CombineWslPath(homePath, "miniconda3/bin/python"));
+            candidates.Add(CombineWslPath(homePath, "anaconda3/bin/python"));
+            AddPythonCandidatesFromEnvRoot(candidates, CombineWslPath(homePath, "miniconda3/envs"));
+            AddPythonCandidatesFromEnvRoot(candidates, CombineWslPath(homePath, "anaconda3/envs"));
+
+            return candidates
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static void AddPythonCandidatesFromEnvRoot(List<string> candidates, string envRootWsl)
+        {
+            string envRootWindows = ToWindowsPathFromWslPath(envRootWsl, FallbackWslDistroName);
+            if (!Directory.Exists(envRootWindows))
+            {
+                return;
+            }
+
+            foreach (string envFolder in Directory.EnumerateDirectories(envRootWindows))
+            {
+                string envName = Path.GetFileName(envFolder);
+                candidates.Add(CombineWslPath(CombineWslPath(envRootWsl, envName), "bin/python"));
+            }
+        }
+
+        private static string GetHomePathFromMyCarPath(string myCarPath)
+        {
+            string normalized = myCarPath.TrimEnd('/');
+            if (normalized.EndsWith("/mycar", StringComparison.OrdinalIgnoreCase))
+            {
+                int index = normalized.LastIndexOf('/', normalized.Length - 1);
+                if (index > 0)
+                {
+                    return normalized.Substring(0, index);
+                }
+            }
+
+            return "/home";
+        }
+
+        private static string BuildPythonCommand(
+            PilotCardState cardState,
+            string scriptPath,
+            string modelPath,
+            string outputPath,
+            string tubsArg,
+            string pythonPath)
+        {
+            // C#에서 선택한 python을 직접 실행해 conda activate 방식의 환경별 차이를 피합니다.
             string command =
-                "if [ -f \"$HOME/miniconda3/etc/profile.d/conda.sh\" ]; then " +
-                "source \"$HOME/miniconda3/etc/profile.d/conda.sh\"; " +
-                "elif [ -f \"$HOME/anaconda3/etc/profile.d/conda.sh\" ]; then " +
-                "source \"$HOME/anaconda3/etc/profile.d/conda.sh\"; " +
-                "else echo 'conda.sh를 찾을 수 없습니다.' >&2; exit 10; fi; " +
-                $"for env in {envCandidates}; do conda activate \"$env\" >/dev/null 2>&1 && SELECTED_CONDA_ENV=\"$env\" && break; done; " +
-                "if [ -z \"$SELECTED_CONDA_ENV\" ]; then echo 'usable conda env not found' >&2; exit 11; fi; " +
-                "echo \"conda env: $SELECTED_CONDA_ENV\"; " +
                 $"cd '{EscapeBash(cardState.MyCarPath)}' || exit 12; " +
-                $"python '{EscapeBash(scriptPath)}'" +
+                $"'{EscapeBash(pythonPath)}' '{EscapeBash(scriptPath)}'" +
                 $" --model '{EscapeBash(modelPath)}'" +
                 $" --model-name '{EscapeBash(cardState.ModelName)}'" +
                 $" --model-type '{EscapeBash(cardState.ModelType)}'" +
@@ -2215,19 +2370,30 @@ namespace Data_Manager
             sb.AppendLine("");
             sb.AppendLine("def load_model(model_path):");
             sb.AppendLine("    try:");
-            sb.AppendLine("        from donkeycar.parts.keras import KerasPilot");
-            sb.AppendLine("        pilot = KerasPilot()");
-            sb.AppendLine("        pilot.load(model_path)");
-            sb.AppendLine("        return pilot.model");
-            sb.AppendLine("    except Exception:");
+            sb.AppendLine("        from tensorflow.keras.models import load_model");
+            sb.AppendLine("        return load_model(model_path, compile=False)");
+            sb.AppendLine("    except Exception as tf_ex:");
             sb.AppendLine("        try:");
-            sb.AppendLine("            from tensorflow.keras.models import load_model" );
-            sb.AppendLine("            return load_model(model_path)");
-            sb.AppendLine("        except Exception as ex:");
-            sb.AppendLine("            raise ex");
+            sb.AppendLine("            import donkeycar.parts.keras as dk");
+            sb.AppendLine("            candidate_names = ['KerasLinear', 'KerasCategorical', 'KerasIMU', 'KerasBehavioral', 'KerasPilot']");
+            sb.AppendLine("            candidates = [getattr(dk, name) for name in candidate_names if hasattr(dk, name)]");
+            sb.AppendLine("            errors = []");
+            sb.AppendLine("            for cls in candidates:");
+            sb.AppendLine("                try:");
+            sb.AppendLine("                    pilot = cls()");
+            sb.AppendLine("                    pilot.load(model_path)");
+            sb.AppendLine("                    return pilot.model");
+            sb.AppendLine("                except Exception as ex:");
+            sb.AppendLine("                    errors.append(f'{cls.__name__}: {ex}')");
+            sb.AppendLine("            raise RuntimeError('model load failed. tensorflow=' + str(tf_ex) + '; donkey=' + ' | '.join(errors))");
+            sb.AppendLine("        except Exception as donkey_ex:");
+            sb.AppendLine("            raise RuntimeError('model load failed. tensorflow=' + str(tf_ex) + '; donkey=' + str(donkey_ex))");
             sb.AppendLine("");
             sb.AppendLine("def collect_records(tub_path):");
             sb.AppendLine("    records = []");
+            sb.AppendLine("    if not os.path.isdir(tub_path):");
+            sb.AppendLine("        print(f'tub missing: {tub_path}', flush=True)");
+            sb.AppendLine("        return records");
             sb.AppendLine("    records_folder = os.path.join(tub_path, 'records')");
             sb.AppendLine("    if os.path.isdir(records_folder):");
             sb.AppendLine("        for root, _, files in os.walk(records_folder):");
