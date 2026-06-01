@@ -715,9 +715,9 @@
             pnlCtrl.Controls.Add(btnNxt1F);
             pnlCtrl.Controls.Add(btnPre5F);
             pnlCtrl.Controls.Add(btnDel);
-            pnlCtrl.Location = new Point(498, 727);
+            pnlCtrl.Location = new Point(383, 704);
             pnlCtrl.Name = "pnlCtrl";
-            pnlCtrl.Size = new Size(766, 199);
+            pnlCtrl.Size = new Size(776, 204);
             pnlCtrl.TabIndex = 13;
             // 
             // btnSetInterval

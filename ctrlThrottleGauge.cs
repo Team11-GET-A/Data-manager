@@ -199,33 +199,34 @@ namespace AD_AI_LearningData_Editor
 
         private GraphicsPath BuildFullGaugePath(RectangleF rect)
         {
-            float centerY = rect.Top + rect.Height / 2f;
             int steps = Math.Max(24, (int)(rect.Width / 5f));
 
             PointF[] topPoints = new PointF[steps + 1];
-            PointF[] bottomPoints = new PointF[steps + 1];
+
+            float bottomY = rect.Bottom;
+            float minHeight = 6f;
+            float maxHeight = rect.Height;
 
             for (int i = 0; i <= steps; i++)
             {
                 float t = steps == 0 ? 0f : (float)i / steps;
                 float x = rect.Left + rect.Width * t;
 
-
+                // 밑변은 수평으로 고정하고, 윗변만 지수 함수처럼 위로 올라가게 합니다.
                 float exponential = (float)Math.Pow(t, 1.85);
-                float thickness = 6f + (rect.Height - 8f) * exponential;
+                float height = minHeight + (maxHeight - minHeight) * exponential;
+                float topY = bottomY - height;
 
-                topPoints[i] = new PointF(x, centerY - thickness / 2f);
-                bottomPoints[i] = new PointF(x, centerY + thickness / 2f);
+                topPoints[i] = new PointF(x, topY);
             }
 
             GraphicsPath path = new GraphicsPath();
             path.StartFigure();
-            path.AddLines(topPoints);
 
-            for (int i = steps; i >= 0; i--)
-            {
-                path.AddLine(bottomPoints[i], i > 0 ? bottomPoints[i - 1] : bottomPoints[i]);
-            }
+            path.AddLine(rect.Left, bottomY, rect.Left, bottomY - minHeight);
+            path.AddLines(topPoints);
+            path.AddLine(rect.Right, topPoints[topPoints.Length - 1].Y, rect.Right, bottomY);
+            path.AddLine(rect.Right, bottomY, rect.Left, bottomY);
 
             path.CloseFigure();
 

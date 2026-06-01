@@ -40,6 +40,10 @@ namespace AD_AI_LearningData_Editor
         private int selectedIntervalEndIndex = -1;
         private Font lblSetIntervalDesignerFont = null;
         private ToolTip mainToolTip;
+        private System.Windows.Forms.Timer slideHoldStartTimer;
+        private System.Windows.Forms.Timer slideHoldRepeatTimer;
+        private Action slideHoldAction;
+        private bool slideHoldStarted;
 
         protected override CreateParams CreateParams
         {
@@ -137,6 +141,9 @@ namespace AD_AI_LearningData_Editor
 
             InitializeSpeedController();
             InitializeImageEditor();
+
+            this.KeyPreview = true;
+            InitializeSlideHoldButtons();
         }
 
         private string GetBinFolder()
@@ -613,6 +620,8 @@ namespace AD_AI_LearningData_Editor
             List<string> targets = GetTargetImageFilesForEdit();
             if (targets.Count == 0) return;
 
+            int restoreIndex = GetFirstTargetSlideIndex(targets);
+
             ReleaseCurrentImage();
 
             foreach (string targetPath in targets)
@@ -635,7 +644,55 @@ namespace AD_AI_LearningData_Editor
             }
 
             LoadUploadedFilesToD();
+            MoveToSlideIndexAfterEdit(restoreIndex);
             SelectIntervalItemsInListView();
+        }
+
+        private int GetFirstTargetSlideIndex(List<string> targetPaths)
+        {
+            if (targetPaths == null || targetPaths.Count == 0 || slideImages == null || slideImages.Count == 0)
+            {
+                return currentSlideIndex;
+            }
+
+            HashSet<string> targetSet = new HashSet<string>(targetPaths, StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < slideImages.Count; i++)
+            {
+                if (targetSet.Contains(slideImages[i]))
+                {
+                    return i;
+                }
+            }
+
+            HashSet<string> targetNames = new HashSet<string>(
+                targetPaths.Select(path => Path.GetFileName(path)),
+                StringComparer.OrdinalIgnoreCase
+            );
+
+            for (int i = 0; i < slideImages.Count; i++)
+            {
+                if (targetNames.Contains(Path.GetFileName(slideImages[i])))
+                {
+                    return i;
+                }
+            }
+
+            return currentSlideIndex;
+        }
+
+        private void MoveToSlideIndexAfterEdit(int targetIndex)
+        {
+            if (slideImages == null || slideImages.Count == 0)
+            {
+                return;
+            }
+
+            if (targetIndex < 0) targetIndex = 0;
+            if (targetIndex >= slideImages.Count) targetIndex = slideImages.Count - 1;
+
+            currentSlideIndex = targetIndex;
+            UpdateSlideDisplay();
         }
 
         private void btnNoise_Click(object sender, EventArgs e)
@@ -668,6 +725,8 @@ namespace AD_AI_LearningData_Editor
         {
             List<string> targets = GetTargetImageFilesForEdit();
             if (targets.Count == 0) return;
+
+            int restoreIndex = GetFirstTargetSlideIndex(targets);
 
             string backupFolder = GetMirrorYBackupFolder();
             bool hasBackupForTargets = targets.All(targetPath =>
@@ -744,6 +803,8 @@ namespace AD_AI_LearningData_Editor
             List<string> targets = GetTargetImageFilesForEdit();
             if (targets.Count == 0) return;
 
+            int restoreIndex = GetFirstTargetSlideIndex(targets);
+
             roiState[row, col] = !roiState[row, col];
             ReleaseCurrentImage();
 
@@ -795,6 +856,7 @@ namespace AD_AI_LearningData_Editor
             }
 
             LoadUploadedFilesToD();
+            MoveToSlideIndexAfterEdit(restoreIndex);
             SelectIntervalItemsInListView();
         }
 
@@ -802,6 +864,8 @@ namespace AD_AI_LearningData_Editor
         {
             List<string> targets = GetTargetImageFilesForEdit();
             if (targets.Count == 0) return;
+
+            int restoreIndex = GetFirstTargetSlideIndex(targets);
 
             int trackValue = trcbrContrastProperty.Value;
             ReleaseCurrentImage();
@@ -866,6 +930,7 @@ namespace AD_AI_LearningData_Editor
             }
 
             LoadUploadedFilesToD();
+            MoveToSlideIndexAfterEdit(restoreIndex);
             SelectIntervalItemsInListView();
         }
 
@@ -978,15 +1043,15 @@ namespace AD_AI_LearningData_Editor
 
         private void InitializeToolTips()
         {
-            SetToolTipByName("btnPlayStop", "슬라이드를 재생/정지");
-            SetToolTipByName("btnNxt1F", "1프레임 넘기기");
-            SetToolTipByName("btnPre1F", "1프레임 넘기기");
+            SetToolTipByName("btnPlayStop", "단축키 : 스패이스 바");
+            SetToolTipByName("btnNxt1F", "단축키 : 방향키");
+            SetToolTipByName("btnPre1F", "단축키 : 방향키");
             SetToolTipByName("btnNxt5F", "5프레임 넘기기");
             SetToolTipByName("btnPre5F", "5프레임 넘기기");
             SetToolTipByName("btnSpeedPopup", "재생 속도 조절");
 
-            SetToolTipByName("btnDel", "선택된 항목을 휴지통으로 이동");
-            SetToolTipByName("btnSetInterval", "현재 프레임을 구간으로 지정");
+            SetToolTipByName("btnDel", "단축키 : Del 또는 백 스페이스");
+            SetToolTipByName("btnSetInterval", "현재 프레임을 구간으로 지정, 단축키 : Ctrl");
             SetToolTipByName("btnSave", "변경내용 저장");
 
             SetToolTipByName("btnContrastProperty", "명암 조절");
@@ -2195,6 +2260,191 @@ namespace AD_AI_LearningData_Editor
             }
 
             return null;
+        }
+
+        private void InitializeSlideHoldButtons()
+        {
+            slideHoldStartTimer = new System.Windows.Forms.Timer();
+            slideHoldStartTimer.Interval = 200;
+            slideHoldStartTimer.Tick += SlideHoldStartTimer_Tick;
+
+            slideHoldRepeatTimer = new System.Windows.Forms.Timer();
+            slideHoldRepeatTimer.Interval = 100;
+            slideHoldRepeatTimer.Tick += SlideHoldRepeatTimer_Tick;
+
+            RegisterSlideHoldButton(btnPre1F, () => MoveSlide(-1));
+            RegisterSlideHoldButton(btnPre5F, () => MoveSlide(-5));
+            RegisterSlideHoldButton(btnNxt1F, () => MoveSlide(1));
+            RegisterSlideHoldButton(btnNxt5F, () => MoveSlide(5));
+        }
+
+        private void RegisterSlideHoldButton(Control button, Action action)
+        {
+            if (button == null || action == null)
+            {
+                return;
+            }
+
+            button.MouseDown += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Left)
+                {
+                    StartSlideHold(action);
+                }
+            };
+
+            button.MouseUp += (s, e) =>
+            {
+                StopSlideHold();
+            };
+
+            button.MouseLeave += (s, e) =>
+            {
+                if (Control.MouseButtons != MouseButtons.Left)
+                {
+                    StopSlideHold();
+                }
+            };
+        }
+
+        private void StartSlideHold(Action action)
+        {
+            StopSlideHold();
+
+            slideHoldAction = action;
+            slideHoldStarted = false;
+
+            if (slideHoldStartTimer != null)
+            {
+                slideHoldStartTimer.Start();
+            }
+        }
+
+        private void StopSlideHold()
+        {
+            if (slideHoldStartTimer != null)
+            {
+                slideHoldStartTimer.Stop();
+            }
+
+            if (slideHoldRepeatTimer != null)
+            {
+                slideHoldRepeatTimer.Stop();
+            }
+
+            slideHoldStarted = false;
+            slideHoldAction = null;
+        }
+
+        private void SlideHoldStartTimer_Tick(object sender, EventArgs e)
+        {
+            if (Control.MouseButtons != MouseButtons.Left)
+            {
+                StopSlideHold();
+                return;
+            }
+
+            slideHoldStartTimer.Stop();
+            slideHoldStarted = true;
+
+            slideHoldAction?.Invoke();
+
+            if (slideHoldRepeatTimer != null)
+            {
+                slideHoldRepeatTimer.Start();
+            }
+        }
+
+        private void SlideHoldRepeatTimer_Tick(object sender, EventArgs e)
+        {
+            if (Control.MouseButtons != MouseButtons.Left)
+            {
+                StopSlideHold();
+                return;
+            }
+
+            if (slideHoldStarted)
+            {
+                slideHoldAction?.Invoke();
+            }
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            Keys keyCode = keyData & Keys.KeyCode;
+
+            if (IsTextInputFocused())
+            {
+                return base.ProcessCmdKey(ref msg, keyData);
+            }
+
+            if (keyCode == Keys.Space)
+            {
+                ClickControlButton(btnPlayStop, () => btnPlayStop_Click(btnPlayStop, EventArgs.Empty));
+                return true;
+            }
+
+            if (keyCode == Keys.Right)
+            {
+                ClickControlButton(btnNxt1F, () => btnNxt1F_Click(btnNxt1F, EventArgs.Empty));
+                return true;
+            }
+
+            if (keyCode == Keys.Left)
+            {
+                ClickControlButton(btnPre1F, () => btnPre1F_Click(btnPre1F, EventArgs.Empty));
+                return true;
+            }
+
+            if (keyCode == Keys.Delete || keyCode == Keys.Back)
+            {
+                ClickControlButton(btnDel, () => btnDel_Click(btnDel, EventArgs.Empty));
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private void ClickControlButton(Control control, Action fallbackAction)
+        {
+            if (control is Button button)
+            {
+                button.PerformClick();
+                return;
+            }
+
+            fallbackAction?.Invoke();
+        }
+
+        private bool IsTextInputFocused()
+        {
+            return IsTextInputFocusedRecursive(this);
+        }
+
+        private bool IsTextInputFocusedRecursive(Control parent)
+        {
+            if (parent == null)
+            {
+                return false;
+            }
+
+            foreach (Control control in parent.Controls)
+            {
+                if ((control is TextBoxBase ||
+                     control is ComboBox ||
+                     control is NumericUpDown) &&
+                    control.ContainsFocus)
+                {
+                    return true;
+                }
+
+                if (control.HasChildren && IsTextInputFocusedRecursive(control))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void btnPlayStop_Click(object sender, EventArgs e)
