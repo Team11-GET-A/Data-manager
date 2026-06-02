@@ -61,10 +61,10 @@ namespace DonkeyDataManager
         private System.Windows.Forms.Timer browserMonitorTimer =
             new System.Windows.Forms.Timer();
 
-        private string wslDistroName = "Ubuntu";
+        private string wslDistroName = "Ubuntu-22.04";
         private string wslUsername = "";
         private string wslBasePath = "";
-        private const string DonkeyCarWslPath = "~/mycar";
+        private string wslMycarPath = "";
         private const string ModelDirectoryName = "models";
         private const string TrainingCondaEnvironment = "e2e_env";
         private readonly string modelRegistryPath =
@@ -215,13 +215,7 @@ namespace DonkeyDataManager
                             {
                                 Name = name,
                                 WindowsPath = file,
-                                WslPath =
-                                    "/home/" +
-                                    wslUsername +
-                                    "/mycar/" +
-                                    ModelDirectoryName +
-                                    "/" +
-                                    name,
+                                WslPath = GetModelWslPath(name),
                                 CreatedAt =
                                     File.GetCreationTime(file)
                             });
@@ -320,36 +314,60 @@ namespace DonkeyDataManager
                 wslDistroName =
                     ChooseWslDistro(distros);
 
-                wslUsername = GetWSLUserName();
-
-                wslBasePath =
-                    BuildWslSharePath(
-                        wslDistroName,
-                        wslUsername);
+                RefreshWslPaths();
             }
             catch
             {
-                if (string.IsNullOrWhiteSpace(wslUsername))
-                {
-                    wslUsername = Environment.UserName;
-                }
+                wslUsername =
+                    string.IsNullOrWhiteSpace(wslUsername)
+                        ? ""
+                        : wslUsername;
+
+                wslMycarPath =
+                    string.IsNullOrWhiteSpace(wslUsername)
+                        ? "/home/*/mycar"
+                        : "/home/" + wslUsername + "/mycar";
 
                 wslBasePath =
                     BuildWslSharePath(
-                        "Ubuntu",
-                        wslUsername);
+                        "Ubuntu-22.04",
+                        wslMycarPath);
             }
+        }
+
+        private void RefreshWslPaths()
+        {
+            wslMycarPath = ResolveMycarWslPath();
+
+            string pathUser =
+                ExtractWslUserFromMycarPath(wslMycarPath);
+
+            wslUsername =
+                string.IsNullOrWhiteSpace(pathUser)
+                    ? GetWSLUserName()
+                    : pathUser;
+
+            wslBasePath =
+                BuildWslSharePath(
+                    wslDistroName,
+                    wslMycarPath);
         }
 
         private string BuildWslSharePath(
             string distroName,
-            string username)
+            string mycarWslPath)
         {
+            string relativePath =
+                mycarWslPath
+                    .Trim()
+                    .TrimStart('/')
+                    .Replace('/', '\\');
+
             string wslDollarPath =
-                $@"\\wsl$\{distroName}\home\{username}\mycar";
+                $@"\\wsl$\{distroName}\{relativePath}";
 
             string wslLocalhostPath =
-                $@"\\wsl.localhost\{distroName}\home\{username}\mycar";
+                $@"\\wsl.localhost\{distroName}\{relativePath}";
 
             if (Directory.Exists(wslDollarPath))
             {
@@ -367,34 +385,265 @@ namespace DonkeyDataManager
         private string ChooseWslDistro(
             List<string> distros)
         {
-            foreach (string distro in distros)
+            List<string> orderedDistros =
+                OrderWslDistrosByPreference(distros);
+
+            foreach (string distro in orderedDistros)
             {
                 if (
-                    TryRunWslCommand(
+                    TryResolveMycarFromWslShare(
                         distro,
-                        "test -f ~/mycar/train.py"))
+                        out _,
+                        out _))
                 {
                     return distro;
                 }
             }
 
-            foreach (string distro in distros)
+            foreach (string distro in orderedDistros)
             {
                 if (
                     TryRunWslCommand(
                         distro,
-                        "test -d ~/mycar"))
+                        BuildMycarProbeCommand("test -f \"$MYCAR_PATH/train.py\"")))
                 {
                     return distro;
                 }
             }
 
-            if (distros.Count > 0)
+            foreach (string distro in orderedDistros)
             {
-                return distros[0];
+                if (
+                    TryRunWslCommand(
+                        distro,
+                        BuildMycarProbeCommand("test -d \"$MYCAR_PATH\"")))
+                {
+                    return distro;
+                }
             }
 
-            return "Ubuntu";
+            if (orderedDistros.Count > 0)
+            {
+                return orderedDistros[0];
+            }
+
+            return "Ubuntu-22.04";
+        }
+
+        private List<string> OrderWslDistrosByPreference(
+            List<string> distros)
+        {
+            List<string> ordered =
+                new List<string>();
+
+            string[] preferredNames =
+                new string[]
+                {
+                    "Ubuntu-22.04",
+                    "Ubuntu22.04",
+                    "Ubuntu 22.04",
+                    "Ubuntu"
+                };
+
+            foreach (string preferredName in preferredNames)
+            {
+                foreach (string distro in distros)
+                {
+                    if (
+                        string.Equals(
+                            distro,
+                            preferredName,
+                            StringComparison.OrdinalIgnoreCase) &&
+                        !ordered.Contains(distro))
+                    {
+                        ordered.Add(distro);
+                    }
+                }
+            }
+
+            foreach (string distro in distros)
+            {
+                if (!ordered.Contains(distro))
+                {
+                    ordered.Add(distro);
+                }
+            }
+
+            return ordered;
+        }
+
+        private string BuildMycarProbeCommand(string testCommand)
+        {
+            return
+                BuildMycarResolverScript(false) +
+                testCommand;
+        }
+
+        private string ResolveMycarWslPath()
+        {
+            if (
+                TryResolveMycarFromWslShare(
+                    wslDistroName,
+                    out string shareWslPath,
+                    out _))
+            {
+                return shareWslPath;
+            }
+
+            return
+                RunWslCommandForOutput(
+                    BuildMycarResolverScript(true) +
+                    "cd \"$MYCAR_PATH\" && pwd");
+        }
+
+        private bool TryResolveMycarFromWslShare(
+            string distroName,
+            out string mycarWslPath,
+            out string mycarWindowsPath)
+        {
+            mycarWslPath = "";
+            mycarWindowsPath = "";
+
+            string[] shareRoots =
+                new string[]
+                {
+                    $@"\\wsl$\{distroName}\home",
+                    $@"\\wsl.localhost\{distroName}\home"
+                };
+
+            foreach (string shareRoot in shareRoots)
+            {
+                try
+                {
+                    if (!Directory.Exists(shareRoot))
+                    {
+                        continue;
+                    }
+
+                    foreach (
+                        string userDirectory in
+                        Directory.GetDirectories(shareRoot))
+                    {
+                        string candidate =
+                            Path.Combine(
+                                userDirectory,
+                                "mycar");
+
+                        if (
+                            File.Exists(
+                                Path.Combine(
+                                    candidate,
+                                    "train.py")))
+                        {
+                            string userName =
+                                Path.GetFileName(userDirectory);
+
+                            mycarWindowsPath = candidate;
+                            mycarWslPath =
+                                "/home/" +
+                                userName +
+                                "/mycar";
+
+                            return true;
+                        }
+                    }
+                }
+                catch
+                {
+
+                }
+            }
+
+            return false;
+        }
+
+        private string ExtractWslUserFromMycarPath(string mycarWslPath)
+        {
+            if (string.IsNullOrWhiteSpace(mycarWslPath))
+            {
+                return "";
+            }
+
+            string normalized =
+                mycarWslPath
+                    .Replace("\\", "/")
+                    .Trim('/');
+
+            string[] parts =
+                normalized.Split(
+                    new char[] { '/' },
+                    StringSplitOptions.RemoveEmptyEntries);
+
+            if (
+                parts.Length >= 3 &&
+                string.Equals(
+                    parts[0],
+                    "home",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return parts[1];
+            }
+
+            return "";
+        }
+
+        private string BuildMycarResolverScript(bool requireTrainPy)
+        {
+            string requiredFile =
+                requireTrainPy
+                    ? "train.py"
+                    : "";
+
+            string requirementCheck =
+                string.IsNullOrWhiteSpace(requiredFile)
+                    ? "if [ -d \"$candidate\" ]; then MYCAR_PATH=\"$candidate\"; break; fi; "
+                    : "if [ -f \"$candidate/" + requiredFile + "\" ]; then MYCAR_PATH=\"$candidate\"; break; fi; ";
+
+            string fallbackFind =
+                string.IsNullOrWhiteSpace(requiredFile)
+                    ? "MYCAR_PATH=$(find /home -maxdepth 4 -type d -name mycar 2>/dev/null | head -n 1 || true); "
+                    : "MYCAR_TRAIN=$(find /home -maxdepth 5 -path '*/mycar/" + requiredFile + "' 2>/dev/null | head -n 1 || true); " +
+                      "if [ -n \"$MYCAR_TRAIN\" ]; then MYCAR_PATH=$(dirname \"$MYCAR_TRAIN\"); fi; ";
+
+            string missingMessage =
+                string.IsNullOrWhiteSpace(requiredFile)
+                    ? "mycar folder was not found in WSL."
+                    : "mycar folder with train.py was not found in WSL.";
+
+            return
+                "MYCAR_PATH=''; " +
+                "WSL_USER=$(id -un 2>/dev/null || whoami 2>/dev/null || true); " +
+                "USER_HOME=$(getent passwd \"$WSL_USER\" 2>/dev/null | cut -d: -f6); " +
+                "if [ -z \"$USER_HOME\" ]; then USER_HOME=\"$HOME\"; fi; " +
+                "for candidate in \"$USER_HOME/mycar\" \"$HOME/mycar\" \"/home/$WSL_USER/mycar\" /home/*/mycar; do " +
+                "[ -e \"$candidate\" ] || continue; " +
+                requirementCheck +
+                "done; " +
+                "if [ -z \"$MYCAR_PATH\" ]; then " +
+                fallbackFind +
+                "fi; " +
+                "if [ -z \"$MYCAR_PATH\" ]; then " +
+                "echo '" + missingMessage + "' >&2; " +
+                "echo 'WSL user: '\"$WSL_USER\" >&2; " +
+                "echo 'WSL home: '\"$USER_HOME\" >&2; " +
+                "echo 'Checked: $USER_HOME/mycar, $HOME/mycar, /home/$WSL_USER/mycar, /home/*/mycar' >&2; " +
+                "exit 20; " +
+                "fi; ";
+        }
+
+        private string GetModelWslPath(string modelName)
+        {
+            string mycarPath =
+                string.IsNullOrWhiteSpace(wslMycarPath)
+                    ? "/home/" + wslUsername + "/mycar"
+                    : wslMycarPath;
+
+            return
+                mycarPath.TrimEnd('/') +
+                "/" +
+                ModelDirectoryName +
+                "/" +
+                modelName;
         }
 
         private bool TryRunWslCommand(
@@ -505,7 +754,12 @@ namespace DonkeyDataManager
                         CreateNoWindow = true
                     };
 
-                AddWslArguments(psi, "whoami");
+                AddWslArguments(
+                    psi,
+                    "WSL_USER=$(whoami 2>/dev/null || true); " +
+                    "if [ -z \"$WSL_USER\" ]; then WSL_USER=\"$USER\"; fi; " +
+                    "if [ -z \"$WSL_USER\" ]; then WSL_USER=$(basename \"$HOME\"); fi; " +
+                    "printf '%s' \"$WSL_USER\"");
 
                 using (Process proc =
                     Process.Start(psi))
@@ -518,8 +772,12 @@ namespace DonkeyDataManager
 
                     proc.WaitForExit();
 
-                    if (!string.IsNullOrWhiteSpace(user))
+                    if (
+                        proc.ExitCode == 0 &&
+                        !string.IsNullOrWhiteSpace(user))
+                    {
                         return user;
+                    }
                 }
             }
             catch
@@ -527,7 +785,7 @@ namespace DonkeyDataManager
 
             }
 
-            return Environment.UserName;
+            return "";
         }
 
         private void AddWslArguments(
@@ -549,6 +807,13 @@ namespace DonkeyDataManager
             {
                 psi.ArgumentList.Add("-d");
                 psi.ArgumentList.Add(distroName);
+
+                if (!string.IsNullOrWhiteSpace(wslUsername))
+                {
+                    psi.ArgumentList.Add("-u");
+                    psi.ArgumentList.Add(wslUsername);
+                }
+
                 psi.ArgumentList.Add("--");
             }
 
@@ -1238,11 +1503,10 @@ namespace DonkeyDataManager
                     return;
                 }
 
+                RefreshWslPaths();
+
                 string mycarWslPath =
-                    RunWslCommandForOutput(
-                        "cd " +
-                        DonkeyCarWslPath +
-                        " && pwd");
+                    wslMycarPath;
 
                 string selectedTubWslPath =
                     ResolveTubWslPath(
@@ -1452,7 +1716,9 @@ namespace DonkeyDataManager
                 QuoteForBash(mycarWslPath) +
                 "; " +
                 "if [ ! -f train.py ]; then " +
-                "echo 'train.py was not found in ~/mycar.' >&2; " +
+                "echo 'train.py was not found in the resolved mycar folder: " +
+                EscapeForDoubleQuotedBash(mycarWslPath) +
+                "' >&2; " +
                 "exit 21; " +
                 "fi; " +
                 "if [ ! -d " +
@@ -1472,38 +1738,151 @@ namespace DonkeyDataManager
                 "mkdir -p " +
                 QuoteForBash(ModelDirectoryName) +
                 "; " +
-                "if [ -x \"$HOME/miniconda3/envs/" +
-                TrainingCondaEnvironment +
-                "/bin/python\" ]; then " +
-                "PYTHON_BIN=\"$HOME/miniconda3/envs/" +
-                TrainingCondaEnvironment +
-                "/bin/python\"; " +
-                "elif [ -f \"$HOME/miniconda3/etc/profile.d/conda.sh\" ]; then " +
-                "source \"$HOME/miniconda3/etc/profile.d/conda.sh\"; " +
-                "if conda env list | awk '{print $1}' | grep -qx " +
-                QuoteForBash(TrainingCondaEnvironment) +
-                "; then conda activate " +
-                QuoteForBash(TrainingCondaEnvironment) +
-                "; fi; " +
-                "PYTHON_BIN=$(command -v python || command -v python3 || true); " +
-                "else " +
-                "PYTHON_BIN=$(command -v python || command -v python3 || true); " +
-                "fi; " +
-                "if [ -z \"$PYTHON_BIN\" ]; then " +
-                "echo 'python or python3 was not found in WSL. Check the conda environment.' >&2; " +
-                "exit 22; " +
-                "fi; " +
-                "echo \"Using Python: $PYTHON_BIN\"; " +
+                BuildPythonResolverCommand() +
+                "echo 'Using Python after conda activate:'; " +
+                "python -c 'import sys; print(sys.executable)'; " +
                 "echo \"Training tub: " +
                 EscapeForDoubleQuotedBash(selectedTubWslPath) +
                 "\"; " +
                 "echo \"Saving model: " +
                 EscapeForDoubleQuotedBash(modelRelativePath) +
                 "\"; " +
-                "\"$PYTHON_BIN\" train.py --tubs " +
+                "python train.py --tubs " +
                 QuoteForBash(selectedTubWslPath) +
                 " --model " +
                 QuoteForBash(modelRelativePath);
+        }
+
+        private string BuildPythonResolverCommand()
+        {
+            string configuredUserHome =
+                string.IsNullOrWhiteSpace(wslUsername)
+                    ? ""
+                    : "/home/" + wslUsername;
+
+            List<string> condaShellPaths =
+                BuildCondaShellCandidates(configuredUserHome);
+
+            return
+                "echo 'Activating DonkeyCar Conda environment: " +
+                TrainingCondaEnvironment +
+                "'; " +
+                "echo 'Resolver strategy: conda-activate-explicit-v2'; " +
+                "echo 'Configured WSL user: " +
+                EscapeForDoubleQuotedBash(wslUsername) +
+                "'; " +
+                "echo 'Configured WSL home: " +
+                EscapeForDoubleQuotedBash(configuredUserHome) +
+                "'; " +
+                BuildCondaShellSourceCommand(condaShellPaths) +
+                "if ! conda --version >/dev/null 2>&1; then " +
+                "echo 'Conda initialization failed after loading conda.sh.' >&2; " +
+                "exit 22; " +
+                "fi; " +
+                "conda --version; " +
+                "echo 'Activating conda env: " +
+                EscapeForDoubleQuotedBash(TrainingCondaEnvironment) +
+                "'; " +
+                "conda activate " +
+                QuoteForBash(TrainingCondaEnvironment) +
+                " || { " +
+                "echo 'Conda environment activation failed: " +
+                EscapeForDoubleQuotedBash(TrainingCondaEnvironment) +
+                "' >&2; " +
+                "conda env list >&2; " +
+                "exit 22; " +
+                "}; " +
+                "if ! python -c 'import sys' >/dev/null 2>&1; then " +
+                "echo 'Python was not found or cannot be executed after conda activate.' >&2; " +
+                "exit 22; " +
+                "fi; ";
+        }
+
+        private List<string> BuildCondaShellCandidates(string configuredUserHome)
+        {
+            List<string> bases =
+                new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(configuredUserHome))
+            {
+                bases.Add(configuredUserHome);
+            }
+
+            if (!string.IsNullOrWhiteSpace(wslUsername))
+            {
+                bases.Add("/home/" + wslUsername);
+            }
+
+            bases.Add("/opt/conda");
+
+            List<string> candidates =
+                new List<string>();
+
+            foreach (string basePath in bases.Distinct(StringComparer.Ordinal))
+            {
+                if (basePath == "/opt/conda")
+                {
+                    candidates.Add("/opt/conda/etc/profile.d/conda.sh");
+                    continue;
+                }
+
+                candidates.Add(basePath + "/miniconda3/etc/profile.d/conda.sh");
+                candidates.Add(basePath + "/anaconda3/etc/profile.d/conda.sh");
+                candidates.Add(basePath + "/miniforge3/etc/profile.d/conda.sh");
+                candidates.Add(basePath + "/mambaforge/etc/profile.d/conda.sh");
+                candidates.Add(basePath + "/micromamba/etc/profile.d/conda.sh");
+            }
+
+            return candidates.Distinct(StringComparer.Ordinal).ToList();
+        }
+
+        private string BuildCondaShellSourceCommand(List<string> condaShellPaths)
+        {
+            StringBuilder builder =
+                new StringBuilder();
+
+            if (condaShellPaths.Count == 0)
+            {
+                return
+                    "echo 'Conda was not found in WSL.' >&2; " +
+                    "echo 'No explicit conda.sh locations were available to check.' >&2; " +
+                    "exit 22; ";
+            }
+
+            for (int i = 0; i < condaShellPaths.Count; i++)
+            {
+                string condaShellPath =
+                    condaShellPaths[i];
+
+                builder.Append(
+                    i == 0
+                        ? "if [ -f "
+                        : "elif [ -f ");
+
+                builder.Append(
+                    QuoteForBash(condaShellPath) +
+                    " ]; then " +
+                    "echo 'Using conda.sh: " +
+                    EscapeForDoubleQuotedBash(condaShellPath) +
+                    "'; " +
+                    ". " +
+                    QuoteForBash(condaShellPath) +
+                    "; ");
+            }
+
+            builder.Append(
+                "else " +
+                "echo 'Conda was not found in WSL.' >&2; " +
+                "echo 'Checked explicit conda.sh locations under the resolved WSL user home.' >&2; " +
+                "exit 22; " +
+                "fi; ");
+
+            return builder.ToString();
+        }
+
+        private string EscapeForSingleQuotedBash(string value)
+        {
+            return value.Replace("'", "'\"'\"'");
         }
 
         private string EscapeForDoubleQuotedBash(string value)
@@ -1699,6 +2078,8 @@ namespace DonkeyDataManager
                 string selectedModel =
                     GetSelectedModelName();
 
+                RefreshWslPaths();
+
                 ProcessStartInfo psi =
                     new ProcessStartInfo
                     {
@@ -1728,30 +2109,18 @@ namespace DonkeyDataManager
             return
                 "set -e; " +
                 "cd " +
-                DonkeyCarWslPath +
+                QuoteForBash(wslMycarPath) +
                 "; " +
-                "if [ -x \"$HOME/miniconda3/envs/" +
-                TrainingCondaEnvironment +
-                "/bin/python\" ]; then " +
-                "PYTHON_BIN=\"$HOME/miniconda3/envs/" +
-                TrainingCondaEnvironment +
-                "/bin/python\"; " +
-                "elif [ -f \"$HOME/miniconda3/etc/profile.d/conda.sh\" ]; then " +
-                "source \"$HOME/miniconda3/etc/profile.d/conda.sh\"; " +
-                "if conda env list | awk '{print $1}' | grep -qx " +
-                QuoteForBash(TrainingCondaEnvironment) +
-                "; then conda activate " +
-                QuoteForBash(TrainingCondaEnvironment) +
-                "; fi; " +
-                "PYTHON_BIN=$(command -v python || command -v python3 || true); " +
-                "else " +
-                "PYTHON_BIN=$(command -v python || command -v python3 || true); " +
+                "if [ ! -f manage.py ]; then " +
+                "echo 'manage.py was not found in the resolved mycar folder: " +
+                EscapeForDoubleQuotedBash(wslMycarPath) +
+                "' >&2; " +
+                "exit 25; " +
                 "fi; " +
-                "if [ -z \"$PYTHON_BIN\" ]; then " +
-                "echo 'python or python3 was not found in WSL. Check the conda environment.' >&2; " +
-                "exit 22; " +
-                "fi; " +
-                "\"$PYTHON_BIN\" manage.py drive --model " +
+                BuildPythonResolverCommand() +
+                "echo 'Using Python after conda activate:'; " +
+                "python -c 'import sys; print(sys.executable)'; " +
+                "python manage.py drive --model " +
                 QuoteForBash(
                     "./" +
                     ModelDirectoryName +
@@ -2107,13 +2476,7 @@ namespace DonkeyDataManager
                     {
                         Name = newName,
                         WindowsPath = newFilePath,
-                        WslPath =
-                            "/home/" +
-                            wslUsername +
-                            "/mycar/" +
-                            ModelDirectoryName +
-                            "/" +
-                            newName,
+                        WslPath = GetModelWslPath(newName),
                         SourceTubWindowsPath =
                             oldEntry == null
                                 ? ""
