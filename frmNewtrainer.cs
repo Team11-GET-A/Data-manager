@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text;
+using Data_Manager;
 
 namespace DonkeyDataManager
 {
@@ -148,6 +149,39 @@ namespace DonkeyDataManager
 
             // ⭐ 추가
             LoadModelsToList();
+
+            SharedModelRegistry.ModelsChanged +=
+                SharedModelRegistry_ModelsChanged;
+
+            FormClosed += FrmNewtrainer_FormClosed;
+        }
+
+        private void SharedModelRegistry_ModelsChanged(
+            object sender,
+            EventArgs e)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            BeginInvoke(
+                new Action(
+                    () =>
+                    {
+                        if (!IsDisposed)
+                        {
+                            LoadModelsToList();
+                        }
+                    }));
+        }
+
+        private void FrmNewtrainer_FormClosed(
+            object sender,
+            FormClosedEventArgs e)
+        {
+            SharedModelRegistry.ModelsChanged -=
+                SharedModelRegistry_ModelsChanged;
         }
 
         // =====================================================
@@ -205,8 +239,8 @@ namespace DonkeyDataManager
                             entries.Exists(
                                 entry =>
                                     string.Equals(
-                                        entry.Name,
-                                        name,
+                                        entry.WindowsPath,
+                                        file,
                                         StringComparison.OrdinalIgnoreCase)))
                         {
                             continue;
@@ -233,10 +267,12 @@ namespace DonkeyDataManager
 
                 lstModels.Items.Clear();
 
-                foreach (ModelRegistryEntry entry in entries)
+                for (int i = 0; i < entries.Count; i++)
                 {
                     lstModels.Items.Add(
-                        CreateModelListItem(entry));
+                        CreateModelListItem(
+                            entries[i],
+                            i + 1));
                 }
 
                 SaveModelRegistry(entries);
@@ -1068,8 +1104,10 @@ namespace DonkeyDataManager
             return
                 lstModels.SelectedItems.Count == 0
                     ? ""
-                    : lstModels.SelectedItems[0]
-                        .Text
+                    : (
+                        lstModels.SelectedItems[0].SubItems.Count > 1
+                            ? lstModels.SelectedItems[0].SubItems[1].Text
+                            : lstModels.SelectedItems[0].Text)
                         .Replace("\0", "")
                         .Trim();
         }
@@ -1098,15 +1136,22 @@ namespace DonkeyDataManager
                             string.Equals(
                                 entry.Name,
                                 selectedModel,
+                                StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(
+                                entry.Name,
+                                selectedModel + ".h5",
                                 StringComparison.OrdinalIgnoreCase));
         }
 
         private ListViewItem CreateModelListItem(
-            ModelRegistryEntry entry)
+            ModelRegistryEntry entry,
+            int number)
         {
             ListViewItem item =
-                new ListViewItem(entry.Name);
+                new ListViewItem(number.ToString());
 
+            item.SubItems.Add(
+                Path.GetFileNameWithoutExtension(entry.Name));
             item.SubItems.Add(entry.WindowsPath);
             item.Tag = entry;
 
@@ -1153,9 +1198,26 @@ namespace DonkeyDataManager
                     WriteIndented = true
                 };
 
+            string json =
+                JsonSerializer.Serialize(entries, options);
+
+            string existingJson =
+                File.Exists(modelRegistryPath)
+                    ? File.ReadAllText(modelRegistryPath)
+                    : "";
+
             File.WriteAllText(
                 modelRegistryPath,
-                JsonSerializer.Serialize(entries, options));
+                json);
+
+            if (
+                !string.Equals(
+                    existingJson,
+                    json,
+                    StringComparison.Ordinal))
+            {
+                SharedModelRegistry.NotifyChanged();
+            }
         }
 
         private void UpsertModelRegistry(
@@ -1166,10 +1228,15 @@ namespace DonkeyDataManager
 
             entries.RemoveAll(
                 entry =>
-                    string.Equals(
-                        entry.Name,
-                        model.Name,
-                        StringComparison.OrdinalIgnoreCase));
+                    !string.IsNullOrWhiteSpace(model.WindowsPath)
+                        ? string.Equals(
+                            entry.WindowsPath,
+                            model.WindowsPath,
+                            StringComparison.OrdinalIgnoreCase)
+                        : string.Equals(
+                            entry.Name,
+                            model.Name,
+                            StringComparison.OrdinalIgnoreCase));
 
             entries.Add(model);
 
@@ -1184,7 +1251,9 @@ namespace DonkeyDataManager
                 string itemName =
                     lstModels.Items[i].Tag is ModelRegistryEntry entry
                         ? entry.Name
-                        : lstModels.Items[i].Text;
+                        : lstModels.Items[i].SubItems.Count > 1
+                            ? lstModels.Items[i].SubItems[1].Text
+                            : lstModels.Items[i].Text;
 
                 if (
                     string.Equals(
@@ -1193,7 +1262,9 @@ namespace DonkeyDataManager
                         StringComparison.OrdinalIgnoreCase))
                 {
                     ListViewItem item =
-                        CreateModelListItem(model);
+                        CreateModelListItem(
+                            model,
+                            i + 1);
 
                     lstModels.Items.RemoveAt(i);
                     lstModels.Items.Insert(i, item);
@@ -1204,7 +1275,9 @@ namespace DonkeyDataManager
             }
 
             ListViewItem newItem =
-                CreateModelListItem(model);
+                CreateModelListItem(
+                    model,
+                    lstModels.Items.Count + 1);
 
             lstModels.Items.Add(newItem);
             newItem.Selected = true;
@@ -1913,16 +1986,15 @@ namespace DonkeyDataManager
 
             entries.RemoveAll(
                 entry =>
-                    string.Equals(
-                        entry.Name,
-                        modelName,
-                        StringComparison.OrdinalIgnoreCase) ||
-                    (
-                        !string.IsNullOrWhiteSpace(modelWindowsPath) &&
-                        string.Equals(
+                    !string.IsNullOrWhiteSpace(modelWindowsPath)
+                        ? string.Equals(
                             entry.WindowsPath,
                             modelWindowsPath,
-                            StringComparison.OrdinalIgnoreCase)));
+                            StringComparison.OrdinalIgnoreCase)
+                        : string.Equals(
+                            entry.Name,
+                            modelName,
+                            StringComparison.OrdinalIgnoreCase));
 
             SaveModelRegistry(entries);
         }
@@ -3026,16 +3098,15 @@ namespace DonkeyDataManager
 
                 entries.RemoveAll(
                     entry =>
-                        string.Equals(
-                            entry.Name,
-                            selectedModel,
-                            StringComparison.OrdinalIgnoreCase) ||
-                        (
-                            !string.IsNullOrWhiteSpace(selectedModelPath) &&
-                            string.Equals(
+                        !string.IsNullOrWhiteSpace(selectedModelPath)
+                            ? string.Equals(
                                 entry.WindowsPath,
                                 selectedModelPath,
-                                StringComparison.OrdinalIgnoreCase)));
+                                StringComparison.OrdinalIgnoreCase)
+                            : string.Equals(
+                                entry.Name,
+                                selectedModel,
+                                StringComparison.OrdinalIgnoreCase));
 
                 SaveModelRegistry(entries);
                 LoadModelsToList();
@@ -3174,14 +3245,15 @@ namespace DonkeyDataManager
 
                 entries.RemoveAll(
                     entry =>
-                        string.Equals(
-                            entry.Name,
-                            oldName,
-                            StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(
-                            entry.WindowsPath,
-                            oldFilePath,
-                            StringComparison.OrdinalIgnoreCase));
+                        !string.IsNullOrWhiteSpace(oldFilePath)
+                            ? string.Equals(
+                                entry.WindowsPath,
+                                oldFilePath,
+                                StringComparison.OrdinalIgnoreCase)
+                            : string.Equals(
+                                entry.Name,
+                                oldName,
+                                StringComparison.OrdinalIgnoreCase));
 
                 entries.Add(newEntry);
                 SaveModelRegistry(entries);

@@ -66,8 +66,11 @@ namespace Data_Manager
             pnlAngleOverlay.Resize += (s, e) => ConfigureAngleOverlayLayout();
             pnlAngleOverlay.Paint += PnlAngleOverlay_Paint;
             FormClosed += Pliot_FormClosed;
+            SharedModelRegistry.ModelsChanged +=
+                SharedModelRegistry_ModelsChanged;
 
             ResizeModelColumns();
+            SyncModelsFromSharedRegistry();
             ConfigureLocationTrackBar();
             ClearModelLabels();
             DrawTubRequiredMessage();
@@ -263,14 +266,10 @@ namespace Data_Manager
 
             if (existing == null)
             {
-                existing = new ModelListItem(modelName, modelPath);
-                _models.Add(existing);
-
-                ListViewItem item = new ListViewItem(_models.Count.ToString());
-                item.SubItems.Add(modelName);
-                item.SubItems.Add(modelPath);
-                item.Tag = existing;
-                lvModelList.Items.Add(item);
+                existing =
+                    AddModelToList(
+                        modelName,
+                        modelPath);
             }
 
             foreach (ListViewItem item in lvModelList.Items)
@@ -280,6 +279,7 @@ namespace Data_Manager
             }
 
             _selectedModel = existing;
+            UpsertSharedModel(modelName, modelPath);
             ResizeModelColumns();
         }
 
@@ -292,7 +292,26 @@ namespace Data_Manager
                 return false;
             }
 
-            ModelListItem model = new ModelListItem(modelName, modelPath);
+            AddModelToList(
+                modelName,
+                modelPath);
+
+            UpsertSharedModel(
+                modelName,
+                modelPath);
+
+            return true;
+        }
+
+        private ModelListItem AddModelToList(
+            string modelName,
+            string modelPath)
+        {
+            ModelListItem model =
+                new ModelListItem(
+                    modelName,
+                    modelPath);
+
             _models.Add(model);
 
             ListViewItem item = new ListViewItem(_models.Count.ToString());
@@ -300,7 +319,115 @@ namespace Data_Manager
             item.SubItems.Add(modelPath);
             item.Tag = model;
             lvModelList.Items.Add(item);
-            return true;
+
+            return model;
+        }
+
+        private void UpsertSharedModel(
+            string modelName,
+            string modelPath)
+        {
+            if (
+                string.IsNullOrWhiteSpace(modelPath) ||
+                !File.Exists(modelPath))
+            {
+                return;
+            }
+
+            SharedModelRegistry.Upsert(
+                new SharedModelRegistryEntry()
+                {
+                    Name = Path.GetFileName(modelPath),
+                    WindowsPath = modelPath,
+                    CreatedAt = File.GetCreationTime(modelPath)
+                });
+        }
+
+        private void SharedModelRegistry_ModelsChanged(
+            object? sender,
+            EventArgs e)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            BeginInvoke(
+                new Action(
+                    () =>
+                    {
+                        if (!IsDisposed)
+                        {
+                            SyncModelsFromSharedRegistry();
+                        }
+                    }));
+        }
+
+        private void SyncModelsFromSharedRegistry()
+        {
+            List<SharedModelRegistryEntry> sharedModels =
+                SharedModelRegistry.Load();
+
+            HashSet<string> sharedPaths =
+                sharedModels
+                    .Select(model => model.WindowsPath)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = _models.Count - 1; i >= 0; i--)
+            {
+                if (sharedPaths.Contains(_models[i].Path))
+                {
+                    continue;
+                }
+
+                bool wasSelected =
+                    ReferenceEquals(_selectedModel, _models[i]);
+
+                _models.RemoveAt(i);
+                lvModelList.Items.RemoveAt(i);
+
+                if (wasSelected)
+                {
+                    _selectedModel = null;
+                    ClearModelLabels();
+                    _frameList.Clear();
+                    ConfigureLocationTrackBar();
+                    DrawTubRequiredMessage();
+                }
+            }
+
+            foreach (SharedModelRegistryEntry sharedModel in sharedModels)
+            {
+                bool exists =
+                    _models.Any(
+                        model =>
+                            string.Equals(
+                                model.Path,
+                                sharedModel.WindowsPath,
+                                StringComparison.OrdinalIgnoreCase));
+
+                if (exists)
+                {
+                    continue;
+                }
+
+                AddModelToList(
+                    Path.GetFileNameWithoutExtension(
+                        sharedModel.WindowsPath),
+                    sharedModel.WindowsPath);
+            }
+
+            RenumberModelListItems();
+            ResizeModelColumns();
+        }
+
+        private void RenumberModelListItems()
+        {
+            for (int i = 0; i < lvModelList.Items.Count; i++)
+            {
+                lvModelList.Items[i].Text =
+                    (i + 1).ToString();
+            }
         }
 
         private async void LvModelList_SelectedIndexChanged(object? sender, EventArgs e)
@@ -624,13 +751,13 @@ namespace Data_Manager
             // The chart needs both recorded tub values and AI judgment values to compare the two lines.
             if (_selectedModel == null)
             {
-                MessageBox.Show("먼저 모델을 선택해 주세요.", "Chart", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("먼저 모델을 선택해 주세요.", "그래프", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
             if (_frameList.Count == 0)
             {
-                MessageBox.Show("먼저 TUB 데이터를 연결해 주세요.", "Chart", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("먼저 TUB 데이터를 연결해 주세요.", "그래프", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -638,7 +765,7 @@ namespace Data_Manager
                 frame.PilotAngle.HasValue || frame.PilotThrottle.HasValue);
             if (!hasAiJudement)
             {
-                MessageBox.Show("AI 판단 데이터를 먼저 생성하거나 불러와 주세요.", "Chart", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("AI 판단 데이터를 먼저 생성하거나 불러와 주세요.", "그래프", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -1161,8 +1288,8 @@ namespace Data_Manager
 
             e.Graphics.DrawLine(centerPen, centerX, 18, centerX, centerY + 18);
             e.Graphics.DrawLine(axisPen, centerX - length, centerY, centerX + length, centerY);
-            e.Graphics.DrawString("User Angle", titleFont, titleBrush, 14, 12);
-            e.Graphics.DrawString("AI Angle", titleFont, titleBrush, pnlAngleOverlay.Width - 82, 12);
+            e.Graphics.DrawString("사용자 방향", titleFont, titleBrush, 14, 12);
+            e.Graphics.DrawString("AI 방향", titleFont, titleBrush, pnlAngleOverlay.Width - 66, 12);
             DrawAngleLine(e.Graphics, userPen, centerX, centerY, length, GetCurrentAngleValue(true));
             DrawAngleLine(e.Graphics, pilotPen, centerX, centerY, length, GetCurrentAngleValue(false));
         }
@@ -1209,6 +1336,9 @@ namespace Data_Manager
 
         private void Pliot_FormClosed(object? sender, FormClosedEventArgs e)
         {
+            SharedModelRegistry.ModelsChanged -=
+                SharedModelRegistry_ModelsChanged;
+
             _loadCts?.Cancel();
             _loadCts?.Dispose();
             _playbackTimer?.Stop();

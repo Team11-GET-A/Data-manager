@@ -45,7 +45,7 @@ namespace Data_Manager
             lblSummary.Name = "lblSummary";
             lblSummary.Size = new Size(1000, 22);
             lblSummary.TabIndex = 1;
-            lblSummary.Text = "Frames 0 | AI Angle 0 | AI Throttle 0";
+            lblSummary.Text = "프레임 0 | AI 방향 0 | AI 속력 0";
             lblSummary.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // lblTitle
@@ -57,7 +57,7 @@ namespace Data_Manager
             lblTitle.Name = "lblTitle";
             lblTitle.Size = new Size(1002, 30);
             lblTitle.TabIndex = 0;
-            lblTitle.Text = "Pilot Chart";
+            lblTitle.Text = "파일럿 그래프";
             lblTitle.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // pnlChart
@@ -82,7 +82,7 @@ namespace Data_Manager
             MinimumSize = new Size(820, 520);
             Name = "PliotChart";
             StartPosition = FormStartPosition.CenterParent;
-            Text = "Pilot Chart";
+            Text = "파일럿 그래프";
             pnlHeader.ResumeLayout(false);
             ResumeLayout(false);
         }
