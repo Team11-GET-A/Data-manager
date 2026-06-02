@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Threading;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text;
 
 namespace DonkeyDataManager
 {
@@ -62,6 +64,16 @@ namespace DonkeyDataManager
         private string wslDistroName = "Ubuntu";
         private string wslUsername = "";
         private string wslBasePath = "";
+        private const string DonkeyCarWslPath = "~/mycar";
+        private const string ModelDirectoryName = "models";
+        private const string TrainingCondaEnvironment = "e2e_env";
+        private readonly string modelRegistryPath =
+            Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.ApplicationData),
+                "DonkeyDataManager",
+                "models.json");
+        private readonly object trainingLogLock = new object();
 
         // =====================================================
         // ⭐ 모델 자동 로드 추가
@@ -93,6 +105,26 @@ namespace DonkeyDataManager
             public bool IsDeleted { get; set; }
 
             public bool IsAnomaly { get; set; }
+        }
+
+        public class ModelRegistryEntry
+        {
+            public string Name { get; set; } = "";
+
+            public string WindowsPath { get; set; } = "";
+
+            public string WslPath { get; set; } = "";
+
+            public string SourceTubWindowsPath { get; set; } = "";
+
+            public string SourceTubWslPath { get; set; } = "";
+
+            public DateTime CreatedAt { get; set; }
+
+            public override string ToString()
+            {
+                return Name;
+            }
         }
 
         // =====================================================
@@ -145,28 +177,72 @@ namespace DonkeyDataManager
                 if (lstModels == null)
                     return;
 
+                List<ModelRegistryEntry> entries =
+                    LoadModelRegistry();
+
                 string modelFolder =
                     Path.Combine(
                         wslBasePath,
-                        "models");
+                        ModelDirectoryName);
 
-                if (!Directory.Exists(modelFolder))
-                    return;
+                if (Directory.Exists(modelFolder))
+                {
+                    string[] modelFiles =
+                        Directory.GetFiles(
+                            modelFolder,
+                            "*.h5");
 
-                string[] modelFiles =
-                    Directory.GetFiles(
-                        modelFolder,
-                        "*.h5");
+                    Array.Sort(modelFiles);
 
-                Array.Sort(modelFiles);
+                    foreach (string file in modelFiles)
+                    {
+                        string name =
+                            Path.GetFileName(file);
+
+                        if (
+                            entries.Exists(
+                                entry =>
+                                    string.Equals(
+                                        entry.Name,
+                                        name,
+                                        StringComparison.OrdinalIgnoreCase)))
+                        {
+                            continue;
+                        }
+
+                        entries.Add(
+                            new ModelRegistryEntry()
+                            {
+                                Name = name,
+                                WindowsPath = file,
+                                WslPath =
+                                    "/home/" +
+                                    wslUsername +
+                                    "/mycar/" +
+                                    ModelDirectoryName +
+                                    "/" +
+                                    name,
+                                CreatedAt =
+                                    File.GetCreationTime(file)
+                            });
+                    }
+                }
+
+                entries.Sort(
+                    (left, right) =>
+                        string.Compare(
+                            left.Name,
+                            right.Name,
+                            StringComparison.OrdinalIgnoreCase));
 
                 lstModels.Items.Clear();
 
-                foreach (string file in modelFiles)
+                foreach (ModelRegistryEntry entry in entries)
                 {
-                    lstModels.Items.Add(
-                        Path.GetFileName(file));
+                    lstModels.Items.Add(entry);
                 }
+
+                SaveModelRegistry(entries);
             }
             catch
             {
@@ -241,20 +317,116 @@ namespace DonkeyDataManager
             {
                 var distros = GetWSLDistros();
 
-                if (distros.Count > 0)
-                {
-                    wslDistroName = distros[0];
-                }
+                wslDistroName =
+                    ChooseWslDistro(distros);
 
                 wslUsername = GetWSLUserName();
 
                 wslBasePath =
-                    $@"\\wsl$\{wslDistroName}\home\{wslUsername}\mycar";
+                    BuildWslSharePath(
+                        wslDistroName,
+                        wslUsername);
             }
             catch
             {
+                if (string.IsNullOrWhiteSpace(wslUsername))
+                {
+                    wslUsername = Environment.UserName;
+                }
+
                 wslBasePath =
-                    $@"\\wsl$\Ubuntu\home\{wslUsername}\mycar";
+                    BuildWslSharePath(
+                        "Ubuntu",
+                        wslUsername);
+            }
+        }
+
+        private string BuildWslSharePath(
+            string distroName,
+            string username)
+        {
+            string wslDollarPath =
+                $@"\\wsl$\{distroName}\home\{username}\mycar";
+
+            string wslLocalhostPath =
+                $@"\\wsl.localhost\{distroName}\home\{username}\mycar";
+
+            if (Directory.Exists(wslDollarPath))
+            {
+                return wslDollarPath;
+            }
+
+            if (Directory.Exists(wslLocalhostPath))
+            {
+                return wslLocalhostPath;
+            }
+
+            return wslDollarPath;
+        }
+
+        private string ChooseWslDistro(
+            List<string> distros)
+        {
+            foreach (string distro in distros)
+            {
+                if (
+                    TryRunWslCommand(
+                        distro,
+                        "test -f ~/mycar/train.py"))
+                {
+                    return distro;
+                }
+            }
+
+            foreach (string distro in distros)
+            {
+                if (
+                    TryRunWslCommand(
+                        distro,
+                        "test -d ~/mycar"))
+                {
+                    return distro;
+                }
+            }
+
+            if (distros.Count > 0)
+            {
+                return distros[0];
+            }
+
+            return "Ubuntu";
+        }
+
+        private bool TryRunWslCommand(
+            string distroName,
+            string command)
+        {
+            try
+            {
+                ProcessStartInfo psi =
+                    new ProcessStartInfo
+                    {
+                        FileName = "wsl.exe",
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+
+                AddWslArguments(
+                    psi,
+                    command,
+                    distroName);
+
+                using (Process proc =
+                    Process.Start(psi))
+                {
+                    proc.WaitForExit();
+
+                    return proc.ExitCode == 0;
+                }
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -292,11 +464,17 @@ namespace DonkeyDataManager
                             (line = reader.ReadLine())
                             != null)
                         {
-                            line = line.Trim();
+                            line =
+                                line
+                                    .Replace("\0", "")
+                                    .Trim();
 
                             if (
                                 !string.IsNullOrEmpty(
-                                    line))
+                                    line) &&
+                                !line.StartsWith(
+                                    "Windows",
+                                    StringComparison.OrdinalIgnoreCase))
                             {
                                 distros.Add(line);
                             }
@@ -322,11 +500,12 @@ namespace DonkeyDataManager
                     new ProcessStartInfo
                     {
                         FileName = "wsl.exe",
-                        Arguments = "whoami",
                         RedirectStandardOutput = true,
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
+
+                AddWslArguments(psi, "whoami");
 
                 using (Process proc =
                     Process.Start(psi))
@@ -334,6 +513,7 @@ namespace DonkeyDataManager
                     string user =
                         proc.StandardOutput
                             .ReadToEnd()
+                            .Replace("\0", "")
                             .Trim();
 
                     proc.WaitForExit();
@@ -347,7 +527,318 @@ namespace DonkeyDataManager
 
             }
 
-            return "odozy";
+            return Environment.UserName;
+        }
+
+        private void AddWslArguments(
+            ProcessStartInfo psi,
+            string command)
+        {
+            AddWslArguments(
+                psi,
+                command,
+                wslDistroName);
+        }
+
+        private void AddWslArguments(
+            ProcessStartInfo psi,
+            string command,
+            string distroName)
+        {
+            if (!string.IsNullOrWhiteSpace(distroName))
+            {
+                psi.ArgumentList.Add("-d");
+                psi.ArgumentList.Add(distroName);
+                psi.ArgumentList.Add("--");
+            }
+
+            psi.ArgumentList.Add("bash");
+            psi.ArgumentList.Add("-lc");
+            psi.ArgumentList.Add(command);
+        }
+
+        private string QuoteForBash(string value)
+        {
+            return
+                "'" +
+                value.Replace("'", "'\"'\"'") +
+                "'";
+        }
+
+        private string RunWslCommandForOutput(string command)
+        {
+            ProcessStartInfo psi =
+                new ProcessStartInfo
+                {
+                    FileName = "wsl.exe",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+            AddWslArguments(psi, command);
+
+            using (Process proc = Process.Start(psi))
+            {
+                string output =
+                    proc.StandardOutput
+                        .ReadToEnd()
+                        .Replace("\0", "")
+                        .Trim();
+
+                string error =
+                    proc.StandardError
+                        .ReadToEnd()
+                        .Replace("\0", "")
+                        .Trim();
+
+                proc.WaitForExit();
+
+                if (proc.ExitCode != 0)
+                {
+                    throw new InvalidOperationException(
+                        string.IsNullOrWhiteSpace(error)
+                            ? "WSL 명령 실행에 실패했습니다."
+                            : error);
+                }
+
+                return output;
+            }
+        }
+
+        private bool IsWslAvailable(out string message)
+        {
+            try
+            {
+                RunWslCommandForOutput("printf ready");
+                message = "";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                message =
+                    "WSL을 실행할 수 없습니다.\n\n" +
+                    "Windows에 WSL과 Ubuntu 배포판이 설치되어 있고 " +
+                    "초기 설정이 완료되었는지 확인하세요.\n\n" +
+                    ex.Message;
+
+                return false;
+            }
+        }
+
+        private string ConvertWindowsPathToWslPath(string windowsPath)
+        {
+            if (string.IsNullOrWhiteSpace(windowsPath))
+            {
+                throw new ArgumentException(
+                    "경로가 비어 있습니다.",
+                    nameof(windowsPath));
+            }
+
+            string normalizedPath =
+                Path.GetFullPath(windowsPath);
+
+            string[] uncPrefixes =
+                new string[]
+                {
+                    @"\\wsl$\",
+                    @"\\wsl.localhost\"
+                };
+
+            foreach (string uncPrefix in uncPrefixes)
+            {
+                if (
+                    !normalizedPath.StartsWith(
+                        uncPrefix,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string remaining =
+                    normalizedPath.Substring(
+                        uncPrefix.Length);
+
+                int separatorIndex =
+                    remaining.IndexOf('\\');
+
+                if (separatorIndex >= 0)
+                {
+                    return
+                        "/" +
+                        remaining
+                            .Substring(separatorIndex + 1)
+                            .Replace('\\', '/');
+                }
+            }
+
+            string command =
+                "wslpath -a " +
+                QuoteForBash(normalizedPath);
+
+            return RunWslCommandForOutput(command);
+        }
+
+        private string ResolveTubWslPath(
+            string tubWindowsPath,
+            string mycarWslPath)
+        {
+            string fullTubPath =
+                Path.GetFullPath(tubWindowsPath);
+
+            string fullBasePath =
+                Path.GetFullPath(wslBasePath);
+
+            if (
+                fullTubPath.StartsWith(
+                    fullBasePath,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                string relativePath =
+                    Path.GetRelativePath(
+                        fullBasePath,
+                        fullTubPath);
+
+                if (
+                    relativePath == "." ||
+                    string.IsNullOrWhiteSpace(relativePath))
+                {
+                    return mycarWslPath;
+                }
+
+                if (!relativePath.StartsWith(".."))
+                {
+                    return
+                        mycarWslPath.TrimEnd('/') +
+                        "/" +
+                        relativePath.Replace('\\', '/');
+                }
+            }
+
+            string convertedPath =
+                ConvertWindowsPathToWslPath(fullTubPath);
+
+            string expectedPrefix =
+                mycarWslPath.TrimEnd('/') + "/";
+
+            if (
+                convertedPath.StartsWith(
+                    "/home/mycar/",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                convertedPath =
+                    expectedPrefix +
+                    convertedPath.Substring(
+                        "/home/mycar/".Length);
+            }
+
+            return convertedPath;
+        }
+
+        private string GetSelectedModelName()
+        {
+            if (lstModels.SelectedItem is ModelRegistryEntry entry)
+            {
+                return entry.Name;
+            }
+
+            return
+                lstModels.SelectedItem == null
+                    ? ""
+                    : lstModels.SelectedItem
+                        .ToString()
+                        .Replace("\0", "")
+                        .Trim();
+        }
+
+        private List<ModelRegistryEntry> LoadModelRegistry()
+        {
+            try
+            {
+                if (!File.Exists(modelRegistryPath))
+                {
+                    return new List<ModelRegistryEntry>();
+                }
+
+                string json =
+                    File.ReadAllText(modelRegistryPath);
+
+                return
+                    JsonSerializer.Deserialize
+                        <List<ModelRegistryEntry>>(json) ??
+                    new List<ModelRegistryEntry>();
+            }
+            catch
+            {
+                return new List<ModelRegistryEntry>();
+            }
+        }
+
+        private void SaveModelRegistry(
+            List<ModelRegistryEntry> entries)
+        {
+            string directory =
+                Path.GetDirectoryName(modelRegistryPath);
+
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            JsonSerializerOptions options =
+                new JsonSerializerOptions()
+                {
+                    WriteIndented = true
+                };
+
+            File.WriteAllText(
+                modelRegistryPath,
+                JsonSerializer.Serialize(entries, options));
+        }
+
+        private void UpsertModelRegistry(
+            ModelRegistryEntry model)
+        {
+            List<ModelRegistryEntry> entries =
+                LoadModelRegistry();
+
+            entries.RemoveAll(
+                entry =>
+                    string.Equals(
+                        entry.Name,
+                        model.Name,
+                        StringComparison.OrdinalIgnoreCase));
+
+            entries.Add(model);
+
+            SaveModelRegistry(entries);
+        }
+
+        private void AddOrUpdateModelList(
+            ModelRegistryEntry model)
+        {
+            for (int i = 0; i < lstModels.Items.Count; i++)
+            {
+                string itemName =
+                    lstModels.Items[i] is ModelRegistryEntry entry
+                        ? entry.Name
+                        : lstModels.Items[i].ToString();
+
+                if (
+                    string.Equals(
+                        itemName,
+                        model.Name,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    lstModels.Items[i] = model;
+                    lstModels.SelectedIndex = i;
+                    return;
+                }
+            }
+
+            lstModels.Items.Add(model);
+            lstModels.SelectedItem = model;
         }
 
         // =====================================================
@@ -702,75 +1193,445 @@ namespace DonkeyDataManager
         // TRAIN
         // =====================================================
 
-        private void BtnTrain_Click(
+        private async void BtnTrain_Click(
             object sender,
             EventArgs e)
         {
+            TrainerStatus statusForm = null;
+
             try
             {
-                string selectedTubFolder =
-                    PromptTubFolderSelection();
-
                 if (
                     string.IsNullOrEmpty(
-                        selectedTubFolder))
+                        selectedDataPath) ||
+                    !Directory.Exists(
+                        selectedDataPath))
                 {
                     MessageBox.Show(
-                        "학습할 폴더가 선택되지 않았습니다.",
-                        "선택 취소",
+                        "먼저 데이터 폴더를 로드하세요.",
+                        "데이터 없음",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
 
                     return;
                 }
 
-                // ⭐ 모델명 자동 생성
+                if (integratedCatalogList.Count == 0)
+                {
+                    MessageBox.Show(
+                        "로드된 catalog 데이터가 없습니다.",
+                        "데이터 없음",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+
+                    return;
+                }
+
+                if (!IsWslAvailable(out string wslMessage))
+                {
+                    MessageBox.Show(
+                        wslMessage,
+                        "WSL 실행 실패",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+
+                    return;
+                }
+
+                string mycarWslPath =
+                    RunWslCommandForOutput(
+                        "cd " +
+                        DonkeyCarWslPath +
+                        " && pwd");
+
+                string selectedTubWslPath =
+                    ResolveTubWslPath(
+                        selectedDataPath,
+                        mycarWslPath);
+
                 string modelName =
                     "mypilot_" +
                     DateTime.Now.ToString(
                         "yyyyMMdd_HHmmss") +
                     ".h5";
 
-                MessageBox.Show(
-                    $"AI 학습 시작\n\n" +
-                    $"데이터 폴더 : {selectedTubFolder}\n" +
-                    $"생성 모델 : {modelName}");
+                string modelRelativePath =
+                    ModelDirectoryName + "/" + modelName;
+
+                string modelWslPath =
+                    mycarWslPath.TrimEnd('/') +
+                    "/" +
+                    modelRelativePath;
+
+                string modelWindowsPath =
+                    Path.Combine(
+                        wslBasePath,
+                        ModelDirectoryName,
+                        modelName);
+
+                string trainingLogPath =
+                    CreateTrainingLogPath(modelName);
+
+                DialogResult result =
+                    MessageBox.Show(
+                        "AI 학습을 시작합니다.\n\n" +
+                        "데이터 폴더:\n" +
+                        selectedDataPath +
+                        "\n\nWSL 경로:\n" +
+                        selectedTubWslPath +
+                        "\n\n생성 모델:\n" +
+                        modelName +
+                        "\n\n로그 파일:\n" +
+                        trainingLogPath,
+                        "AI 학습 시작",
+                        MessageBoxButtons.OKCancel,
+                        MessageBoxIcon.Information);
+
+                if (result != DialogResult.OK)
+                {
+                    return;
+                }
 
                 ProcessStartInfo psi =
-                    new ProcessStartInfo();
+                    new ProcessStartInfo
+                    {
+                        FileName = "wsl.exe",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        StandardOutputEncoding = Encoding.UTF8,
+                        StandardErrorEncoding = Encoding.UTF8,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
 
-                psi.FileName = "cmd.exe";
+                AddWslArguments(
+                    psi,
+                    BuildTrainCommand(
+                        mycarWslPath,
+                        selectedTubWslPath,
+                        modelRelativePath));
 
-                psi.Arguments =
-                    "/k wsl bash -c \"" +
-                    "source ~/miniconda3/etc/profile.d/conda.sh && " +
-                    "conda activate e2e_env && " +
-                    "cd ~/mycar && " +
-                    "python train.py --tub " +
-                    selectedTubFolder +
-                    " --model models/" +
-                    modelName +
-                    "\"";
+                btnTrain.Enabled = false;
+                btnTrain.Text = "학습 실행 중...";
 
-                psi.UseShellExecute = true;
+                statusForm =
+                    new TrainerStatus();
 
-                wslProcess =
-                    Process.Start(psi);
+                statusForm.SetStatus(
+                    "WSL 학습 준비 중",
+                    selectedDataPath,
+                    selectedTubWslPath,
+                    modelWindowsPath,
+                    trainingLogPath);
 
-                // ⭐ 즉시 리스트에 추가
-                if (
-                    !lstModels.Items.Contains(
-                        modelName))
+                statusForm.Show(this);
+
+                wslProcess = Process.Start(psi);
+
+                if (wslProcess == null)
                 {
-                    lstModels.Items.Add(
-                        modelName);
+                    throw new InvalidOperationException(
+                        "wsl.exe 프로세스를 시작하지 못했습니다.");
                 }
+
+                statusForm.SetStatus(
+                    "WSL 학습 실행 중",
+                    selectedDataPath,
+                    selectedTubWslPath,
+                    modelWindowsPath,
+                    trainingLogPath);
+
+                System.Threading.Tasks.Task outputTask =
+                    CopyStreamToLogAsync(
+                        wslProcess.StandardOutput,
+                        trainingLogPath,
+                        statusForm);
+
+                System.Threading.Tasks.Task errorTask =
+                    CopyStreamToLogAsync(
+                        wslProcess.StandardError,
+                        trainingLogPath,
+                        statusForm);
+
+                await wslProcess.WaitForExitAsync();
+
+                await System.Threading.Tasks.Task.WhenAll(
+                    outputTask,
+                    errorTask);
+
+                if (wslProcess.ExitCode != 0)
+                {
+                    statusForm.SetStatus(
+                        "학습 실패",
+                        selectedDataPath,
+                        selectedTubWslPath,
+                        modelWindowsPath,
+                        trainingLogPath);
+
+                    throw new InvalidOperationException(
+                        "train.py 실행이 실패했습니다.\n\n" +
+                        "자세한 내용은 로그 파일을 확인하세요.\n" +
+                        trainingLogPath);
+                }
+
+                if (!File.Exists(modelWindowsPath))
+                {
+                    throw new FileNotFoundException(
+                        "학습은 종료되었지만 모델 파일을 찾지 못했습니다.",
+                        modelWindowsPath);
+                }
+
+                ModelRegistryEntry model =
+                    new ModelRegistryEntry()
+                    {
+                        Name = modelName,
+                        WindowsPath = modelWindowsPath,
+                        WslPath = modelWslPath,
+                        SourceTubWindowsPath = selectedDataPath,
+                        SourceTubWslPath = selectedTubWslPath,
+                        CreatedAt = DateTime.Now
+                    };
+
+                UpsertModelRegistry(model);
+                AddOrUpdateModelList(model);
+
+                statusForm.SetStatus(
+                    "학습 완료",
+                    selectedDataPath,
+                    selectedTubWslPath,
+                    modelWindowsPath,
+                    trainingLogPath);
+
+                MessageBox.Show(
+                    "AI 학습이 완료되었습니다.\n\n" +
+                    "모델:\n" +
+                    modelName +
+                    "\n\n저장 경로:\n" +
+                    modelWindowsPath,
+                    "학습 완료",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
+                if (statusForm != null && !statusForm.IsDisposed)
+                {
+                    statusForm.SetStatus(
+                        "학습 실패",
+                        selectedDataPath,
+                        "",
+                        "",
+                        "");
+
+                    statusForm.AppendLog(
+                        "ERROR: " + ex.Message);
+                }
+
                 MessageBox.Show(
-                    $"학습 실행 실패\n\n{ex.Message}");
+                    $"학습 실행 실패\n\n{ex.Message}",
+                    "학습 실패",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
+            finally
+            {
+                btnTrain.Enabled = true;
+                btnTrain.Text = "\U0001f9e0 AI 학습 시작";
+            }
+        }
+
+        private string BuildTrainCommand(
+            string mycarWslPath,
+            string selectedTubWslPath,
+            string modelRelativePath)
+        {
+            return
+                "set -e; " +
+                "export PYTHONUNBUFFERED=1; " +
+                "cd " +
+                QuoteForBash(mycarWslPath) +
+                "; " +
+                "if [ ! -f train.py ]; then " +
+                "echo 'train.py was not found in ~/mycar.' >&2; " +
+                "exit 21; " +
+                "fi; " +
+                "if [ ! -d " +
+                QuoteForBash(selectedTubWslPath) +
+                " ]; then " +
+                "echo 'Selected tub directory does not exist: " +
+                EscapeForDoubleQuotedBash(selectedTubWslPath) +
+                "' >&2; " +
+                "exit 23; " +
+                "fi; " +
+                "if [ ! -f " +
+                QuoteForBash(selectedTubWslPath.TrimEnd('/') + "/manifest.json") +
+                " ]; then " +
+                "echo 'Selected folder is not a DonkeyCar tub. manifest.json was not found.' >&2; " +
+                "exit 24; " +
+                "fi; " +
+                "mkdir -p " +
+                QuoteForBash(ModelDirectoryName) +
+                "; " +
+                "if [ -x \"$HOME/miniconda3/envs/" +
+                TrainingCondaEnvironment +
+                "/bin/python\" ]; then " +
+                "PYTHON_BIN=\"$HOME/miniconda3/envs/" +
+                TrainingCondaEnvironment +
+                "/bin/python\"; " +
+                "elif [ -f \"$HOME/miniconda3/etc/profile.d/conda.sh\" ]; then " +
+                "source \"$HOME/miniconda3/etc/profile.d/conda.sh\"; " +
+                "if conda env list | awk '{print $1}' | grep -qx " +
+                QuoteForBash(TrainingCondaEnvironment) +
+                "; then conda activate " +
+                QuoteForBash(TrainingCondaEnvironment) +
+                "; fi; " +
+                "PYTHON_BIN=$(command -v python || command -v python3 || true); " +
+                "else " +
+                "PYTHON_BIN=$(command -v python || command -v python3 || true); " +
+                "fi; " +
+                "if [ -z \"$PYTHON_BIN\" ]; then " +
+                "echo 'python or python3 was not found in WSL. Check the conda environment.' >&2; " +
+                "exit 22; " +
+                "fi; " +
+                "echo \"Using Python: $PYTHON_BIN\"; " +
+                "echo \"Training tub: " +
+                EscapeForDoubleQuotedBash(selectedTubWslPath) +
+                "\"; " +
+                "echo \"Saving model: " +
+                EscapeForDoubleQuotedBash(modelRelativePath) +
+                "\"; " +
+                "\"$PYTHON_BIN\" train.py --tubs " +
+                QuoteForBash(selectedTubWslPath) +
+                " --model " +
+                QuoteForBash(modelRelativePath);
+        }
+
+        private string EscapeForDoubleQuotedBash(string value)
+        {
+            return
+                value
+                    .Replace("\\", "\\\\")
+                    .Replace("\"", "\\\"")
+                    .Replace("$", "\\$")
+                    .Replace("`", "\\`");
+        }
+
+        private string CreateTrainingLogPath(string modelName)
+        {
+            string logDirectory =
+                Path.Combine(
+                    Environment.GetFolderPath(
+                        Environment.SpecialFolder.LocalApplicationData),
+                    "DonkeyDataManager",
+                    "TrainingLogs");
+
+            Directory.CreateDirectory(logDirectory);
+
+            string safeName =
+                Path.GetFileNameWithoutExtension(modelName);
+
+            string logPath =
+                Path.Combine(
+                    logDirectory,
+                    safeName + ".log");
+
+            File.WriteAllText(
+                logPath,
+                "DonkeyCar training log" +
+                Environment.NewLine +
+                "Started: " +
+                DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") +
+                Environment.NewLine +
+                Environment.NewLine);
+
+            return logPath;
+        }
+
+        private System.Threading.Tasks.Task CopyStreamToLogAsync(
+            StreamReader reader,
+            string logPath,
+            TrainerStatus statusForm)
+        {
+            return System.Threading.Tasks.Task.Run(
+                () =>
+                {
+                    string line;
+
+                    try
+                    {
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            AppendTrainingLog(
+                                logPath,
+                                line.Replace("\0", ""));
+
+                            if (
+                                statusForm != null &&
+                                !statusForm.IsDisposed)
+                            {
+                                statusForm.AppendLog(
+                                    line.Replace("\0", ""));
+                            }
+                        }
+                    }
+                    catch (IOException ex)
+                    {
+                        AppendTrainingLog(
+                            logPath,
+                            "Log stream closed: " + ex.Message);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+
+                    }
+                });
+        }
+
+        private void AppendTrainingLog(
+            string logPath,
+            string line)
+        {
+            lock (trainingLogLock)
+            {
+                File.AppendAllText(
+                    logPath,
+                    line + Environment.NewLine);
+            }
+        }
+
+        private void OpenTrainingLogWindow(string logPath)
+        {
+            try
+            {
+                ProcessStartInfo psi =
+                    new ProcessStartInfo
+                    {
+                        FileName = "powershell.exe",
+                        UseShellExecute = true
+                    };
+
+                psi.ArgumentList.Add("-NoExit");
+                psi.ArgumentList.Add("-Command");
+                psi.ArgumentList.Add(
+                    "$host.UI.RawUI.WindowTitle = 'DonkeyCar WSL Training'; " +
+                    "Get-Content -LiteralPath " +
+                    QuoteForPowerShell(logPath) +
+                    " -Wait");
+
+                Process.Start(psi);
+            }
+            catch
+            {
+
+            }
+        }
+
+        private string QuoteForPowerShell(string value)
+        {
+            return
+                "'" +
+                value.Replace("'", "''") +
+                "'";
         }
 
         // =====================================================
@@ -836,24 +1697,19 @@ namespace DonkeyDataManager
                 }
 
                 string selectedModel =
-                    lstModels.SelectedItem
-                    .ToString();
+                    GetSelectedModelName();
 
                 ProcessStartInfo psi =
-                    new ProcessStartInfo();
+                    new ProcessStartInfo
+                    {
+                        FileName = "wsl.exe",
+                        UseShellExecute = false,
+                        CreateNoWindow = false
+                    };
 
-                psi.FileName = "cmd.exe";
-
-                psi.Arguments =
-                    "/k wsl bash -c \"" +
-                    "source ~/miniconda3/etc/profile.d/conda.sh && " +
-                    "conda activate e2e_env && " +
-                    "cd ~/mycar && " +
-                    "python manage.py drive --model ./models/" +
-                    selectedModel +
-                    "\"";
-
-                psi.UseShellExecute = true;
+                AddWslArguments(
+                    psi,
+                    BuildDriveCommand(selectedModel));
 
                 wslProcess =
                     Process.Start(psi);
@@ -865,6 +1721,42 @@ namespace DonkeyDataManager
                 MessageBox.Show(
                     $"자율주행 실행 실패\n\n{ex.Message}");
             }
+        }
+
+        private string BuildDriveCommand(string selectedModel)
+        {
+            return
+                "set -e; " +
+                "cd " +
+                DonkeyCarWslPath +
+                "; " +
+                "if [ -x \"$HOME/miniconda3/envs/" +
+                TrainingCondaEnvironment +
+                "/bin/python\" ]; then " +
+                "PYTHON_BIN=\"$HOME/miniconda3/envs/" +
+                TrainingCondaEnvironment +
+                "/bin/python\"; " +
+                "elif [ -f \"$HOME/miniconda3/etc/profile.d/conda.sh\" ]; then " +
+                "source \"$HOME/miniconda3/etc/profile.d/conda.sh\"; " +
+                "if conda env list | awk '{print $1}' | grep -qx " +
+                QuoteForBash(TrainingCondaEnvironment) +
+                "; then conda activate " +
+                QuoteForBash(TrainingCondaEnvironment) +
+                "; fi; " +
+                "PYTHON_BIN=$(command -v python || command -v python3 || true); " +
+                "else " +
+                "PYTHON_BIN=$(command -v python || command -v python3 || true); " +
+                "fi; " +
+                "if [ -z \"$PYTHON_BIN\" ]; then " +
+                "echo 'python or python3 was not found in WSL. Check the conda environment.' >&2; " +
+                "exit 22; " +
+                "fi; " +
+                "\"$PYTHON_BIN\" manage.py drive --model " +
+                QuoteForBash(
+                    "./" +
+                    ModelDirectoryName +
+                    "/" +
+                    selectedModel);
         }
 
         // =====================================================
@@ -883,7 +1775,7 @@ namespace DonkeyDataManager
                 string modelsPath =
                     Path.Combine(
                         wslBasePath,
-                        "models");
+                        ModelDirectoryName);
 
                 if (
                     Directory.Exists(
@@ -1094,7 +1986,7 @@ namespace DonkeyDataManager
                 }
 
                 string selectedModel =
-                    lstModels.SelectedItem.ToString();
+                    GetSelectedModelName();
 
                 DialogResult result =
                     MessageBox.Show(
@@ -1107,11 +1999,26 @@ namespace DonkeyDataManager
                 if (result != DialogResult.Yes)
                     return;
 
+                object selectedItem =
+                    lstModels.SelectedItem;
+
                 lstModels.Items.Remove(
-                    selectedModel);
+                    selectedItem);
+
+                List<ModelRegistryEntry> entries =
+                    LoadModelRegistry();
+
+                entries.RemoveAll(
+                    entry =>
+                        string.Equals(
+                            entry.Name,
+                            selectedModel,
+                            StringComparison.OrdinalIgnoreCase));
+
+                SaveModelRegistry(entries);
 
                 MessageBox.Show(
-                    "리스트에서 삭제되었습니다.");
+                    "모델 목록에서 삭제되었습니다.");
             }
             catch (Exception ex)
             {
@@ -1138,10 +2045,11 @@ namespace DonkeyDataManager
                 }
 
                 string oldName =
+                    GetSelectedModelName();
+
+                ModelRegistryEntry oldEntry =
                     lstModels.SelectedItem
-                    .ToString()
-                    .Replace("\0", "")
-                    .Trim();
+                        as ModelRegistryEntry;
 
                 string newName =
                     Microsoft.VisualBasic.Interaction.InputBox(
@@ -1162,7 +2070,7 @@ namespace DonkeyDataManager
         wslBasePath
             .Replace("\0", "")
             .Trim(),
-        "models");
+        ModelDirectoryName);
 
                 string oldFilePath =
                     Path.Combine(
@@ -1194,8 +2102,47 @@ namespace DonkeyDataManager
                 int selectedIndex =
                     lstModels.SelectedIndex;
 
+                ModelRegistryEntry newEntry =
+                    new ModelRegistryEntry()
+                    {
+                        Name = newName,
+                        WindowsPath = newFilePath,
+                        WslPath =
+                            "/home/" +
+                            wslUsername +
+                            "/mycar/" +
+                            ModelDirectoryName +
+                            "/" +
+                            newName,
+                        SourceTubWindowsPath =
+                            oldEntry == null
+                                ? ""
+                                : oldEntry.SourceTubWindowsPath,
+                        SourceTubWslPath =
+                            oldEntry == null
+                                ? ""
+                                : oldEntry.SourceTubWslPath,
+                        CreatedAt =
+                            oldEntry == null
+                                ? DateTime.Now
+                                : oldEntry.CreatedAt
+                    };
+
+                List<ModelRegistryEntry> entries =
+                    LoadModelRegistry();
+
+                entries.RemoveAll(
+                    entry =>
+                        string.Equals(
+                            entry.Name,
+                            oldName,
+                            StringComparison.OrdinalIgnoreCase));
+
+                entries.Add(newEntry);
+                SaveModelRegistry(entries);
+
                 lstModels.Items[selectedIndex] =
-                    newName;
+                    newEntry;
 
                 MessageBox.Show(
                     "모델 이름이 변경되었습니다.");
