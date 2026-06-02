@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text;
 
 namespace DonkeyDataManager
@@ -104,7 +105,6 @@ namespace DonkeyDataManager
 
             public bool IsDeleted { get; set; }
 
-            public bool IsAnomaly { get; set; }
         }
 
         public class ModelRegistryEntry
@@ -178,7 +178,9 @@ namespace DonkeyDataManager
                     return;
 
                 List<ModelRegistryEntry> entries =
-                    LoadModelRegistry();
+                    LoadModelRegistry()
+                        .Where(IsValidModelRegistryEntry)
+                        .ToList();
 
                 string modelFolder =
                     Path.Combine(
@@ -233,7 +235,8 @@ namespace DonkeyDataManager
 
                 foreach (ModelRegistryEntry entry in entries)
                 {
-                    lstModels.Items.Add(entry);
+                    lstModels.Items.Add(
+                        CreateModelListItem(entry));
                 }
 
                 SaveModelRegistry(entries);
@@ -242,6 +245,32 @@ namespace DonkeyDataManager
             {
 
             }
+        }
+
+        private bool IsValidModelRegistryEntry(ModelRegistryEntry entry)
+        {
+            if (entry == null)
+            {
+                return false;
+            }
+
+            if (
+                string.IsNullOrWhiteSpace(entry.Name) ||
+                !entry.Name.EndsWith(
+                    ".h5",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (
+                string.IsNullOrWhiteSpace(entry.WindowsPath) ||
+                !File.Exists(entry.WindowsPath))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         // =====================================================
@@ -262,8 +291,6 @@ namespace DonkeyDataManager
             btnPause.Click += (s, e) => playbackTimer.Stop();
 
             btnStop.Click += BtnStop_Click;
-
-            btnDetectAnomalies.Click += BtnDetectAnomalies_Click;
 
             lstCatalogRows.SelectedIndexChanged +=
                 LstCatalogRows_SelectedIndexChanged;
@@ -646,6 +673,33 @@ namespace DonkeyDataManager
                 modelName;
         }
 
+        private string GetRenamedModelWslPath(
+            ModelRegistryEntry? oldEntry,
+            string newName)
+        {
+            if (
+                oldEntry != null &&
+                !string.IsNullOrWhiteSpace(oldEntry.WslPath))
+            {
+                string normalized =
+                    oldEntry.WslPath
+                        .Replace("\\", "/")
+                        .TrimEnd('/');
+
+                int lastSlash =
+                    normalized.LastIndexOf('/');
+
+                if (lastSlash >= 0)
+                {
+                    return
+                        normalized.Substring(0, lastSlash + 1) +
+                        newName;
+                }
+            }
+
+            return GetModelWslPath(newName);
+        }
+
         private bool TryRunWslCommand(
             string distroName,
             string command)
@@ -1003,18 +1057,60 @@ namespace DonkeyDataManager
 
         private string GetSelectedModelName()
         {
-            if (lstModels.SelectedItem is ModelRegistryEntry entry)
+            ModelRegistryEntry entry =
+                GetSelectedModelEntry();
+
+            if (entry != null)
             {
                 return entry.Name;
             }
 
             return
-                lstModels.SelectedItem == null
+                lstModels.SelectedItems.Count == 0
                     ? ""
-                    : lstModels.SelectedItem
-                        .ToString()
+                    : lstModels.SelectedItems[0]
+                        .Text
                         .Replace("\0", "")
                         .Trim();
+        }
+
+        private ModelRegistryEntry GetSelectedModelEntry()
+        {
+            if (
+                lstModels.SelectedItems.Count > 0 &&
+                lstModels.SelectedItems[0].Tag is ModelRegistryEntry entry)
+            {
+                return entry;
+            }
+
+            string selectedModel =
+                GetSelectedModelName();
+
+            if (string.IsNullOrWhiteSpace(selectedModel))
+            {
+                return null;
+            }
+
+            return
+                LoadModelRegistry()
+                    .FirstOrDefault(
+                        entry =>
+                            string.Equals(
+                                entry.Name,
+                                selectedModel,
+                                StringComparison.OrdinalIgnoreCase));
+        }
+
+        private ListViewItem CreateModelListItem(
+            ModelRegistryEntry entry)
+        {
+            ListViewItem item =
+                new ListViewItem(entry.Name);
+
+            item.SubItems.Add(entry.WindowsPath);
+            item.Tag = entry;
+
+            return item;
         }
 
         private List<ModelRegistryEntry> LoadModelRegistry()
@@ -1086,9 +1182,9 @@ namespace DonkeyDataManager
             for (int i = 0; i < lstModels.Items.Count; i++)
             {
                 string itemName =
-                    lstModels.Items[i] is ModelRegistryEntry entry
+                    lstModels.Items[i].Tag is ModelRegistryEntry entry
                         ? entry.Name
-                        : lstModels.Items[i].ToString();
+                        : lstModels.Items[i].Text;
 
                 if (
                     string.Equals(
@@ -1096,14 +1192,23 @@ namespace DonkeyDataManager
                         model.Name,
                         StringComparison.OrdinalIgnoreCase))
                 {
-                    lstModels.Items[i] = model;
-                    lstModels.SelectedIndex = i;
+                    ListViewItem item =
+                        CreateModelListItem(model);
+
+                    lstModels.Items.RemoveAt(i);
+                    lstModels.Items.Insert(i, item);
+                    item.Selected = true;
+                    item.EnsureVisible();
                     return;
                 }
             }
 
-            lstModels.Items.Add(model);
-            lstModels.SelectedItem = model;
+            ListViewItem newItem =
+                CreateModelListItem(model);
+
+            lstModels.Items.Add(newItem);
+            newItem.Selected = true;
+            newItem.EnsureVisible();
         }
 
         // =====================================================
@@ -1419,18 +1524,6 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // ANOMALY
-        // =====================================================
-
-        private void BtnDetectAnomalies_Click(
-            object sender,
-            EventArgs e)
-        {
-            MessageBox.Show(
-                "이상 데이터 탐지 완료");
-        }
-
-        // =====================================================
         // CLEAN
         // =====================================================
 
@@ -1463,6 +1556,9 @@ namespace DonkeyDataManager
             EventArgs e)
         {
             TrainerStatus statusForm = null;
+            bool trainingCancelled = false;
+            string modelName = "";
+            string modelWindowsPath = "";
 
             try
             {
@@ -1513,7 +1609,7 @@ namespace DonkeyDataManager
                         selectedDataPath,
                         mycarWslPath);
 
-                string modelName =
+                modelName =
                     "mypilot_" +
                     DateTime.Now.ToString(
                         "yyyyMMdd_HHmmss") +
@@ -1527,7 +1623,7 @@ namespace DonkeyDataManager
                     "/" +
                     modelRelativePath;
 
-                string modelWindowsPath =
+                modelWindowsPath =
                     Path.Combine(
                         wslBasePath,
                         ModelDirectoryName,
@@ -1535,26 +1631,6 @@ namespace DonkeyDataManager
 
                 string trainingLogPath =
                     CreateTrainingLogPath(modelName);
-
-                DialogResult result =
-                    MessageBox.Show(
-                        "AI 학습을 시작합니다.\n\n" +
-                        "데이터 폴더:\n" +
-                        selectedDataPath +
-                        "\n\nWSL 경로:\n" +
-                        selectedTubWslPath +
-                        "\n\n생성 모델:\n" +
-                        modelName +
-                        "\n\n로그 파일:\n" +
-                        trainingLogPath,
-                        "AI 학습 시작",
-                        MessageBoxButtons.OKCancel,
-                        MessageBoxIcon.Information);
-
-                if (result != DialogResult.OK)
-                {
-                    return;
-                }
 
                 ProcessStartInfo psi =
                     new ProcessStartInfo
@@ -1581,10 +1657,18 @@ namespace DonkeyDataManager
                 statusForm =
                     new TrainerStatus();
 
+                statusForm.CancelRequested +=
+                    (cancelSender, cancelArgs) =>
+                    {
+                        trainingCancelled = true;
+                        statusForm.AppendLog(
+                            "학습 취소 요청됨. 실행 중인 WSL 학습 프로세스를 종료합니다.");
+                        TryTerminateTrainingProcess();
+                    };
+
                 statusForm.SetStatus(
                     "WSL 학습 준비 중",
                     selectedDataPath,
-                    selectedTubWslPath,
                     modelWindowsPath,
                     trainingLogPath);
 
@@ -1601,7 +1685,6 @@ namespace DonkeyDataManager
                 statusForm.SetStatus(
                     "WSL 학습 실행 중",
                     selectedDataPath,
-                    selectedTubWslPath,
                     modelWindowsPath,
                     trainingLogPath);
 
@@ -1625,10 +1708,25 @@ namespace DonkeyDataManager
 
                 if (wslProcess.ExitCode != 0)
                 {
+                    if (trainingCancelled)
+                    {
+                        CleanupGeneratedModel(
+                            modelName,
+                            modelWindowsPath);
+
+                        statusForm.AppendLog(
+                            "학습이 취소되어 생성 중이던 모델 데이터를 정리했습니다.");
+
+                        statusForm.MarkFinished(
+                            "학습 취소됨");
+
+                        LoadModelsToList();
+                        return;
+                    }
+
                     statusForm.SetStatus(
                         "학습 실패",
                         selectedDataPath,
-                        selectedTubWslPath,
                         modelWindowsPath,
                         trainingLogPath);
 
@@ -1662,9 +1760,16 @@ namespace DonkeyDataManager
                 statusForm.SetStatus(
                     "학습 완료",
                     selectedDataPath,
-                    selectedTubWslPath,
                     modelWindowsPath,
                     trainingLogPath);
+
+                statusForm.MarkFinished(
+                    "학습 완료");
+
+                if (!statusForm.IsDisposed)
+                {
+                    statusForm.Close();
+                }
 
                 MessageBox.Show(
                     "AI 학습이 완료되었습니다.\n\n" +
@@ -1683,7 +1788,6 @@ namespace DonkeyDataManager
                     statusForm.SetStatus(
                         "학습 실패",
                         selectedDataPath,
-                        "",
                         "",
                         "");
 
@@ -1751,6 +1855,534 @@ namespace DonkeyDataManager
                 QuoteForBash(selectedTubWslPath) +
                 " --model " +
                 QuoteForBash(modelRelativePath);
+        }
+
+        private void TryTerminateTrainingProcess()
+        {
+            try
+            {
+                if (
+                    wslProcess != null &&
+                    !wslProcess.HasExited)
+                {
+                    wslProcess.Kill(true);
+                }
+            }
+            catch
+            {
+
+            }
+        }
+
+        private void CleanupGeneratedModel(
+            string modelName,
+            string modelWindowsPath)
+        {
+            ModelRegistryEntry generatedEntry =
+                new ModelRegistryEntry()
+                {
+                    Name = modelName,
+                    WindowsPath = modelWindowsPath,
+                    WslPath =
+                        string.IsNullOrWhiteSpace(modelName)
+                            ? ""
+                            : GetModelWslPath(modelName)
+                };
+
+            try
+            {
+                DeleteModelFiles(generatedEntry);
+                DeleteDonkeyModelDatabaseEntry(generatedEntry);
+            }
+            catch
+            {
+
+            }
+
+            RemoveModelRegistryEntry(
+                modelName,
+                modelWindowsPath);
+        }
+
+        private void RemoveModelRegistryEntry(
+            string modelName,
+            string modelWindowsPath)
+        {
+            List<ModelRegistryEntry> entries =
+                LoadModelRegistry();
+
+            entries.RemoveAll(
+                entry =>
+                    string.Equals(
+                        entry.Name,
+                        modelName,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    (
+                        !string.IsNullOrWhiteSpace(modelWindowsPath) &&
+                        string.Equals(
+                            entry.WindowsPath,
+                            modelWindowsPath,
+                            StringComparison.OrdinalIgnoreCase)));
+
+            SaveModelRegistry(entries);
+        }
+
+        private List<string> GetRelatedModelFiles(
+            ModelRegistryEntry entry)
+        {
+            List<string> files =
+                new List<string>();
+
+            if (
+                entry == null ||
+                string.IsNullOrWhiteSpace(entry.WindowsPath))
+            {
+                return files;
+            }
+
+            string modelPath =
+                entry.WindowsPath;
+
+            string modelsPath =
+                Path.GetDirectoryName(modelPath);
+
+            if (string.IsNullOrWhiteSpace(modelsPath))
+            {
+                return files;
+            }
+
+            string modelFileName =
+                Path.GetFileName(modelPath);
+
+            string modelBaseName =
+                Path.GetFileNameWithoutExtension(modelPath);
+
+            if (Directory.Exists(modelsPath))
+            {
+                foreach (string file in Directory.GetFiles(modelsPath))
+                {
+                    string fileName =
+                        Path.GetFileName(file);
+
+                    if (
+                        string.Equals(
+                            fileName,
+                            "database.json",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (
+                        IsRelatedModelFileName(
+                            fileName,
+                            modelFileName,
+                            modelBaseName))
+                    {
+                        files.Add(file);
+                    }
+                }
+            }
+
+            if (File.Exists(modelPath))
+            {
+                files.Add(modelPath);
+            }
+
+            return
+                files
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+        }
+
+        private bool IsRelatedModelFileName(
+            string fileName,
+            string modelFileName,
+            string modelBaseName)
+        {
+            return
+                string.Equals(
+                    fileName,
+                    modelFileName,
+                    StringComparison.OrdinalIgnoreCase) ||
+                fileName.StartsWith(
+                    modelFileName + ".",
+                    StringComparison.OrdinalIgnoreCase) ||
+                fileName.StartsWith(
+                    modelBaseName + ".",
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
+        private List<(string OldPath, string NewPath)> BuildModelRenamePlan(
+            ModelRegistryEntry oldEntry,
+            string newModelPath)
+        {
+            List<(string OldPath, string NewPath)> plan =
+                new List<(string OldPath, string NewPath)>();
+
+            string oldModelFileName =
+                Path.GetFileName(oldEntry.WindowsPath);
+
+            string oldBaseName =
+                Path.GetFileNameWithoutExtension(oldEntry.WindowsPath);
+
+            string newModelFileName =
+                Path.GetFileName(newModelPath);
+
+            string newBaseName =
+                Path.GetFileNameWithoutExtension(newModelPath);
+
+            string modelsPath =
+                Path.GetDirectoryName(newModelPath);
+
+            if (string.IsNullOrWhiteSpace(modelsPath))
+            {
+                return plan;
+            }
+
+            foreach (string oldPath in GetRelatedModelFiles(oldEntry))
+            {
+                string fileName =
+                    Path.GetFileName(oldPath);
+
+                string newFileName;
+
+                if (
+                    string.Equals(
+                        fileName,
+                        oldModelFileName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    newFileName = newModelFileName;
+                }
+                else if (
+                    fileName.StartsWith(
+                        oldModelFileName + ".",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    newFileName =
+                        newModelFileName +
+                        fileName.Substring(oldModelFileName.Length);
+                }
+                else if (
+                    fileName.StartsWith(
+                        oldBaseName + ".",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    newFileName =
+                        newBaseName +
+                        fileName.Substring(oldBaseName.Length);
+                }
+                else
+                {
+                    continue;
+                }
+
+                plan.Add(
+                    (oldPath, Path.Combine(modelsPath, newFileName)));
+            }
+
+            return plan;
+        }
+
+        private void EnsureRenamePlanHasNoConflicts(
+            List<(string OldPath, string NewPath)> plan)
+        {
+            foreach (var item in plan)
+            {
+                if (
+                    !string.Equals(
+                        item.OldPath,
+                        item.NewPath,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    File.Exists(item.NewPath))
+                {
+                    throw new IOException(
+                        "동일한 이름의 관련 모델 파일이 이미 존재합니다.\n" +
+                        item.NewPath);
+                }
+            }
+        }
+
+        private void RenameModelFiles(
+            List<(string OldPath, string NewPath)> plan)
+        {
+            foreach (var item in plan)
+            {
+                if (
+                    string.Equals(
+                        item.OldPath,
+                        item.NewPath,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                File.Move(
+                    item.OldPath,
+                    item.NewPath);
+            }
+        }
+
+        private void DeleteModelFiles(
+            ModelRegistryEntry entry)
+        {
+            foreach (string file in GetRelatedModelFiles(entry))
+            {
+                if (File.Exists(file))
+                {
+                    File.Delete(file);
+                }
+            }
+        }
+
+        private string GetDonkeyModelDatabasePath(
+            ModelRegistryEntry entry)
+        {
+            if (
+                entry == null ||
+                string.IsNullOrWhiteSpace(entry.WindowsPath))
+            {
+                return "";
+            }
+
+            string modelsPath =
+                Path.GetDirectoryName(entry.WindowsPath);
+
+            if (string.IsNullOrWhiteSpace(modelsPath))
+            {
+                return "";
+            }
+
+            return
+                Path.Combine(
+                    modelsPath,
+                    "database.json");
+        }
+
+        private void RenameDonkeyModelDatabaseEntry(
+            ModelRegistryEntry oldEntry,
+            string newName)
+        {
+            string databasePath =
+                GetDonkeyModelDatabasePath(oldEntry);
+
+            if (!File.Exists(databasePath))
+            {
+                return;
+            }
+
+            string oldBaseName =
+                Path.GetFileNameWithoutExtension(oldEntry.Name);
+
+            string newBaseName =
+                Path.GetFileNameWithoutExtension(newName);
+
+            JsonNode root =
+                JsonNode.Parse(File.ReadAllText(databasePath));
+
+            if (root == null)
+            {
+                return;
+            }
+
+            bool changed = false;
+
+            if (root is JsonArray array)
+            {
+                foreach (JsonNode node in array)
+                {
+                    if (
+                        node is JsonObject modelObject &&
+                        IsDonkeyModelDatabaseEntry(
+                            modelObject,
+                            oldBaseName,
+                            oldEntry.Name))
+                    {
+                        ReplaceModelNameInJson(
+                            modelObject,
+                            oldBaseName,
+                            newBaseName,
+                            oldEntry.Name,
+                            newName);
+
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed)
+            {
+                WriteJsonNode(databasePath, root);
+            }
+        }
+
+        private void DeleteDonkeyModelDatabaseEntry(
+            ModelRegistryEntry entry)
+        {
+            string databasePath =
+                GetDonkeyModelDatabasePath(entry);
+
+            if (!File.Exists(databasePath))
+            {
+                return;
+            }
+
+            string modelBaseName =
+                Path.GetFileNameWithoutExtension(entry.Name);
+
+            JsonNode root =
+                JsonNode.Parse(File.ReadAllText(databasePath));
+
+            if (root == null)
+            {
+                return;
+            }
+
+            bool changed = false;
+
+            if (root is JsonArray array)
+            {
+                for (int i = array.Count - 1; i >= 0; i--)
+                {
+                    if (
+                        array[i] is JsonObject modelObject &&
+                        IsDonkeyModelDatabaseEntry(
+                            modelObject,
+                            modelBaseName,
+                            entry.Name))
+                    {
+                        array.RemoveAt(i);
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed)
+            {
+                WriteJsonNode(databasePath, root);
+            }
+        }
+
+        private bool IsDonkeyModelDatabaseEntry(
+            JsonObject modelObject,
+            string modelBaseName,
+            string modelFileName)
+        {
+            if (
+                modelObject.TryGetPropertyValue(
+                    "Name",
+                    out JsonNode nameNode))
+            {
+                string name =
+                    nameNode == null
+                        ? ""
+                        : nameNode.GetValue<string>();
+
+                return
+                    string.Equals(
+                        name,
+                        modelBaseName,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(
+                        name,
+                        modelFileName,
+                        StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
+        }
+
+        private void ReplaceModelNameInJson(
+            JsonNode node,
+            string oldBaseName,
+            string newBaseName,
+            string oldFileName,
+            string newFileName)
+        {
+            if (node is JsonObject obj)
+            {
+                foreach (string key in obj.Select(pair => pair.Key).ToList())
+                {
+                    JsonNode child =
+                        obj[key];
+
+                    if (child is JsonValue value)
+                    {
+                        string text =
+                            TryGetJsonString(value);
+
+                        if (
+                            string.Equals(
+                                text,
+                                oldBaseName,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            obj[key] = newBaseName;
+                        }
+                        else if (
+                            string.Equals(
+                                text,
+                                oldFileName,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            obj[key] = newFileName;
+                        }
+                    }
+                    else if (child != null)
+                    {
+                        ReplaceModelNameInJson(
+                            child,
+                            oldBaseName,
+                            newBaseName,
+                            oldFileName,
+                            newFileName);
+                    }
+                }
+            }
+            else if (node is JsonArray array)
+            {
+                foreach (JsonNode child in array)
+                {
+                    if (child != null)
+                    {
+                        ReplaceModelNameInJson(
+                            child,
+                            oldBaseName,
+                            newBaseName,
+                            oldFileName,
+                            newFileName);
+                    }
+                }
+            }
+        }
+
+        private string TryGetJsonString(
+            JsonValue value)
+        {
+            try
+            {
+                return value.GetValue<string>();
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        private void WriteJsonNode(
+            string path,
+            JsonNode node)
+        {
+            JsonSerializerOptions options =
+                new JsonSerializerOptions()
+                {
+                    WriteIndented = true
+                };
+
+            File.WriteAllText(
+                path,
+                node.ToJsonString(options));
         }
 
         private string BuildPythonResolverCommand()
@@ -2067,7 +2699,7 @@ namespace DonkeyDataManager
         {
             try
             {
-                if (lstModels.SelectedItem == null)
+                if (lstModels.SelectedItems.Count == 0)
                 {
                     MessageBox.Show(
                         "모델을 먼저 선택하세요.");
@@ -2346,7 +2978,7 @@ namespace DonkeyDataManager
         {
             try
             {
-                if (lstModels.SelectedItem == null)
+                if (lstModels.SelectedItems.Count == 0)
                 {
                     MessageBox.Show(
                         "삭제할 모델을 선택하세요.");
@@ -2357,9 +2989,27 @@ namespace DonkeyDataManager
                 string selectedModel =
                     GetSelectedModelName();
 
+                ModelRegistryEntry selectedEntry =
+                    GetSelectedModelEntry();
+
+                string selectedModelPath =
+                    selectedEntry == null
+                        ? ""
+                        : selectedEntry.WindowsPath;
+
+                if (selectedEntry == null)
+                {
+                    MessageBox.Show(
+                        "선택한 모델의 경로 정보를 확인할 수 없습니다.");
+
+                    return;
+                }
+
                 DialogResult result =
                     MessageBox.Show(
                         selectedModel +
+                        "\n" +
+                        selectedModelPath +
                         "\n\n선택한 모델을 삭제하시겠습니까?",
                         "모델 삭제",
                         MessageBoxButtons.YesNo,
@@ -2368,11 +3018,8 @@ namespace DonkeyDataManager
                 if (result != DialogResult.Yes)
                     return;
 
-                object selectedItem =
-                    lstModels.SelectedItem;
-
-                lstModels.Items.Remove(
-                    selectedItem);
+                DeleteModelFiles(selectedEntry);
+                DeleteDonkeyModelDatabaseEntry(selectedEntry);
 
                 List<ModelRegistryEntry> entries =
                     LoadModelRegistry();
@@ -2382,12 +3029,19 @@ namespace DonkeyDataManager
                         string.Equals(
                             entry.Name,
                             selectedModel,
-                            StringComparison.OrdinalIgnoreCase));
+                            StringComparison.OrdinalIgnoreCase) ||
+                        (
+                            !string.IsNullOrWhiteSpace(selectedModelPath) &&
+                            string.Equals(
+                                entry.WindowsPath,
+                                selectedModelPath,
+                                StringComparison.OrdinalIgnoreCase)));
 
                 SaveModelRegistry(entries);
+                LoadModelsToList();
 
                 MessageBox.Show(
-                    "모델 목록에서 삭제되었습니다.");
+                    "모델 파일과 관련 정보가 삭제되었습니다.");
             }
             catch (Exception ex)
             {
@@ -2405,7 +3059,7 @@ namespace DonkeyDataManager
         {
             try
             {
-                if (lstModels.SelectedItem == null)
+                if (lstModels.SelectedItems.Count == 0)
                 {
                     MessageBox.Show(
                         "이름을 변경할 모델을 선택하세요.");
@@ -2417,8 +3071,15 @@ namespace DonkeyDataManager
                     GetSelectedModelName();
 
                 ModelRegistryEntry oldEntry =
-                    lstModels.SelectedItem
-                        as ModelRegistryEntry;
+                    GetSelectedModelEntry();
+
+                if (oldEntry == null)
+                {
+                    MessageBox.Show(
+                        "선택한 모델의 경로 정보를 확인할 수 없습니다.");
+
+                    return;
+                }
 
                 string newName =
                     Microsoft.VisualBasic.Interaction.InputBox(
@@ -2434,17 +3095,26 @@ namespace DonkeyDataManager
     .Replace("\0", "")
     .Trim();
 
-                string modelsPath =
-    Path.Combine(
-        wslBasePath
-            .Replace("\0", "")
-            .Trim(),
-        ModelDirectoryName);
-
                 string oldFilePath =
-                    Path.Combine(
-                        modelsPath,
-                        oldName);
+                    string.IsNullOrWhiteSpace(oldEntry.WindowsPath)
+                        ? Path.Combine(
+                            wslBasePath
+                                .Replace("\0", "")
+                                .Trim(),
+                            ModelDirectoryName,
+                            oldName)
+                        : oldEntry.WindowsPath;
+
+                string modelsPath =
+                    Path.GetDirectoryName(oldFilePath);
+
+                if (string.IsNullOrWhiteSpace(modelsPath))
+                {
+                    MessageBox.Show(
+                        "모델 경로를 확인할 수 없습니다.");
+
+                    return;
+                }
 
                 if (!newName.EndsWith(".h5"))
                 {
@@ -2464,31 +3134,39 @@ namespace DonkeyDataManager
                     return;
                 }
 
-                File.Move(
-                    oldFilePath,
-                    newFilePath);
+                List<(string OldPath, string NewPath)> renamePlan =
+                    BuildModelRenamePlan(
+                        oldEntry,
+                        newFilePath);
 
-                int selectedIndex =
-                    lstModels.SelectedIndex;
+                if (renamePlan.Count == 0)
+                {
+                    MessageBox.Show(
+                        "변경할 모델 파일을 찾을 수 없습니다.\n" +
+                        oldFilePath);
+
+                    return;
+                }
+
+                EnsureRenamePlanHasNoConflicts(renamePlan);
+                RenameModelFiles(renamePlan);
+                RenameDonkeyModelDatabaseEntry(oldEntry, newName);
 
                 ModelRegistryEntry newEntry =
                     new ModelRegistryEntry()
                     {
                         Name = newName,
                         WindowsPath = newFilePath,
-                        WslPath = GetModelWslPath(newName),
+                        WslPath =
+                            GetRenamedModelWslPath(
+                                oldEntry,
+                                newName),
                         SourceTubWindowsPath =
-                            oldEntry == null
-                                ? ""
-                                : oldEntry.SourceTubWindowsPath,
+                            oldEntry.SourceTubWindowsPath,
                         SourceTubWslPath =
-                            oldEntry == null
-                                ? ""
-                                : oldEntry.SourceTubWslPath,
+                            oldEntry.SourceTubWslPath,
                         CreatedAt =
-                            oldEntry == null
-                                ? DateTime.Now
-                                : oldEntry.CreatedAt
+                            oldEntry.CreatedAt
                     };
 
                 List<ModelRegistryEntry> entries =
@@ -2499,13 +3177,18 @@ namespace DonkeyDataManager
                         string.Equals(
                             entry.Name,
                             oldName,
+                            StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(
+                            entry.WindowsPath,
+                            oldFilePath,
                             StringComparison.OrdinalIgnoreCase));
 
                 entries.Add(newEntry);
                 SaveModelRegistry(entries);
 
-                lstModels.Items[selectedIndex] =
-                    newEntry;
+                LoadModelsToList();
+
+                AddOrUpdateModelList(newEntry);
 
                 MessageBox.Show(
                     "모델 이름이 변경되었습니다.");
