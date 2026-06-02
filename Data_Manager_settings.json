@@ -1,0 +1,5 @@
+{
+  "WslDistroName": "Ubuntu-22.04",
+  "CondaEnvName": "e2e_env",
+  "MyCarPath": "/home/cheon/mycar"
+}
