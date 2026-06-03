@@ -6,6 +6,8 @@ using System.Windows.Forms;
 
 namespace AD_AI_LearningData_Editor
 {
+    // 조향값(angle)을 반원형 계기판으로 그리는 커스텀 컨트롤입니다.
+    // DonkeyCar의 -1~1 값을 0~180도 표시 각도로 변환해 화살표로 보여줍니다.
     public class ctrlAngleDicatoer : Control
     {
         private double? rawAngleValue;

@@ -3,6 +3,8 @@ using System.Windows.Forms;
 
 namespace DonkeyDataManager
 {
+    // 학습 진행 상태창입니다.
+    // train.py 표준 출력/오류 로그를 보여주고, 사용자가 취소하면 실행 중인 WSL 프로세스를 종료하도록 알립니다.
     public partial class TrainerStatus : Form
     {
         public event EventHandler? CancelRequested;
@@ -85,6 +87,7 @@ namespace DonkeyDataManager
 
         private void RunOnUiThread(Action action)
         {
+            // WSL 프로세스 출력은 백그라운드 스레드에서 들어오므로 UI 변경은 항상 UI 스레드로 보냅니다.
             try
             {
                 if (IsDisposed)

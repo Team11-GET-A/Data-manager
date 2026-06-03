@@ -9,10 +9,15 @@ using AD_AI_LearningData_Editor;
 
 namespace Data_Manager
 {
+    // 로컬 폴더의 파일을 프로그램의 bin\UploadedFile 폴더로 복사하는 업로드 폼입니다.
+    // 주의: DonkeyCar tub 데이터는 manifest/catalog/image 파일명이 서로 연결되어 있으므로
+    // 파일명을 바꾸면 학습용 tub 구조가 깨질 수 있습니다.
     public partial class frmAddFile : Form
     {
         private frmMain _mainForm;
 
+        // selectedPaths는 사용자가 선택한 원본 파일 경로,
+        // copyTargetPaths는 실제 복사 버튼을 눌렀을 때 복사할 파일 경로입니다.
         private List<string> selectedPaths = new List<string>();
         private List<string> copyTargetPaths = new List<string>();
         private ToolTip AddFileToolTip;
@@ -146,6 +151,8 @@ namespace Data_Manager
 
         private string GetInitialSelectFileDirectory()
         {
+            // 기본 선택 위치는 WSL의 ~/mycar/data를 우선 사용하고,
+            // 찾지 못하면 Data-manager\bin 또는 현재 실행 bin 폴더로 대체합니다.
             string wslPath = FindWslMycarDataPath();
 
             if (!string.IsNullOrWhiteSpace(wslPath) && Directory.Exists(wslPath))
@@ -324,6 +331,8 @@ namespace Data_Manager
             object sender,
             EventArgs e)
         {
+            // 폴더 하나를 선택하면 내부의 허용 확장자 파일들을 재귀적으로 모읍니다.
+            // 임시/백업 파일은 UploadedFile에 섞이지 않도록 제외합니다.
             lstviewCopyFile.Items.Clear();
             lstviewAddFile.Items.Clear();
             selectedPaths.Clear();
@@ -460,6 +469,8 @@ namespace Data_Manager
 
         private void PrepareCopyFileList()
         {
+            // 왼쪽 목록(selectedPaths)을 오른쪽 복사 예정 목록(copyTargetPaths)으로 옮깁니다.
+            // 현재 구현은 중복 방지를 위해 복사 파일명에 -Copy를 붙입니다.
             lstviewAddFile.Items.Clear();
 
             copyTargetPaths.Clear();
@@ -513,6 +524,8 @@ namespace Data_Manager
 
         private async void btnAddFile_Click(object sender, EventArgs e)
         {
+            // UI는 잠그고 백그라운드에서 파일을 복사합니다.
+            // 중간 실패나 취소가 생기면 이미 복사한 파일을 지워 UploadedFile을 되돌립니다.
             PrepareCopyFileList();
 
             if (lstviewAddFile.Items.Count == 0)

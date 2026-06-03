@@ -6,6 +6,8 @@ using System.Windows.Forms;
 
 namespace AD_AI_LearningData_Editor
 {
+    // 버튼 크기에 맞춰 아이콘 이미지를 리사이즈하고 배치하는 공통 유틸리티입니다.
+    // MaterialButton과 일반 Button을 모두 지원합니다.
     public static class IconProperty
     {
         public static void SetIcon(MaterialButton button, Image icon, int iconSize)

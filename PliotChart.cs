@@ -7,6 +7,8 @@ using System.Windows.Forms;
 
 namespace Data_Manager
 {
+    // Pilot 화면의 프레임 데이터를 그래프로 보여주는 비교 창입니다.
+    // 위쪽은 angle, 아래쪽은 throttle을 사용자 값과 AI 예측값 두 선으로 그립니다.
     public partial class PliotChart : Form
     {
         private readonly List<DonkeyAsyncWorker.PilotFrameData> _frames;
@@ -74,6 +76,7 @@ namespace Data_Manager
             Func<DonkeyAsyncWorker.PilotFrameData, double?> userSelector,
             Func<DonkeyAsyncWorker.PilotFrameData, double?> pilotSelector)
         {
+            // 같은 그리기 함수를 angle/throttle에 재사용하기 위해 값 선택 함수를 인자로 받습니다.
             Rectangle plot = Rectangle.FromLTRB(
                 bounds.Left + 58,
                 bounds.Top + 38,

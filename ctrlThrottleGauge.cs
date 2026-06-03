@@ -6,6 +6,8 @@ using System.Windows.Forms;
 
 namespace AD_AI_LearningData_Editor
 {
+    // throttle 값을 0~1 범위 막대 게이지로 그리는 커스텀 컨트롤입니다.
+    // frmMain/Pilot 화면에서 주행 속도 입력 또는 AI 예측 throttle을 직관적으로 표시합니다.
     public class ctrlThrottleGauge : Control
     {
         private double? rawThrottleValue;

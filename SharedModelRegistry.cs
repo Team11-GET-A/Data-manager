@@ -6,6 +6,8 @@ using System.Text.Json;
 
 namespace Data_Manager
 {
+    // Trainer와 Pilot 화면이 함께 사용하는 모델 등록 정보입니다.
+    // 학습된 .h5 파일 경로와 원본 tub 경로를 저장해 화면 간 모델 목록을 동기화합니다.
     public sealed class SharedModelRegistryEntry
     {
         public string Name { get; set; } = "";
@@ -23,6 +25,7 @@ namespace Data_Manager
 
     public static class SharedModelRegistry
     {
+        // 사용자 AppData에 저장하여 프로그램 실행 위치가 바뀌어도 모델 목록을 유지합니다.
         private static readonly string RegistryPath =
             Path.Combine(
                 Environment.GetFolderPath(
@@ -34,6 +37,7 @@ namespace Data_Manager
 
         public static List<SharedModelRegistryEntry> Load()
         {
+            // 실제 파일이 남아 있는 .h5 모델만 유효한 항목으로 반환합니다.
             try
             {
                 if (!File.Exists(RegistryPath))

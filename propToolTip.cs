@@ -2,6 +2,7 @@
 
 namespace AD_AI_LearningData_Editor
 {
+    // 프로젝트 전체에서 동일한 지연 시간/표시 시간을 갖는 ToolTip을 만들기 위한 작은 헬퍼입니다.
     public static class propToolTip
     {
         public static ToolTip CreateDefaultToolTip()

@@ -13,6 +13,9 @@ using System.Threading.Tasks;
 namespace Data_Manager
 {
     // 무거운 작업은 이 클래스에서 비동기로 처리합니다.
+    // DonkeyCar/WSL 관련 무거운 작업을 UI 스레드 밖에서 처리하는 공통 도우미입니다.
+    // tub 파싱, 모델 database 읽기, WSL 명령 실행, Windows<->WSL 경로 변환,
+    // AI 추론용 Python 스크립트 실행을 이 클래스에 모아 두었습니다.
     public static class DonkeyAsyncWorker
     {
         private const string FallbackWslDistroName = "Ubuntu-22.04";
@@ -92,6 +95,8 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            // 하나의 tub 폴더 또는 tub들이 들어 있는 상위 폴더를 읽어 프레임 목록으로 변환합니다.
+            // catalog_*.catalog, record_*.json, images-only 구조를 순서대로 시도합니다.
             if (string.IsNullOrWhiteSpace(distroName))
             {
                 distroName = await GetPreferredWslDistroNameAsync(cancellationToken);
@@ -301,6 +306,8 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            // DonkeyCar catalog 한 줄은 JSON 객체이며 이미지 파일명과 user angle/throttle을 담습니다.
+            // catalog가 가리키는 이미지 경로를 실제 Windows/WSL 경로로 해결해 PilotFrameData로 만듭니다.
             var frames = new List<PilotFrameData>();
             int resolvedCount = 0;
             int unresolvedCount = 0;
@@ -544,6 +551,8 @@ namespace Data_Manager
             string imageValue,
             int index)
         {
+            // tub 버전과 편집 방식에 따라 이미지 경로가 절대/상대/images 폴더/파일명만 들어올 수 있습니다.
+            // 가능한 후보를 만든 뒤 실제 존재하는 파일을 찾아 WSL 경로로 반환합니다.
             List<string> candidates = new List<string>();
             string imageValueTrimmed = imageValue?.Trim() ?? string.Empty;
 
@@ -773,6 +782,8 @@ namespace Data_Manager
 
         public class PilotCardState
         {
+            // Pilot 화면이 모델 하나에 대해 기억해야 하는 상태 묶음입니다.
+            // 모델 파일, WSL 환경, 연결 tub, 추론 결과 경로를 함께 저장합니다.
             public string ModelName { get; set; } = string.Empty;
             public string ModelPath { get; set; } = string.Empty;
             public string ModelType { get; set; } = string.Empty;
@@ -792,6 +803,7 @@ namespace Data_Manager
 
         public class TubDrivingRecord
         {
+            // tub에 저장된 사람 주행 데이터 한 프레임입니다.
             public int Index { get; set; }
             public string TubPath { get; set; } = string.Empty;
             public string ImagePath { get; set; } = string.Empty;
@@ -803,6 +815,7 @@ namespace Data_Manager
 
         public class JudementRecord
         {
+            // Python 추론 결과 한 프레임입니다. user 값과 pilot 예측값, 오차를 함께 담습니다.
             public int Index { get; set; }
             public string TubPath { get; set; } = string.Empty;
             public string ImagePath { get; set; } = string.Empty;
@@ -821,6 +834,7 @@ namespace Data_Manager
 
         public class PilotFrameData
         {
+            // UI 표시용 통합 프레임입니다. tub 원본값과 AI 추론값을 한 행으로 합친 형태입니다.
             public int Index { get; set; }
             public string TubPath { get; set; } = string.Empty;
             public string ImagePath { get; set; } = string.Empty;
@@ -1194,6 +1208,8 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            // 선택 모델과 tub를 Python 스크립트에 전달해 프레임별 AI 조향/스로틀 예측값을 생성합니다.
+            // 결과 JSON은 모델별 output 폴더에 저장하고 다시 읽어 JudementRecord 목록으로 반환합니다.
             await EnsurePilotRuntimePathsAsync(cardState, progress, cancellationToken);
 
             string scriptPath = await EnsurePythonScriptAsync(cardState, cancellationToken);
@@ -1279,6 +1295,8 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            // wsl.exe -d <distro> bash -lc "<command>" 형태로 명령을 실행합니다.
+            // 표준 출력/오류를 모아 실패 원인을 UI 로그에 전달할 수 있게 합니다.
             var psi = new ProcessStartInfo
             {
                 FileName = "wsl.exe",
@@ -1335,6 +1353,8 @@ namespace Data_Manager
 
         public static string ToWindowsPathFromWslPath(string wslPath, string distroName)
         {
+            // /home/... 또는 /mnt/c/... 형태의 WSL 경로를 Windows에서 접근 가능한 경로로 바꿉니다.
+            // WSL 내부 home 경로는 \\wsl.localhost\<distro>\... UNC 경로로 변환합니다.
             if (string.IsNullOrWhiteSpace(wslPath))
             {
                 return string.Empty;
@@ -1371,6 +1391,7 @@ namespace Data_Manager
 
         public static string ToWslPathFromWindowsPath(string windowsPath)
         {
+            // C:\... 또는 \\wsl.localhost\... 경로를 bash 명령에서 쓸 수 있는 /mnt/c/... 경로로 바꿉니다.
             if (string.IsNullOrWhiteSpace(windowsPath))
             {
                 return string.Empty;

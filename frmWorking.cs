@@ -5,6 +5,8 @@ using System.Windows.Forms;
 
 namespace Data_Manager
 {
+    // 파일 복사 같은 짧은 백그라운드 작업에 쓰는 진행 팝업입니다.
+    // CancellationTokenSource를 받아 취소 버튼으로 작업 중단을 요청합니다.
     public partial class frmWoking : Form
     {
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]

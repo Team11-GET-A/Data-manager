@@ -16,14 +16,21 @@ using AD_AI_LearningData_Editor;
 
 namespace AD_AI_LearningData_Editor
 {
+    // 메인 데이터 관리 화면입니다.
+    // UploadedFile 폴더의 이미지/tub 관련 파일을 목록으로 보여주고,
+    // 프레임 재생, 삭제/복원, 이미지 편집, ROI/색상/반전 처리,
+    // 주행값(angle/throttle) 표시와 Trainer/Pilot 탭 연결을 담당합니다.
     public partial class frmMain : MaterialForm
     {
+        // 현재 화면에서 재생할 이미지 목록과 재생 위치입니다.
         private System.Windows.Forms.Timer videoTimer;
         private DoubleBufferedPictureBox picVideoBox;
         private ctrlAngleDicatoer angleIndicatorControl;
         private ctrlThrottleGauge throttleGaugeControl;
         private List<string> slideImages = new List<string>();
         private int currentSlideIndex = 0;
+
+        // 이미지 편집/표시 상태입니다. 사용자가 슬라이더나 팔레트를 조작할 때 중복 이벤트를 막습니다.
         private ListViewItem lastHighlightedItem = null;
         private bool isUpdatingSlider = false;
         private FileSystemWatcher trashWatcher;
@@ -33,9 +40,14 @@ namespace AD_AI_LearningData_Editor
         private Dictionary<string, string> gammaBackupPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private HashSet<string> imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".bit" };
         private string mirrorYBackupFolderName = "MirrorYBackupFile";
+
+        // catalog/record JSON에서 읽은 주행값을 이미지 이름 기준으로 캐시합니다.
+        // 슬라이드를 넘길 때마다 파일을 다시 파싱하지 않기 위한 구조입니다.
         private Dictionary<string, DrivingInfo> drivingInfoCache = new Dictionary<string, DrivingInfo>(StringComparer.OrdinalIgnoreCase);
         private DateTime drivingInfoCacheTime = DateTime.MinValue;
         private string drivingInfoCacheSignature = "";
+
+        // 프레임 구간 선택과 길게 누르기 반복 이동 상태입니다.
         private List<int> intervalPointIndices = new List<int>();
         private int selectedIntervalStartIndex = -1;
         private int selectedIntervalEndIndex = -1;
@@ -50,6 +62,7 @@ namespace AD_AI_LearningData_Editor
         private Dictionary<Control, float> originalControlFontSizes = new Dictionary<Control, float>();
         private bool isApplyingResponsiveLayout;
 
+        // 큰 이미지가 많은 화면에서 리사이즈/전환 시 깜빡임을 줄이기 위한 Win32 스타일입니다.
         protected override CreateParams CreateParams
         {
             get
@@ -154,6 +167,7 @@ namespace AD_AI_LearningData_Editor
 
         private string GetBinFolder()
         {
+            // 실행 위치가 bin\Debug\net... 하위여도 프로젝트 공용 bin 폴더를 기준점으로 사용합니다.
             DirectoryInfo dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
             while (dir != null)
             {
@@ -1339,6 +1353,8 @@ namespace AD_AI_LearningData_Editor
 
         public void LoadUploadedFilesToD()
         {
+            // UploadedFile 폴더를 다시 스캔하여 파일 목록과 슬라이드 이미지를 재구성합니다.
+            // 삭제/복원/업로드 후 UI를 최신 상태로 맞출 때 반복 호출됩니다.
             if (lstviewFileListD.Columns.Count == 0)
             {
                 ConfigureFileListDView();
@@ -1542,6 +1558,8 @@ namespace AD_AI_LearningData_Editor
 
         private void BuildDrivingInfoCacheIfNeeded()
         {
+            // 이미지명, catalog row, record JSON 형식이 섞여 들어올 수 있어 여러 포맷을 순차 파싱합니다.
+            // 파일 목록이 바뀌지 않았다면 기존 캐시를 재사용합니다.
             string uploadFolder = GetUploadedFolder();
 
             if (!Directory.Exists(uploadFolder))
@@ -2203,6 +2221,7 @@ namespace AD_AI_LearningData_Editor
 
         private void UpdateSlideDisplay()
         {
+            // 현재 슬라이드 인덱스에 맞춰 이미지, seek bar, 파일 선택, 주행값 표시를 한 번에 갱신합니다.
             if (slideImages.Count == 0)
             {
                 return;

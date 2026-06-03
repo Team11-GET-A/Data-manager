@@ -13,6 +13,9 @@ using Data_Manager;
 
 namespace DonkeyDataManager
 {
+    // Trainer 화면입니다.
+    // tub 데이터 폴더를 로드해 catalog를 확인하고,
+    // WSL의 mycar/train.py를 실행해 모델(.h5)을 생성/등록/삭제/이름변경합니다.
     public partial class frmNewtrainer : Form
     {
         // =====================================================
@@ -46,11 +49,13 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // 전역 변수
+        // 화면 상태와 WSL/학습 실행 상태
         // =====================================================
 
+        // 사용자가 학습 대상으로 선택한 tub 폴더의 Windows 경로입니다.
         private string selectedDataPath = "";
 
+        // 선택한 tub의 catalog 내용을 UI 목록과 프레임 재생에 쓰기 위해 메모리에 보관합니다.
         private List<CatalogRecord> integratedCatalogList =
             new List<CatalogRecord>();
 
@@ -63,6 +68,7 @@ namespace DonkeyDataManager
         private System.Windows.Forms.Timer browserMonitorTimer =
             new System.Windows.Forms.Timer();
 
+        // WSL 배포판, WSL 사용자, mycar 경로는 실행 환경마다 다르므로 시작 시 자동 탐색합니다.
         private string wslDistroName = "Ubuntu-22.04";
         private string wslUsername = "";
         private string wslBasePath = "";
@@ -90,6 +96,8 @@ namespace DonkeyDataManager
 
         public class CatalogRecord
         {
+            // catalog 원본 한 줄과 화면 표시용으로 파싱한 주요 값입니다.
+            // IsDeleted는 UI에서 프레임 제외/복원 기능을 구현할 때 사용합니다.
             public string OriginalLine { get; set; }
 
             public string SourceFilePath { get; set; }
@@ -110,6 +118,8 @@ namespace DonkeyDataManager
 
         public class ModelRegistryEntry
         {
+            // 학습된 모델 파일과 그 모델이 어떤 tub에서 만들어졌는지 기록하는 항목입니다.
+            // frmNewtrainer와 Pliot 화면이 같은 registry를 통해 모델 목록을 공유합니다.
             public string Name { get; set; } = "";
 
             public string WindowsPath { get; set; } = "";
@@ -370,6 +380,8 @@ namespace DonkeyDataManager
 
         private void InitializeWSLPaths()
         {
+            // 사용 가능한 Ubuntu 배포판을 찾고, 그 안의 mycar 프로젝트 위치를 기준 경로로 잡습니다.
+            // 실패 시 기본 Ubuntu-22.04와 /home/<user>/mycar 후보를 사용합니다.
             try
             {
                 var distros = GetWSLDistros();
@@ -1039,6 +1051,8 @@ namespace DonkeyDataManager
             string tubWindowsPath,
             string mycarWslPath)
         {
+            // train.py는 WSL 내부에서 실행되므로 Windows 폴더 경로를 WSL 경로로 변환합니다.
+            // tub가 WSL 공유 경로(mycar) 아래에 있으면 mycar 기준 상대 경로를 보존합니다.
             string fullTubPath =
                 Path.GetFullPath(tubWindowsPath);
 
@@ -1628,6 +1642,11 @@ namespace DonkeyDataManager
             object sender,
             EventArgs e)
         {
+            // 학습 버튼의 전체 흐름:
+            // 1. 선택된 tub와 catalog가 있는지 확인
+            // 2. WSL/mycar/train.py 실행 가능 여부 확인
+            // 3. train.py --tubs <선택 tub> --model <models/파일명> 실행
+            // 4. 로그를 파일과 상태창에 동시에 남기고, 성공 시 모델 registry에 등록
             TrainerStatus statusForm = null;
             bool trainingCancelled = false;
             string modelName = "";
@@ -1886,6 +1905,8 @@ namespace DonkeyDataManager
             string selectedTubWslPath,
             string modelRelativePath)
         {
+            // WSL bash에서 실행할 실제 학습 명령 문자열을 만듭니다.
+            // 여기서 manifest.json 존재를 검사하므로, tub 파일명이 바뀌면 학습이 시작되기 전에 실패합니다.
             return
                 "set -e; " +
                 "export PYTHONUNBUFFERED=1; " +
@@ -2459,6 +2480,8 @@ namespace DonkeyDataManager
 
         private string BuildPythonResolverCommand()
         {
+            // conda가 설치된 위치가 사용자 환경마다 다르기 때문에 여러 후보를 순서대로 검사합니다.
+            // e2e_env를 활성화한 뒤 python 명령이 학습 환경의 Python을 가리키게 만듭니다.
             string configuredUserHome =
                 string.IsNullOrWhiteSpace(wslUsername)
                     ? ""

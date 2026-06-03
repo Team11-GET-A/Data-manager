@@ -9,12 +9,17 @@ using System.Windows.Forms;
 
 namespace Data_Manager
 {
+    // Pilot 화면입니다.
+    // 학습된 모델을 선택하고 tub 데이터를 연결한 뒤,
+    // 실제 주행값과 AI 추론값(angle/throttle)을 프레임 단위로 비교합니다.
     public partial class Pliot : Form
     {
         private const int OverlayAlpha = 120;
         private static readonly Color OverlayBackColor = Color.FromArgb(OverlayAlpha, 22, 26, 32);
 
         private readonly List<ModelListItem> _models = new List<ModelListItem>();
+
+        // 현재 선택 모델에 연결된 tub/AI 추론 결과를 프레임 단위로 합친 목록입니다.
         private readonly List<DonkeyAsyncWorker.PilotFrameData> _frameList =
             new List<DonkeyAsyncWorker.PilotFrameData>();
 
@@ -39,6 +44,7 @@ namespace Data_Manager
 
         private void InitializePilotUi()
         {
+            // Designer 파일은 배치만 담당하고, 이벤트 연결과 초기 화면 상태는 여기서 모읍니다.
             cmbSpeed.SelectedIndex = 1;
             ApplyOverlayStyles();
             ConfigurePlaybackTimer();
@@ -537,6 +543,8 @@ namespace Data_Manager
 
         private async Task LoadSelectedModelAsync(ModelListItem model)
         {
+            // 모델 registry/database에서 모델 정보와 이전에 연결했던 tub 상태를 읽어 화면에 복원합니다.
+            // tub가 이미 연결돼 있으면 프레임도 즉시 다시 로드합니다.
             // Each model owns its cached card/frame state; switching models should not reparse loaded tubs.
             _loadCts?.Cancel();
             _loadCts = new CancellationTokenSource();
@@ -628,6 +636,8 @@ namespace Data_Manager
 
         private async void BtnTubInput_Click(object? sender, EventArgs e)
         {
+            // 사용자가 선택한 tub 폴더를 WSL 경로로 저장하고,
+            // catalog/record/image 정보를 파싱해 프레임 리스트에 올립니다.
             if (_cardState == null)
             {
                 if (_selectedModel == null)
@@ -699,6 +709,8 @@ namespace Data_Manager
 
         private async void BtnGenerateJudement_Click(object? sender, EventArgs e)
         {
+            // 선택 모델과 tub를 Python 추론 스크립트에 넘겨 judement 결과 JSON을 생성하거나 로드합니다.
+            // 이후 사용자 주행값과 AI 예측값을 같은 프레임 인덱스로 병합합니다.
             if (_cardState == null || _selectedModel == null)
             {
                 MessageBox.Show("먼저 모델을 선택해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1049,6 +1061,7 @@ namespace Data_Manager
 
         private void ShowCurrentFrame()
         {
+            // 현재 프레임의 이미지, 사용자 조향/스로틀, AI 조향/스로틀을 한 화면에 반영합니다.
             if (_frameList.Count == 0)
             {
                 lblImageIndexOverlay.Text = "0 / 0";
