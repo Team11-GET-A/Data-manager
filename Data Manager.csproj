@@ -7,14 +7,17 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**;Diagnostics\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="MaterialSkin.2" Version="2.3.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Remove="External\MaterialSkin-master\MaterialSkin\**\*.cs" />
+    <Compile Remove="Diagnostics\**\*.cs" />
     <EmbeddedResource Remove="External\MaterialSkin-master\MaterialSkin\**\*.resx" />
     <None Remove="External\MaterialSkin-master\MaterialSkin\**\*" />
   </ItemGroup>

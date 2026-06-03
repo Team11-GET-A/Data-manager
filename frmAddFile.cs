@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -62,26 +62,52 @@ namespace Data_Manager
 
 
             InitListViewStyles();
+
             RegisterEvents();
         }
 
-        public frmAddFile(frmMain mainForm) : this()
+        public frmAddFile(frmMain mainForm)
+            : this()
         {
             _mainForm = mainForm;
         }
 
+        // =====================================================
+        // ListView 스타일
+        // =====================================================
+
         private void InitListViewStyles()
         {
-            lstviewCopyFile.View = View.Details;
-            lstviewCopyFile.FullRowSelect = true;
-            lstviewCopyFile.HeaderStyle = ColumnHeaderStyle.None;
-            lstviewCopyFile.Columns.Add("File Path", lstviewCopyFile.Width - 25);
+            lstviewCopyFile.View =
+                View.Details;
 
-            lstviewAddFile.View = View.Details;
-            lstviewAddFile.FullRowSelect = true;
-            lstviewAddFile.HeaderStyle = ColumnHeaderStyle.None;
-            lstviewAddFile.Columns.Add("Copy Name", lstviewAddFile.Width - 25);
+            lstviewCopyFile.FullRowSelect =
+                true;
+
+            lstviewCopyFile.HeaderStyle =
+                ColumnHeaderStyle.None;
+
+            lstviewCopyFile.Columns.Add(
+                "Frame Data",
+                lstviewCopyFile.Width - 25);
+
+            lstviewAddFile.View =
+                View.Details;
+
+            lstviewAddFile.FullRowSelect =
+                true;
+
+            lstviewAddFile.HeaderStyle =
+                ColumnHeaderStyle.None;
+
+            lstviewAddFile.Columns.Add(
+                "Copy Data",
+                lstviewAddFile.Width - 25);
         }
+
+        // =====================================================
+        // 이벤트 등록
+        // =====================================================
 
         private void RegisterEvents()
         {
@@ -292,6 +318,53 @@ namespace Data_Manager
 
         private void btnSelctFile_Click(object sender, EventArgs e)
         {
+            string[] wslRoots =
+            {
+                @"\\wsl.localhost\Ubuntu\home",
+                @"\\wsl.localhost\Ubuntu-22.04\home",
+                @"\\wsl.localhost\Ubuntu22.04\home"
+            };
+
+            foreach (string root in wslRoots)
+            {
+                try
+                {
+                    if (!Directory.Exists(root))
+                    {
+                        continue;
+                    }
+
+                    foreach (string userDir
+                        in Directory.GetDirectories(root))
+                    {
+                        string candidate =
+                            Path.Combine(
+                                userDir,
+                                "mycar",
+                                "data");
+
+                        if (Directory.Exists(candidate))
+                        {
+                            return candidate;
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return null;
+        }
+
+        // =====================================================
+        // 데이터 폴더 선택
+        // =====================================================
+
+        private void btnSelctFile_Click(
+            object sender,
+            EventArgs e)
+        {
             lstviewCopyFile.Items.Clear();
             lstviewAddFile.Items.Clear();
             selectedPaths.Clear();
@@ -429,10 +502,14 @@ namespace Data_Manager
         private void PrepareCopyFileList()
         {
             lstviewAddFile.Items.Clear();
+
             copyTargetPaths.Clear();
 
-            if (selectedPaths.Count == 0)
+            if (selectedFrameLines.Count == 0)
             {
+                MessageBox.Show(
+                    "먼저 데이터를 로드하세요.");
+
                 return;
             }
 
@@ -489,7 +566,8 @@ namespace Data_Manager
 
             if (!Directory.Exists(targetFolder))
             {
-                Directory.CreateDirectory(targetFolder);
+                Directory.CreateDirectory(
+                    uploadedFolder);
             }
 
             List<string> rollbackPaths = new List<string>();
@@ -507,8 +585,6 @@ namespace Data_Manager
             popup.Show(this);
 
             this.Enabled = false;
-
-            bool isCancelled = false;
 
             await Task.Run(() =>
             {
@@ -534,54 +610,109 @@ namespace Data_Manager
 
                         string destinationPath = GetNonConflictingPath(Path.Combine(targetFolder, targetName));
 
-                        rollbackPaths.Add(destinationPath);
+                    string savePath =
+                        Path.Combine(
+                            uploadedFolder,
+                            $"frame_{i}.txt");
 
-                        File.Copy(sourcePath, destinationPath, true);
+                    File.WriteAllText(
+                        savePath,
+                        frameData);
 
                         int progress = (int)(((double)(i + 1) / copyTargetPaths.Count) * 100);
 
-                        popup.UpdateProgress(progress);
-                    }
-                }
-                catch
-                {
-                    isCancelled = true;
+                    popup.UpdateProgress(progress);
+
+                    Thread.Sleep(1);
                 }
             });
 
-            if (isCancelled)
-            {
-                foreach (string path in rollbackPaths)
-                {
-                    try
-                    {
-                        if (File.Exists(path))
-                        {
-                            File.Delete(path);
-                        }
-                    }
-                    catch
-                    {
-                    }
-                }
+            popup.ShowDone();
 
-                popup.Close();
-            }
-            else
-            {
-                popup.ShowDone();
+            this.Enabled = true;
 
-                if (_mainForm != null)
-                {
-                    _mainForm.Invoke(new Action(() =>
+            MessageBox.Show(
+                $"총 {copyTargetPaths.Count}개 프레임 저장 완료");
+
+            if (_mainForm != null)
+            {
+                _mainForm.Invoke(
+                    new Action(() =>
                     {
                         _mainForm.LoadUploadedFilesToD();
                     }));
+            }
+        }
+
+        // =====================================================
+        // JSON VALUE 추출
+        // =====================================================
+
+        private string ExtractJsonValue(
+            string json,
+            string key)
+        {
+            try
+            {
+                string searchKey =
+                    $"\"{key}\":";
+
+                int startIdx =
+                    json.IndexOf(searchKey);
+
+                if (startIdx == -1)
+                {
+                    return "";
+                }
+
+                startIdx +=
+                    searchKey.Length;
+
+                while (
+                    startIdx < json.Length
+                    &&
+                    json[startIdx] == ' ')
+                {
+                    startIdx++;
+                }
+
+                // 문자열
+                if (json[startIdx] == '"')
+                {
+                    startIdx++;
+
+                    int endIdx =
+                        json.IndexOf(
+                            '"',
+                            startIdx);
+
+                    return json.Substring(
+                        startIdx,
+                        endIdx - startIdx);
+                }
+                // 숫자
+                else
+                {
+                    int endIdx =
+                        json.IndexOfAny(
+                            new char[] { ',', '}' },
+                            startIdx);
+
+                    return json.Substring(
+                        startIdx,
+                        endIdx - startIdx)
+                        .Trim();
                 }
             }
-
-            this.Enabled = true;
+            catch
+            {
+                return "";
+            }
         }
+
+        // =====================================================
+        // 닫기
+        // =====================================================
 
         private void CenterWorkingPopupOnThisForm(Form popup)
         {
@@ -664,7 +795,13 @@ namespace Data_Manager
             this.Close();
         }
 
-        private void frmAddFile_Load(object sender, EventArgs e)
+        // =====================================================
+        // FORM LOAD
+        // =====================================================
+
+        private void frmAddFile_Load(
+            object sender,
+            EventArgs e)
         {
         }
     }
