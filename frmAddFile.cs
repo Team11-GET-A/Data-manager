@@ -20,6 +20,8 @@ namespace Data_Manager
         // copyTargetPaths는 실제 복사 버튼을 눌렀을 때 복사할 파일 경로입니다.
         private List<string> selectedPaths = new List<string>();
         private List<string> copyTargetPaths = new List<string>();
+        private List<string> selectedSourceRoots = new List<string>();
+        private List<CopyPlanItem> copyPlanItems = new List<CopyPlanItem>();
         private ToolTip AddFileToolTip;
 
         private HashSet<string> allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -38,8 +40,16 @@ namespace Data_Manager
             ".xml",
             ".yaml",
             ".yml",
-            ".catalog"
+            ".catalog",
+            ".catalog_manifest"
         };
+
+        private class CopyPlanItem
+        {
+            public string SourceRoot { get; set; } = "";
+            public string SourcePath { get; set; } = "";
+            public string RelativePath { get; set; } = "";
+        }
 
         public frmAddFile()
         {
@@ -337,6 +347,8 @@ namespace Data_Manager
             lstviewAddFile.Items.Clear();
             selectedPaths.Clear();
             copyTargetPaths.Clear();
+            selectedSourceRoots.Clear();
+            copyPlanItems.Clear();
             txtbSelctFile.Clear();
 
             string initialDirectory = GetInitialSelectFileDirectory();
@@ -363,7 +375,12 @@ namespace Data_Manager
                     return;
                 }
 
-                string[] files = GetSelectableFilesFromFolder(selectedFolder);
+                selectedSourceRoots = GetCopySourceRoots(selectedFolder);
+                string[] files = selectedSourceRoots
+                    .SelectMany(root => GetSelectableFilesFromFolder(root))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
 
                 if (files.Length == 0)
                 {
@@ -378,6 +395,55 @@ namespace Data_Manager
 
                 UpdateSelectedFileListView(selectedFolder);
             }
+        }
+
+        private List<string> GetCopySourceRoots(string selectedFolder)
+        {
+            List<string> roots = new List<string>();
+
+            if (IsTubRoot(selectedFolder))
+            {
+                roots.Add(selectedFolder);
+                return roots;
+            }
+
+            try
+            {
+                roots.AddRange(
+                    Directory.GetDirectories(selectedFolder)
+                        .Where(IsTubRoot)
+                        .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase));
+            }
+            catch
+            {
+            }
+
+            if (roots.Count == 0)
+            {
+                roots.Add(selectedFolder);
+            }
+
+            return roots
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private bool IsTubRoot(string folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+            {
+                return false;
+            }
+
+            bool hasManifest =
+                File.Exists(Path.Combine(folder, "manifest.json")) ||
+                File.Exists(Path.Combine(folder, "catalog_manifest.json"));
+            bool hasCatalog =
+                Directory.GetFiles(folder, "catalog_*.catalog", SearchOption.TopDirectoryOnly).Length > 0;
+            bool hasRecords =
+                Directory.GetFiles(folder, "record_*.json", SearchOption.TopDirectoryOnly).Length > 0;
+
+            return hasManifest || hasCatalog || hasRecords;
         }
 
         private string[] GetSelectableFilesFromFolder(string selectedFolder)
@@ -458,7 +524,7 @@ namespace Data_Manager
 
             foreach (string path in selectedPaths)
             {
-                lstviewCopyFile.Items.Add(new ListViewItem(Path.GetFileName(path)));
+                lstviewCopyFile.Items.Add(new ListViewItem(GetDisplayPathForSelectedFile(path)));
             }
 
             if (selectedPaths.Count > 0)
@@ -467,13 +533,39 @@ namespace Data_Manager
             }
         }
 
+        private string GetDisplayPathForSelectedFile(string path)
+        {
+            string root = FindSelectedRootForPath(path);
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                return Path.GetFileName(path);
+            }
+
+            string rootName = Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            string relativePath = Path.GetRelativePath(root, path);
+            return Path.Combine(rootName, relativePath);
+        }
+
+        private string FindSelectedRootForPath(string path)
+        {
+            string fullPath = Path.GetFullPath(path);
+
+            return selectedSourceRoots
+                .OrderByDescending(root => root.Length)
+                .FirstOrDefault(root =>
+                    fullPath.StartsWith(
+                        Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                        StringComparison.OrdinalIgnoreCase));
+        }
+
         private void PrepareCopyFileList()
         {
             // 왼쪽 목록(selectedPaths)을 오른쪽 복사 예정 목록(copyTargetPaths)으로 옮깁니다.
-            // 현재 구현은 중복 방지를 위해 복사 파일명에 -Copy를 붙입니다.
+            // tub 내부 파일명은 manifest/catalog가 참조하므로 변경하지 않고 상대 경로 그대로 복사합니다.
             lstviewAddFile.Items.Clear();
 
             copyTargetPaths.Clear();
+            copyPlanItems.Clear();
 
             if (selectedPaths.Count == 0)
             {
@@ -483,42 +575,26 @@ namespace Data_Manager
                 return;
             }
 
-            HashSet<string> usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
             foreach (string path in selectedPaths)
             {
-                string copyName = CreateCopyFileName(path, usedNames);
+                string root = FindSelectedRootForPath(path);
+                if (string.IsNullOrWhiteSpace(root))
+                {
+                    root = Path.GetDirectoryName(path);
+                }
+
+                string relativePath = Path.GetRelativePath(root, path);
+                string rootName = Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                string copyName = Path.Combine(rootName, relativePath);
 
                 lstviewAddFile.Items.Add(new ListViewItem(copyName));
                 copyTargetPaths.Add(path);
-            }
-        }
-
-        private string CreateCopyFileName(string sourcePath, HashSet<string> usedNames)
-        {
-            string nameWithoutExt = Path.GetFileNameWithoutExtension(sourcePath);
-            string ext = Path.GetExtension(sourcePath);
-            string copyName = $"{nameWithoutExt}-Copy{ext}";
-
-            if (!usedNames.Contains(copyName))
-            {
-                usedNames.Add(copyName);
-                return copyName;
-            }
-
-            int index = 1;
-
-            while (true)
-            {
-                string candidate = $"{nameWithoutExt}-Copy({index}){ext}";
-
-                if (!usedNames.Contains(candidate))
+                copyPlanItems.Add(new CopyPlanItem
                 {
-                    usedNames.Add(candidate);
-                    return candidate;
-                }
-
-                index++;
+                    SourceRoot = root,
+                    SourcePath = path,
+                    RelativePath = relativePath
+                });
             }
         }
 
@@ -542,6 +618,8 @@ namespace Data_Manager
             }
 
             List<string> rollbackPaths = new List<string>();
+            List<string> rollbackRootFolders = new List<string>();
+            List<string> copiedRootFolders = new List<string>();
             CancellationTokenSource cts = new CancellationTokenSource();
             frmWoking popup = new frmWoking();
             bool isCancelled = false;
@@ -564,8 +642,10 @@ namespace Data_Manager
                 await Task.Run(() =>
                 {
                     Task.Delay(300).Wait();
+                    Dictionary<string, string> destinationRoots =
+                        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-                    for (int i = 0; i < copyTargetPaths.Count; i++)
+                    for (int i = 0; i < copyPlanItems.Count; i++)
                     {
                         if (cts.Token.IsCancellationRequested)
                         {
@@ -573,20 +653,40 @@ namespace Data_Manager
                             break;
                         }
 
-                        string sourcePath = copyTargetPaths[i];
-                        string targetName = "";
+                        CopyPlanItem plan = copyPlanItems[i];
 
-                        this.Invoke(new Action(() =>
+                        if (!destinationRoots.TryGetValue(plan.SourceRoot, out string destinationRoot))
                         {
-                            targetName = lstviewAddFile.Items[i].Text;
-                        }));
+                            string rootName =
+                                Path.GetFileName(
+                                    plan.SourceRoot.TrimEnd(
+                                        Path.DirectorySeparatorChar,
+                                        Path.AltDirectorySeparatorChar));
 
-                        string destinationPath = GetNonConflictingPath(Path.Combine(targetFolder, targetName));
+                            destinationRoot =
+                                GetNonConflictingPath(
+                                    Path.Combine(targetFolder, rootName));
 
-                        File.Copy(sourcePath, destinationPath);
+                            destinationRoots[plan.SourceRoot] = destinationRoot;
+                            rollbackRootFolders.Add(destinationRoot);
+                            copiedRootFolders.Add(destinationRoot);
+                        }
+
+                        string destinationPath =
+                            Path.Combine(destinationRoot, plan.RelativePath);
+
+                        string destinationDirectory =
+                            Path.GetDirectoryName(destinationPath);
+
+                        if (!string.IsNullOrWhiteSpace(destinationDirectory))
+                        {
+                            Directory.CreateDirectory(destinationDirectory);
+                        }
+
+                        File.Copy(plan.SourcePath, destinationPath, overwrite: true);
                         rollbackPaths.Add(destinationPath);
 
-                        int progress = (int)(((double)(i + 1) / copyTargetPaths.Count) * 100);
+                        int progress = (int)(((double)(i + 1) / copyPlanItems.Count) * 100);
 
                         popup.UpdateProgress(progress);
 
@@ -619,6 +719,20 @@ namespace Data_Manager
                     }
                 }
 
+                foreach (string folder in rollbackRootFolders.OrderByDescending(path => path.Length))
+                {
+                    try
+                    {
+                        if (Directory.Exists(folder))
+                        {
+                            Directory.Delete(folder, recursive: true);
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
                 if (!popup.IsDisposed)
                 {
                     popup.Close();
@@ -639,7 +753,7 @@ namespace Data_Manager
             popup.ShowDone();
 
             MessageBox.Show(
-                $"총 {copyTargetPaths.Count}개 파일 복사 완료");
+                $"총 {copyPlanItems.Count}개 파일 복사 완료");
 
             if (_mainForm != null)
             {
@@ -647,6 +761,10 @@ namespace Data_Manager
                     new Action(() =>
                     {
                         _mainForm.LoadUploadedFilesToD();
+                        if (copiedRootFolders.Count > 0)
+                        {
+                            _mainForm.LoadTrainerDataFolder(copiedRootFolders[0]);
+                        }
                     }));
             }
         }

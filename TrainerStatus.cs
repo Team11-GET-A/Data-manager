@@ -64,7 +64,7 @@ namespace DonkeyDataManager
 
             btnCancel.Enabled = false;
             btnCancel.Text = "취소 중...";
-            lblStatus.Text = "학습 취소 중";
+            lblStatus.Text = "학습 취소 중...";
 
             CancelRequested?.Invoke(this, EventArgs.Empty);
         }
@@ -87,7 +87,6 @@ namespace DonkeyDataManager
 
         private void RunOnUiThread(Action action)
         {
-            // WSL 프로세스 출력은 백그라운드 스레드에서 들어오므로 UI 변경은 항상 UI 스레드로 보냅니다.
             try
             {
                 if (IsDisposed)
@@ -105,11 +104,9 @@ namespace DonkeyDataManager
             }
             catch (ObjectDisposedException)
             {
-
             }
             catch (InvalidOperationException)
             {
-
             }
         }
     }

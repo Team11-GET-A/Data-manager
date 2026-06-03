@@ -1386,80 +1386,91 @@ namespace DonkeyDataManager
                     selectedDataPath =
                         fbd.SelectedPath;
 
-                    integratedCatalogList.Clear();
+                    LoadDataFolder(selectedDataPath, showMessage: true);
+                }
+            }
+        }
 
-                    lstCatalogRows.Items.Clear();
+        public void LoadDataFolder(string folderPath)
+        {
+            LoadDataFolder(folderPath, showMessage: false);
+        }
 
-                    string[] catalogFiles =
-                        Directory.GetFiles(
-                            selectedDataPath,
-                            "catalog_*.catalog");
+        private void LoadDataFolder(string folderPath, bool showMessage)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                if (showMessage)
+                {
+                    MessageBox.Show("데이터 폴더를 찾을 수 없습니다.");
+                }
 
-                    Array.Sort(catalogFiles);
+                return;
+            }
 
-                    foreach (
-                        string catalogPath
-                        in catalogFiles)
+            selectedDataPath = folderPath;
+            integratedCatalogList.Clear();
+            lstCatalogRows.Items.Clear();
+
+            string[] catalogFiles =
+                Directory.GetFiles(
+                    selectedDataPath,
+                    "catalog_*.catalog",
+                    SearchOption.TopDirectoryOnly);
+
+            Array.Sort(catalogFiles, StringComparer.OrdinalIgnoreCase);
+
+            foreach (string catalogPath in catalogFiles)
+            {
+                string[] lines = File.ReadAllLines(catalogPath);
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string line = lines[i];
+
+                    if (string.IsNullOrWhiteSpace(line))
                     {
-                        string[] lines =
-                            File.ReadAllLines(
-                                catalogPath);
-
-                        for (
-                            int i = 0;
-                            i < lines.Length;
-                            i++)
-                        {
-                            string line = lines[i];
-
-                            if (
-                                string.IsNullOrWhiteSpace(
-                                    line))
-                            {
-                                continue;
-                            }
-
-                            CatalogRecord record =
-                                new CatalogRecord()
-                                {
-                                    OriginalLine = line,
-
-                                    SourceFilePath =
-                                        catalogPath,
-
-                                    LineIndex = i,
-
-                                    ImageFileName =
-                                        ExtractJsonValue(
-                                            line,
-                                            "cam/image_array"),
-
-                                    Angle =
-                                        ExtractJsonValue(
-                                            line,
-                                            "user/angle"),
-
-                                    Throttle =
-                                        ExtractJsonValue(
-                                            line,
-                                            "user/throttle"),
-
-                                    Index =
-                                        ExtractJsonValue(
-                                            line,
-                                            "_index")
-                                };
-
-                            integratedCatalogList
-                                .Add(record);
-
-                            UpdateListBoxItem(record);
-                        }
+                        continue;
                     }
 
-                    MessageBox.Show(
-                        $"총 {integratedCatalogList.Count}개 프레임 로드 완료");
+                    CatalogRecord record =
+                        new CatalogRecord()
+                        {
+                            OriginalLine = line,
+                            SourceFilePath = catalogPath,
+                            LineIndex = i,
+                            ImageFileName =
+                                ExtractJsonValue(
+                                    line,
+                                    "cam/image_array"),
+                            Angle =
+                                ExtractJsonValue(
+                                    line,
+                                    "user/angle"),
+                            Throttle =
+                                ExtractJsonValue(
+                                    line,
+                                    "user/throttle"),
+                            Index =
+                                ExtractJsonValue(
+                                    line,
+                                    "_index")
+                        };
+
+                    integratedCatalogList.Add(record);
+                    UpdateListBoxItem(record);
                 }
+            }
+
+            if (integratedCatalogList.Count > 0)
+            {
+                lstCatalogRows.SelectedIndex = 0;
+            }
+
+            if (showMessage)
+            {
+                MessageBox.Show(
+                    $"총 {integratedCatalogList.Count}개 프레임 로드 완료");
             }
         }
 
@@ -1565,10 +1576,7 @@ namespace DonkeyDataManager
                 integratedCatalogList[idx];
 
             string imgPath =
-                Path.Combine(
-                    selectedDataPath,
-                    "images",
-                    record.ImageFileName);
+                ResolveCatalogImagePath(record);
 
             if (!File.Exists(imgPath))
             {
@@ -1608,6 +1616,46 @@ namespace DonkeyDataManager
             {
                 picDriveImage.Image = null;
             }
+        }
+
+        private string ResolveCatalogImagePath(CatalogRecord record)
+        {
+            if (record == null || string.IsNullOrWhiteSpace(record.ImageFileName))
+            {
+                return "";
+            }
+
+            string imageName =
+                record.ImageFileName
+                    .Replace('\\', Path.DirectorySeparatorChar)
+                    .Replace('/', Path.DirectorySeparatorChar);
+
+            if (Path.IsPathRooted(imageName))
+            {
+                return imageName;
+            }
+
+            string catalogFolder =
+                Path.GetDirectoryName(record.SourceFilePath) ??
+                selectedDataPath;
+
+            string directPath =
+                Path.Combine(catalogFolder, imageName);
+
+            if (File.Exists(directPath))
+            {
+                return directPath;
+            }
+
+            string imagesFolderPath =
+                Path.Combine(catalogFolder, "images", Path.GetFileName(imageName));
+
+            if (File.Exists(imagesFolderPath))
+            {
+                return imagesFolderPath;
+            }
+
+            return directPath;
         }
 
         // =====================================================
@@ -1800,12 +1848,12 @@ namespace DonkeyDataManager
 
                 if (wslProcess.ExitCode != 0)
                 {
+                    CleanupGeneratedModel(
+                        modelName,
+                        modelWindowsPath);
+
                     if (trainingCancelled)
                     {
-                        CleanupGeneratedModel(
-                            modelName,
-                            modelWindowsPath);
-
                         statusForm.AppendLog(
                             "학습이 취소되어 생성 중이던 모델 데이터를 정리했습니다.");
 
@@ -1821,6 +1869,9 @@ namespace DonkeyDataManager
                         selectedDataPath,
                         modelWindowsPath,
                         trainingLogPath);
+
+                    statusForm.MarkFinished(
+                        "학습 실패");
 
                     throw new InvalidOperationException(
                         "train.py 실행이 실패했습니다.\n\n" +
@@ -1885,6 +1936,9 @@ namespace DonkeyDataManager
 
                     statusForm.AppendLog(
                         "ERROR: " + ex.Message);
+
+                    statusForm.MarkFinished(
+                        "학습 실패");
                 }
 
                 MessageBox.Show(

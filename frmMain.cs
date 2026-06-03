@@ -61,6 +61,7 @@ namespace AD_AI_LearningData_Editor
         private Dictionary<Control, Rectangle> originalControlBounds = new Dictionary<Control, Rectangle>();
         private Dictionary<Control, float> originalControlFontSizes = new Dictionary<Control, float>();
         private bool isApplyingResponsiveLayout;
+        private DonkeyDataManager.frmNewtrainer trainerForm;
 
         // 큰 이미지가 많은 화면에서 리사이즈/전환 시 깜빡임을 줄이기 위한 Win32 스타일입니다.
         protected override CreateParams CreateParams
@@ -1378,14 +1379,7 @@ namespace AD_AI_LearningData_Editor
                 .OrderBy(d => d.Name, new NaturalFileNameComparer())
                 .ToList();
 
-            foreach (var folder in folders)
-            {
-                ListViewItem item = new ListViewItem("[폴더] " + folder.Name);
-                item.Tag = "추가된파일";
-                lstviewFileListD.Items.Add(item);
-            }
-
-            var files = di.GetFiles()
+            var files = di.GetFiles("*.*", SearchOption.AllDirectories)
                 .Where(f => !f.Name.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !f.Name.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !f.Name.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase))
@@ -1393,12 +1387,21 @@ namespace AD_AI_LearningData_Editor
                 .ToList();
 
             var filesForListView = files
-                .OrderBy(f => f.Name, new NaturalFileNameComparer())
+                .OrderBy(f => IsImageFile(f.FullName) ? 0 : 1)
+                .ThenBy(f => GetSlideImageSortNumber(f.Name))
+                .ThenBy(f => GetUploadedRelativePath(f.FullName), new NaturalFileNameComparer())
                 .ToList();
 
             foreach (var file in filesForListView)
             {
-                ListViewItem item = new ListViewItem(file.Name);
+                ListViewItem item = new ListViewItem(GetUploadedRelativePath(file.FullName));
+                item.Tag = file.FullName;
+                lstviewFileListD.Items.Add(item);
+            }
+
+            foreach (var folder in folders)
+            {
+                ListViewItem item = new ListViewItem("[폴더] " + folder.Name);
                 item.Tag = "추가된파일";
                 lstviewFileListD.Items.Add(item);
             }
@@ -1406,8 +1409,7 @@ namespace AD_AI_LearningData_Editor
             slideImages = files
                 .Where(f => IsImageFile(f.FullName))
                 .OrderBy(f => GetSlideImageSortNumber(f.Name))
-                .ThenBy(f => NormalizeDrivingImageName(f.Name), new NaturalFileNameComparer())
-                .ThenBy(f => f.Name, new NaturalFileNameComparer())
+                .ThenBy(f => GetUploadedRelativePath(f.FullName), new NaturalFileNameComparer())
                 .Select(f => f.FullName)
                 .ToList();
 
@@ -1443,6 +1445,20 @@ namespace AD_AI_LearningData_Editor
             }
 
             return int.MaxValue;
+        }
+
+        private string GetUploadedRelativePath(string path)
+        {
+            try
+            {
+                string uploadFolder = GetUploadedFolder();
+                string relativePath = Path.GetRelativePath(uploadFolder, path);
+                return relativePath.Replace(Path.DirectorySeparatorChar, '\\');
+            }
+            catch
+            {
+                return Path.GetFileName(path);
+            }
         }
 
         private void LoadTrashCanFiles()
@@ -1528,8 +1544,20 @@ namespace AD_AI_LearningData_Editor
             BuildDrivingInfoCacheIfNeeded();
 
             string fileName = Path.GetFileName(imagePath);
+            string relativePath = NormalizeDrivingPathKey(GetUploadedRelativePath(imagePath));
+            string fullPath = NormalizeDrivingPathKey(Path.GetFullPath(imagePath));
             string normalizedName = NormalizeDrivingImageName(fileName);
             string normalizedNameWithoutExtension = Path.GetFileNameWithoutExtension(normalizedName);
+
+            if (drivingInfoCache.TryGetValue(fullPath, out DrivingInfo fullPathInfo))
+            {
+                return fullPathInfo;
+            }
+
+            if (drivingInfoCache.TryGetValue(relativePath, out DrivingInfo relativePathInfo))
+            {
+                return relativePathInfo;
+            }
 
             if (drivingInfoCache.TryGetValue(fileName, out DrivingInfo directInfo))
             {
@@ -1835,14 +1863,14 @@ namespace AD_AI_LearningData_Editor
                 {
                     JsonElement root = doc.RootElement;
 
-                    if (root.ValueKind == JsonValueKind.Object && TryAddDrivingInfoFromDonkeyCatalogObject(root))
+                    if (root.ValueKind == JsonValueKind.Object && TryAddDrivingInfoFromDonkeyCatalogObject(root, catalogFile))
                     {
                         return;
                     }
 
                     if (root.ValueKind == JsonValueKind.Array)
                     {
-                        TryAddDrivingInfoFromCatalogArray(root, format);
+                        TryAddDrivingInfoFromCatalogArray(root, format, catalogFile);
                     }
                     else if (root.ValueKind == JsonValueKind.Object)
                     {
@@ -1855,7 +1883,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        private bool TryAddDrivingInfoFromDonkeyCatalogObject(JsonElement root)
+        private bool TryAddDrivingInfoFromDonkeyCatalogObject(JsonElement root, string catalogFile)
         {
             if (root.ValueKind != JsonValueKind.Object)
             {
@@ -1893,7 +1921,7 @@ namespace AD_AI_LearningData_Editor
                 Throttle = throttle
             };
 
-            AddDrivingInfoForImageName(imageName, info);
+            AddDrivingInfoForImageName(imageName, info, catalogFile);
 
             if (root.TryGetProperty("_index", out JsonElement indexElement))
             {
@@ -1908,7 +1936,7 @@ namespace AD_AI_LearningData_Editor
             return true;
         }
 
-        private void TryAddDrivingInfoFromCatalogArray(JsonElement array, CatalogFormatInfo format)
+        private void TryAddDrivingInfoFromCatalogArray(JsonElement array, CatalogFormatInfo format, string catalogFile)
         {
             int count = array.GetArrayLength();
 
@@ -1917,7 +1945,7 @@ namespace AD_AI_LearningData_Editor
                 return;
             }
 
-            string imageName = Path.GetFileName(array[format.ImageIndex].ToString());
+            string imageName = array[format.ImageIndex].ToString();
 
             if (string.IsNullOrWhiteSpace(imageName))
             {
@@ -1941,7 +1969,7 @@ namespace AD_AI_LearningData_Editor
             {
                 Angle = angle,
                 Throttle = throttle
-            });
+            }, catalogFile);
         }
 
         private void TryReadJsonRecordFile(string jsonFile)
@@ -1959,7 +1987,7 @@ namespace AD_AI_LearningData_Editor
                     else if (doc.RootElement.ValueKind == JsonValueKind.Array)
                     {
                         CatalogFormatInfo format = CreateDefaultCatalogFormat();
-                        TryAddDrivingInfoFromCatalogArray(doc.RootElement, format);
+                        TryAddDrivingInfoFromCatalogArray(doc.RootElement, format, jsonFile);
                     }
                 }
             }
@@ -1997,7 +2025,7 @@ namespace AD_AI_LearningData_Editor
 
             if (!string.IsNullOrWhiteSpace(imageName))
             {
-                AddDrivingInfoForImageName(imageName, info);
+                AddDrivingInfoForImageName(imageName, info, filePath);
             }
 
             string extension = Path.GetExtension(filePath);
@@ -2135,6 +2163,50 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        private void AddDrivingInfoForImageName(string imageName, DrivingInfo info, string sourceDataFile)
+        {
+            AddDrivingInfoForImageName(imageName, info);
+
+            if (string.IsNullOrWhiteSpace(imageName) ||
+                string.IsNullOrWhiteSpace(sourceDataFile) ||
+                info == null)
+            {
+                return;
+            }
+
+            string dataFolder = Path.GetDirectoryName(sourceDataFile);
+            if (string.IsNullOrWhiteSpace(dataFolder))
+            {
+                return;
+            }
+
+            string normalizedImageName = imageName.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+            List<string> candidatePaths = new List<string>();
+
+            if (Path.IsPathRooted(normalizedImageName))
+            {
+                candidatePaths.Add(normalizedImageName);
+            }
+            else
+            {
+                candidatePaths.Add(Path.Combine(dataFolder, normalizedImageName));
+                candidatePaths.Add(Path.Combine(dataFolder, "images", Path.GetFileName(normalizedImageName)));
+            }
+
+            foreach (string candidate in candidatePaths)
+            {
+                try
+                {
+                    string fullPath = Path.GetFullPath(candidate);
+                    AddDrivingInfoCacheItem(NormalizeDrivingPathKey(fullPath), info);
+                    AddDrivingInfoCacheItem(NormalizeDrivingPathKey(GetUploadedRelativePath(fullPath)), info);
+                }
+                catch
+                {
+                }
+            }
+        }
+
         private void AddDrivingInfoCacheItem(string key, DrivingInfo info)
         {
             if (string.IsNullOrWhiteSpace(key) || info == null)
@@ -2142,7 +2214,17 @@ namespace AD_AI_LearningData_Editor
                 return;
             }
 
-            drivingInfoCache[key] = info;
+            drivingInfoCache[NormalizeDrivingPathKey(key)] = info;
+        }
+
+        private string NormalizeDrivingPathKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return "";
+            }
+
+            return key.Replace('\\', '/').Trim();
         }
 
         private string NormalizeDrivingImageName(string fileName)
@@ -2759,8 +2841,17 @@ namespace AD_AI_LearningData_Editor
             {
                 foreach (ListViewItem item in lstviewFileListD.SelectedItems)
                 {
-                    string name = item.Text.Replace("[폴더] ", "");
-                    targets.Add(Path.Combine(uploadFolder, name));
+                    if (item.Tag is string fullPath &&
+                        !string.Equals(fullPath, "추가된파일", StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(fullPath, "휴지통파일", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targets.Add(fullPath);
+                    }
+                    else
+                    {
+                        string name = item.Text.Replace("[폴더] ", "");
+                        targets.Add(Path.Combine(uploadFolder, name));
+                    }
                 }
             }
             else
@@ -2976,12 +3067,12 @@ namespace AD_AI_LearningData_Editor
 
             this.Controls.Add(tabControl);
 
-            DonkeyDataManager.frmNewtrainer form3 = new DonkeyDataManager.frmNewtrainer();
-            form3.TopLevel = false;
-            form3.FormBorderStyle = FormBorderStyle.None;
-            form3.Dock = DockStyle.Fill;
-            tabTrainer.Controls.Add(form3);
-            form3.Show();
+            trainerForm = new DonkeyDataManager.frmNewtrainer();
+            trainerForm.TopLevel = false;
+            trainerForm.FormBorderStyle = FormBorderStyle.None;
+            trainerForm.Dock = DockStyle.Fill;
+            tabTrainer.Controls.Add(trainerForm);
+            trainerForm.Show();
 
             Data_Manager.Pliot form2 = new Data_Manager.Pliot();
             form2.TopLevel = false;
@@ -2991,6 +3082,16 @@ namespace AD_AI_LearningData_Editor
             form2.Show();
 
             this.DrawerTabControl = tabControl;
+        }
+
+        public void LoadTrainerDataFolder(string folderPath)
+        {
+            if (trainerForm == null || trainerForm.IsDisposed)
+            {
+                return;
+            }
+
+            trainerForm.LoadDataFolder(folderPath);
         }
 
         private void materialSlider1_Click(object sender, EventArgs e) { }
