@@ -316,47 +316,6 @@ namespace Data_Manager
             return skipNames.Any(name => string.Equals(name, directoryName, StringComparison.OrdinalIgnoreCase));
         }
 
-        private void btnSelctFile_Click(object sender, EventArgs e)
-        {
-            string[] wslRoots =
-            {
-                @"\\wsl.localhost\Ubuntu\home",
-                @"\\wsl.localhost\Ubuntu-22.04\home",
-                @"\\wsl.localhost\Ubuntu22.04\home"
-            };
-
-            foreach (string root in wslRoots)
-            {
-                try
-                {
-                    if (!Directory.Exists(root))
-                    {
-                        continue;
-                    }
-
-                    foreach (string userDir
-                        in Directory.GetDirectories(root))
-                    {
-                        string candidate =
-                            Path.Combine(
-                                userDir,
-                                "mycar",
-                                "data");
-
-                        if (Directory.Exists(candidate))
-                        {
-                            return candidate;
-                        }
-                    }
-                }
-                catch
-                {
-                }
-            }
-
-            return null;
-        }
-
         // =====================================================
         // 데이터 폴더 선택
         // =====================================================
@@ -505,10 +464,10 @@ namespace Data_Manager
 
             copyTargetPaths.Clear();
 
-            if (selectedFrameLines.Count == 0)
+            if (selectedPaths.Count == 0)
             {
                 MessageBox.Show(
-                    "먼저 데이터를 로드하세요.");
+                    "먼저 폴더를 선택하세요.");
 
                 return;
             }
@@ -566,13 +525,14 @@ namespace Data_Manager
 
             if (!Directory.Exists(targetFolder))
             {
-                Directory.CreateDirectory(
-                    uploadedFolder);
+                Directory.CreateDirectory(targetFolder);
             }
 
             List<string> rollbackPaths = new List<string>();
             CancellationTokenSource cts = new CancellationTokenSource();
             frmWoking popup = new frmWoking();
+            bool isCancelled = false;
+            Exception copyException = null;
 
             popup.Cts = cts;
 
@@ -586,9 +546,9 @@ namespace Data_Manager
 
             this.Enabled = false;
 
-            await Task.Run(() =>
+            try
             {
-                try
+                await Task.Run(() =>
                 {
                     Task.Delay(300).Wait();
 
@@ -610,29 +570,63 @@ namespace Data_Manager
 
                         string destinationPath = GetNonConflictingPath(Path.Combine(targetFolder, targetName));
 
-                    string savePath =
-                        Path.Combine(
-                            uploadedFolder,
-                            $"frame_{i}.txt");
-
-                    File.WriteAllText(
-                        savePath,
-                        frameData);
+                        File.Copy(sourcePath, destinationPath);
+                        rollbackPaths.Add(destinationPath);
 
                         int progress = (int)(((double)(i + 1) / copyTargetPaths.Count) * 100);
 
-                    popup.UpdateProgress(progress);
+                        popup.UpdateProgress(progress);
 
-                    Thread.Sleep(1);
+                        Thread.Sleep(1);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                copyException = ex;
+            }
+            finally
+            {
+                this.Enabled = true;
+            }
+
+            if (isCancelled || copyException != null)
+            {
+                foreach (string path in rollbackPaths)
+                {
+                    try
+                    {
+                        if (File.Exists(path))
+                        {
+                            File.Delete(path);
+                        }
+                    }
+                    catch
+                    {
+                    }
                 }
-            });
+
+                if (!popup.IsDisposed)
+                {
+                    popup.Close();
+                }
+
+                if (copyException != null)
+                {
+                    MessageBox.Show($"파일 복사 중 오류가 발생했습니다.\r\n{copyException.Message}");
+                }
+                else
+                {
+                    MessageBox.Show("파일 복사가 취소되었습니다.");
+                }
+
+                return;
+            }
 
             popup.ShowDone();
 
-            this.Enabled = true;
-
             MessageBox.Show(
-                $"총 {copyTargetPaths.Count}개 프레임 저장 완료");
+                $"총 {copyTargetPaths.Count}개 파일 복사 완료");
 
             if (_mainForm != null)
             {
