@@ -1,3 +1,4 @@
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -45,7 +46,7 @@ namespace Data_Manager
             IconProperty.SetAutoImageByMargins(
                 btnSelctFile,
                 Data_Manager.Properties.Resources.AddFolder14970929,
-                leftMargin:22,
+                leftMargin: 22,
                 topMargin: 7,
                 rightMargin: 22,
                 bottomMargin: 19
@@ -109,6 +110,18 @@ namespace Data_Manager
         private string GetUploadedFolder()
         {
             string folder = Path.Combine(GetBinFolder(), "UploadedFile");
+
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            return folder;
+        }
+
+        private string GetUploadedDataFolder()
+        {
+            string folder = Path.Combine(GetUploadedFolder(), "data");
 
             if (!Directory.Exists(folder))
             {
@@ -302,7 +315,7 @@ namespace Data_Manager
 
             using (FolderBrowserDialog fbd = new FolderBrowserDialog())
             {
-                fbd.Description = "UploadedFile에 복사할 파일들이 들어있는 폴더를 선택하세요.";
+                fbd.Description = "UploadedFile\\data에 복사할 파일들이 들어있는 폴더를 선택하세요.";
                 fbd.ShowNewFolderButton = false;
 
                 if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
@@ -485,7 +498,7 @@ namespace Data_Manager
                 return;
             }
 
-            string targetFolder = GetUploadedFolder();
+            string targetFolder = GetUploadedDataFolder();
 
             if (!Directory.Exists(targetFolder))
             {

@@ -1,4 +1,5 @@
-﻿using Data_Manager;
+﻿#nullable disable
+using Data_Manager;
 using MaterialSkin;
 using MaterialSkin.Controls;
 using System;
@@ -48,6 +49,10 @@ namespace AD_AI_LearningData_Editor
         private Dictionary<Control, Rectangle> originalControlBounds = new Dictionary<Control, Rectangle>();
         private Dictionary<Control, float> originalControlFontSizes = new Dictionary<Control, float>();
         private bool isApplyingResponsiveLayout;
+        private HashSet<string> preservedFileListSelection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private HashSet<string> preservedTrashSelection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private string editCancelBackupFolderName = "EditCancelBackupFile";
+        private bool isEditCancelRestoring = false;
 
         protected override CreateParams CreateParams
         {
@@ -133,6 +138,7 @@ namespace AD_AI_LearningData_Editor
             RegisterIntervalControls();
 
             btnRestoration.Visible = false;
+            btnRemove.Visible = false;
 
             ConfigureListViewNameLabel();
             ConfigureFileListDView();
@@ -149,6 +155,8 @@ namespace AD_AI_LearningData_Editor
             this.KeyPreview = true;
             InitializeSlideHoldButtons();
             InitializeResponsiveLayout();
+            InitializeListViewSelectionPersistence();
+            RegisterEditCancelButton();
         }
 
         private string GetBinFolder()
@@ -172,6 +180,46 @@ namespace AD_AI_LearningData_Editor
             return folder;
         }
 
+        private string GetUploadedDataFolder()
+        {
+            string folder = Path.Combine(GetUploadedFolder(), "data");
+
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            return folder;
+        }
+
+        private string GetEditCancelBackupFolder()
+        {
+            string folder = Path.Combine(GetBinFolder(), editCancelBackupFolderName);
+
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            return folder;
+        }
+
+        private void ClearEditCancelBackupFolder()
+        {
+            try
+            {
+                string folder = Path.Combine(GetBinFolder(), editCancelBackupFolderName);
+
+                if (Directory.Exists(folder))
+                {
+                    Directory.Delete(folder, true);
+                }
+            }
+            catch
+            {
+            }
+        }
+
         private string GetTrashFolder()
         {
             string folder = Path.Combine(GetBinFolder(), "TrashCan");
@@ -191,6 +239,321 @@ namespace AD_AI_LearningData_Editor
             string folder = Path.Combine(GetBinFolder(), mirrorYBackupFolderName);
             if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
             return folder;
+        }
+
+        private string FindManifestJsonFile()
+        {
+            string dataFolder = GetUploadedDataFolder();
+
+            if (!Directory.Exists(dataFolder))
+            {
+                return "";
+            }
+
+            string[] jsonFiles = Directory.GetFiles(dataFolder, "*.json", SearchOption.TopDirectoryOnly);
+
+            string manifestCopy = jsonFiles.FirstOrDefault(path =>
+                Path.GetFileName(path).IndexOf("manifest", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                Path.GetFileName(path).IndexOf("Copy", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (!string.IsNullOrWhiteSpace(manifestCopy))
+            {
+                return manifestCopy;
+            }
+
+            string manifest = jsonFiles.FirstOrDefault(path =>
+                Path.GetFileName(path).IndexOf("manifest", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (!string.IsNullOrWhiteSpace(manifest))
+            {
+                return manifest;
+            }
+
+            return jsonFiles.FirstOrDefault() ?? "";
+        }
+
+        private HashSet<int> ReadDeletedIndexes()
+        {
+            HashSet<int> deletedIndexes = new HashSet<int>();
+            string manifestPath = FindManifestJsonFile();
+
+            if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
+            {
+                return deletedIndexes;
+            }
+
+            try
+            {
+                foreach (string line in File.ReadLines(manifestPath))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    using (JsonDocument document = JsonDocument.Parse(line))
+                    {
+                        JsonElement root = document.RootElement;
+
+                        if (root.ValueKind != JsonValueKind.Object)
+                        {
+                            continue;
+                        }
+
+                        if (!root.TryGetProperty("deleted_indexes", out JsonElement deletedElement) ||
+                            deletedElement.ValueKind != JsonValueKind.Array)
+                        {
+                            continue;
+                        }
+
+                        foreach (JsonElement item in deletedElement.EnumerateArray())
+                        {
+                            int index;
+
+                            if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out index))
+                            {
+                                deletedIndexes.Add(index);
+                            }
+                            else if (int.TryParse(item.ToString(), out index))
+                            {
+                                deletedIndexes.Add(index);
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return deletedIndexes;
+        }
+
+        private void WriteDeletedIndexes(HashSet<int> deletedIndexes)
+        {
+            string manifestPath = FindManifestJsonFile();
+
+            if (string.IsNullOrWhiteSpace(manifestPath))
+            {
+                manifestPath = Path.Combine(GetUploadedDataFolder(), "manifest-Copy.json");
+                File.WriteAllText(manifestPath, "{\"deleted_indexes\":[]}");
+            }
+
+            try
+            {
+                string[] lines = File.Exists(manifestPath)
+                    ? File.ReadAllLines(manifestPath)
+                    : new string[0];
+
+                if (lines.Length == 0)
+                {
+                    lines = new string[] { "{}" };
+                }
+
+                int targetLineIndex = -1;
+                JsonElement targetObject = default(JsonElement);
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    try
+                    {
+                        using (JsonDocument document = JsonDocument.Parse(lines[i]))
+                        {
+                            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                                document.RootElement.TryGetProperty("deleted_indexes", out _))
+                            {
+                                targetLineIndex = i;
+                                targetObject = document.RootElement.Clone();
+                                break;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (targetLineIndex < 0)
+                {
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        try
+                        {
+                            using (JsonDocument document = JsonDocument.Parse(lines[i]))
+                            {
+                                if (document.RootElement.ValueKind == JsonValueKind.Object)
+                                {
+                                    targetLineIndex = i;
+                                    targetObject = document.RootElement.Clone();
+                                    break;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+                }
+
+                if (targetLineIndex < 0)
+                {
+                    Array.Resize(ref lines, lines.Length + 1);
+                    targetLineIndex = lines.Length - 1;
+                    lines[targetLineIndex] = "{}";
+
+                    using (JsonDocument document = JsonDocument.Parse(lines[targetLineIndex]))
+                    {
+                        targetObject = document.RootElement.Clone();
+                    }
+                }
+
+                using (MemoryStream memoryStream = new MemoryStream())
+                {
+                    using (Utf8JsonWriter writer = new Utf8JsonWriter(memoryStream, new JsonWriterOptions { Indented = false }))
+                    {
+                        writer.WriteStartObject();
+
+                        foreach (JsonProperty property in targetObject.EnumerateObject())
+                        {
+                            if (string.Equals(property.Name, "deleted_indexes", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            writer.WritePropertyName(property.Name);
+                            property.Value.WriteTo(writer);
+                        }
+
+                        writer.WritePropertyName("deleted_indexes");
+                        writer.WriteStartArray();
+
+                        foreach (int index in deletedIndexes.OrderBy(x => x))
+                        {
+                            writer.WriteNumberValue(index);
+                        }
+
+                        writer.WriteEndArray();
+                        writer.WriteEndObject();
+                    }
+
+                    lines[targetLineIndex] = System.Text.Encoding.UTF8.GetString(memoryStream.ToArray());
+                }
+
+                File.WriteAllLines(manifestPath, lines);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("deleted_indexes 저장 중 오류가 발생했습니다.\n" + ex.Message);
+            }
+        }
+
+        private int ExtractImageIndexFromFileName(string fileNameOrPath)
+        {
+            string normalizedName = NormalizeDrivingImageName(Path.GetFileName(fileNameOrPath));
+            string numberText = ExtractLeadingNumber(normalizedName);
+            int index;
+
+            if (int.TryParse(numberText, out index))
+            {
+                return index;
+            }
+
+            return -1;
+        }
+
+        private bool IsDeletedByManifest(string path, HashSet<int> deletedIndexes)
+        {
+            int index = ExtractImageIndexFromFileName(path);
+            return index >= 0 && deletedIndexes.Contains(index);
+        }
+
+        private bool IsTemporaryOrBackupImageFile(string path)
+        {
+            string fileName = Path.GetFileName(path);
+
+            if (fileName.EndsWith(".gback", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) return true;
+            if (Path.GetFileNameWithoutExtension(fileName).EndsWith("-Temp", StringComparison.OrdinalIgnoreCase)) return true;
+
+            return false;
+        }
+
+        private List<string> GetVisibleImageFiles()
+        {
+            string dataFolder = GetUploadedDataFolder();
+
+            if (!Directory.Exists(dataFolder))
+            {
+                return new List<string>();
+            }
+
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
+
+            return Directory.GetFiles(dataFolder, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(path => IsImageFile(path))
+                .Where(path => !IsTemporaryOrBackupImageFile(path))
+                .Where(path => !IsDeletedByManifest(path, deletedIndexes))
+                .OrderBy(path => GetSlideImageSortNumber(Path.GetFileName(path)))
+                .ThenBy(path => NormalizeDrivingImageName(Path.GetFileName(path)), new NaturalFileNameComparer())
+                .ThenBy(path => Path.GetFileName(path), new NaturalFileNameComparer())
+                .ToList();
+        }
+
+        private List<string> GetDeletedImageFiles()
+        {
+            string dataFolder = GetUploadedDataFolder();
+
+            if (!Directory.Exists(dataFolder))
+            {
+                return new List<string>();
+            }
+
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
+
+            return Directory.GetFiles(dataFolder, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(path => IsImageFile(path))
+                .Where(path => !IsTemporaryOrBackupImageFile(path))
+                .Where(path => IsDeletedByManifest(path, deletedIndexes))
+                .OrderBy(path => GetSlideImageSortNumber(Path.GetFileName(path)))
+                .ThenBy(path => NormalizeDrivingImageName(Path.GetFileName(path)), new NaturalFileNameComparer())
+                .ThenBy(path => Path.GetFileName(path), new NaturalFileNameComparer())
+                .ToList();
+        }
+
+        private void AddDeletedIndexes(IEnumerable<string> imagePaths)
+        {
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
+
+            foreach (string path in imagePaths)
+            {
+                int index = ExtractImageIndexFromFileName(path);
+
+                if (index >= 0)
+                {
+                    deletedIndexes.Add(index);
+                }
+            }
+
+            WriteDeletedIndexes(deletedIndexes);
+        }
+
+        private void RemoveDeletedIndexes(IEnumerable<string> imageNamesOrPaths)
+        {
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
+
+            foreach (string path in imageNamesOrPaths)
+            {
+                int index = ExtractImageIndexFromFileName(path);
+
+                if (index >= 0)
+                {
+                    deletedIndexes.Remove(index);
+                }
+            }
+
+            WriteDeletedIndexes(deletedIndexes);
         }
 
         private void ConfigureListViewNameLabel()
@@ -361,7 +724,7 @@ namespace AD_AI_LearningData_Editor
         private List<string> GetSelectedListViewImageFiles()
         {
             List<string> targets = new List<string>();
-            string uploadFolder = GetUploadedFolder();
+            string dataFolder = GetUploadedDataFolder();
 
             if (lstviewFileListD.SelectedItems.Count == 0)
             {
@@ -371,7 +734,7 @@ namespace AD_AI_LearningData_Editor
             foreach (ListViewItem item in lstviewFileListD.SelectedItems)
             {
                 string name = item.Text.Replace("[폴더] ", "");
-                string path = Path.Combine(uploadFolder, name);
+                string path = Path.Combine(dataFolder, name);
 
                 if (File.Exists(path) && IsImageFile(path))
                 {
@@ -384,6 +747,7 @@ namespace AD_AI_LearningData_Editor
                 .ToList();
         }
 
+
         private List<string> GetTargetImageFilesForEdit()
         {
             List<string> intervalTargets = GetIntervalImageFiles();
@@ -393,6 +757,13 @@ namespace AD_AI_LearningData_Editor
                 return intervalTargets;
             }
 
+            List<string> singlePointTargets = GetSingleIntervalPointImageFiles();
+
+            if (singlePointTargets.Count > 0)
+            {
+                return singlePointTargets;
+            }
+
             List<string> selectedTargets = GetSelectedListViewImageFiles();
 
             if (selectedTargets.Count > 0)
@@ -400,8 +771,64 @@ namespace AD_AI_LearningData_Editor
                 return selectedTargets;
             }
 
-            return GetUploadedImageFiles();
+            return GetCurrentSlideImageFile();
         }
+
+        private List<string> GetSingleIntervalPointImageFiles()
+        {
+            List<string> targets = new List<string>();
+
+            if (HasSelectedInterval())
+            {
+                return targets;
+            }
+
+            if (intervalPointIndices == null || intervalPointIndices.Count != 1)
+            {
+                return targets;
+            }
+
+            int index = intervalPointIndices[0];
+
+            if (index < 0 || index >= slideImages.Count)
+            {
+                return targets;
+            }
+
+            string path = slideImages[index];
+
+            if (File.Exists(path) && IsImageFile(path))
+            {
+                targets.Add(path);
+            }
+
+            return targets;
+        }
+
+        private List<string> GetCurrentSlideImageFile()
+        {
+            List<string> targets = new List<string>();
+
+            if (slideImages == null || slideImages.Count == 0)
+            {
+                return targets;
+            }
+
+            if (currentSlideIndex < 0 || currentSlideIndex >= slideImages.Count)
+            {
+                return targets;
+            }
+
+            string path = slideImages[currentSlideIndex];
+
+            if (File.Exists(path) && IsImageFile(path))
+            {
+                targets.Add(path);
+            }
+
+            return targets;
+        }
+
 
         private void SelectIntervalItemsInListView()
         {
@@ -423,6 +850,114 @@ namespace AD_AI_LearningData_Editor
             }
 
             lstviewFileListD.EndUpdate();
+        }
+
+        private void InitializeListViewSelectionPersistence()
+        {
+            if (lstviewFileListD != null)
+            {
+                lstviewFileListD.HideSelection = false;
+                lstviewFileListD.SelectedIndexChanged += lstviewFileListD_SelectedIndexChangedForPersistence;
+            }
+
+            if (lstviewTrash != null)
+            {
+                lstviewTrash.HideSelection = false;
+                lstviewTrash.SelectedIndexChanged += lstviewTrash_SelectedIndexChangedForPersistence;
+            }
+        }
+
+        private void lstviewFileListD_SelectedIndexChangedForPersistence(object sender, EventArgs e)
+        {
+            SaveListViewSelection(lstviewFileListD, preservedFileListSelection);
+            UpdateIntervalLabelFromListViewSelection(lstviewFileListD);
+        }
+
+        private void lstviewTrash_SelectedIndexChangedForPersistence(object sender, EventArgs e)
+        {
+            SaveListViewSelection(lstviewTrash, preservedTrashSelection);
+            UpdateIntervalLabelFromListViewSelection(lstviewTrash);
+        }
+
+        private void SaveListViewSelection(ListView listView, HashSet<string> storage)
+        {
+            if (listView == null || storage == null)
+            {
+                return;
+            }
+
+            storage.Clear();
+
+            foreach (ListViewItem item in listView.SelectedItems)
+            {
+                storage.Add(item.Text);
+            }
+        }
+
+        private void RestoreListViewSelection(ListView listView, HashSet<string> storage)
+        {
+            if (listView == null || storage == null || storage.Count == 0)
+            {
+                return;
+            }
+
+            foreach (ListViewItem item in listView.Items)
+            {
+                item.Selected = storage.Contains(item.Text);
+            }
+        }
+
+        private void ClearAllListViewSelections()
+        {
+            preservedFileListSelection.Clear();
+            preservedTrashSelection.Clear();
+
+            if (lstviewFileListD != null)
+            {
+                lstviewFileListD.SelectedItems.Clear();
+            }
+
+            if (lstviewTrash != null)
+            {
+                lstviewTrash.SelectedItems.Clear();
+            }
+        }
+
+        private void UpdateIntervalLabelFromListViewSelection(ListView listView)
+        {
+            if (listView == null || listView.SelectedItems.Count == 0)
+            {
+                return;
+            }
+
+            List<int> indexes = new List<int>();
+
+            foreach (ListViewItem item in listView.SelectedItems)
+            {
+                int index = ExtractImageIndexFromFileName(item.Text);
+
+                if (index >= 0)
+                {
+                    indexes.Add(index);
+                }
+            }
+
+            if (indexes.Count == 0)
+            {
+                return;
+            }
+
+            int min = indexes.Min();
+            int max = indexes.Max();
+
+            if (min == max)
+            {
+                SetIntervalLabelText("(" + min.ToString() + ")");
+            }
+            else
+            {
+                SetIntervalLabelText("(" + min.ToString() + "~" + max.ToString() + ")");
+            }
         }
 
         private void InitializeSpeedController()
@@ -563,17 +1098,9 @@ namespace AD_AI_LearningData_Editor
 
         private List<string> GetUploadedImageFiles()
         {
-            string uploadFolder = GetUploadedFolder();
-            if (!Directory.Exists(uploadFolder)) return new List<string>();
-
-            return Directory.GetFiles(uploadFolder)
-                .Where(path => imageExtensions.Contains(Path.GetExtension(path)))
-                .Where(path => !path.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !path.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !Path.GetFileNameWithoutExtension(path).EndsWith("-Temp", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(path => File.GetCreationTime(path))
-                .ToList();
+            return GetVisibleImageFiles();
         }
+
 
         private bool IsImageFile(string path)
         {
@@ -634,6 +1161,7 @@ namespace AD_AI_LearningData_Editor
                 Bitmap targetBitmap = null;
                 try
                 {
+                    EnsureEditCancelBackupForFile(targetPath);
                     targetBitmap = LoadBitmapWithoutLock(targetPath);
                     modifyAction(targetBitmap, targetPath);
                     SaveBitmapToPath(targetBitmap, targetPath);
@@ -746,6 +1274,7 @@ namespace AD_AI_LearningData_Editor
                 {
                     foreach (string targetPath in targets)
                     {
+                        EnsureEditCancelBackupForFile(targetPath);
                         string backupPath = Path.Combine(backupFolder, Path.GetFileName(targetPath));
 
                         if (!File.Exists(backupPath))
@@ -793,12 +1322,14 @@ namespace AD_AI_LearningData_Editor
                 }
 
                 LoadUploadedFilesToD();
+                MoveToSlideIndexAfterEdit(restoreIndex);
                 SelectIntervalItemsInListView();
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"상하 반전 처리 중 오류가 발생했습니다: {ex.Message}");
                 LoadUploadedFilesToD();
+                MoveToSlideIndexAfterEdit(restoreIndex);
                 SelectIntervalItemsInListView();
             }
         }
@@ -815,6 +1346,7 @@ namespace AD_AI_LearningData_Editor
 
             foreach (string targetPath in targets)
             {
+                EnsureEditCancelBackupForFile(targetPath);
                 string backupPath = targetPath + ".roiback";
                 Bitmap compositeBmp = null;
 
@@ -879,6 +1411,8 @@ namespace AD_AI_LearningData_Editor
             {
                 try
                 {
+                    EnsureEditCancelBackupForFile(targetPath);
+
                     if (!gammaBackupPaths.ContainsKey(targetPath) || !File.Exists(gammaBackupPaths[targetPath]))
                     {
                         string backupPath = targetPath + ".gback";
@@ -1046,6 +1580,89 @@ namespace AD_AI_LearningData_Editor
         }
 
 
+        private void RegisterEditCancelButton()
+        {
+            Control button = this.Controls.Find("btnEditCncl", true).FirstOrDefault();
+
+            if (button != null)
+            {
+                button.Click -= btnEditCncl_Click;
+                button.Click += btnEditCncl_Click;
+            }
+        }
+
+        private void EnsureEditCancelBackupForFile(string targetPath)
+        {
+            if (string.IsNullOrWhiteSpace(targetPath) || !File.Exists(targetPath) || isEditCancelRestoring)
+            {
+                return;
+            }
+
+            try
+            {
+                string backupFolder = GetEditCancelBackupFolder();
+                string backupPath = Path.Combine(backupFolder, Path.GetFileName(targetPath));
+
+                if (!File.Exists(backupPath))
+                {
+                    File.Copy(targetPath, backupPath, true);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void RestoreEditCancelBackups()
+        {
+            string backupFolder = Path.Combine(GetBinFolder(), editCancelBackupFolderName);
+
+            if (!Directory.Exists(backupFolder))
+            {
+                MessageBox.Show("취소할 이미지 편집 내용이 없습니다.");
+                return;
+            }
+
+            string dataFolder = GetUploadedDataFolder();
+
+            try
+            {
+                isEditCancelRestoring = true;
+                ReleaseCurrentImage();
+
+                foreach (string backupPath in Directory.GetFiles(backupFolder, "*.*", SearchOption.TopDirectoryOnly))
+                {
+                    string targetPath = Path.Combine(dataFolder, Path.GetFileName(backupPath));
+                    File.Copy(backupPath, targetPath, true);
+                }
+
+                Directory.Delete(backupFolder, true);
+
+                gammaBackupPaths.Clear();
+                Array.Clear(roiState, 0, roiState.Length);
+
+                int restoreIndex = currentSlideIndex;
+                LoadUploadedFilesToD();
+                MoveToSlideIndexAfterEdit(restoreIndex);
+                LoadTrashCanFiles();
+
+                MessageBox.Show("이미지 편집 변경사항을 취소했습니다.\n삭제 제외 인덱스는 유지됩니다.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("편집 취소 중 오류가 발생했습니다.\n" + ex.Message);
+            }
+            finally
+            {
+                isEditCancelRestoring = false;
+            }
+        }
+
+        private void btnEditCncl_Click(object sender, EventArgs e)
+        {
+            RestoreEditCancelBackups();
+        }
+
         private void InitializeToolTips()
         {
             SetToolTipByName("btnPlayStop", "단축키 : 스패이스 바");
@@ -1058,6 +1675,7 @@ namespace AD_AI_LearningData_Editor
             SetToolTipByName("btnDel", "단축키 : Del 또는 백 스페이스");
             SetToolTipByName("btnSetInterval", "현재 프레임을 구간으로 지정, 단축키 : Ctrl");
             SetToolTipByName("btnSave", "변경내용 저장");
+            SetToolTipByName("btnEditCncl", "이미지 편집 변경사항 취소");
 
             SetToolTipByName("btnContrastProperty", "명암 조절");
             SetToolTipByName("btnColorProperty", "색상 필터");
@@ -1241,15 +1859,10 @@ namespace AD_AI_LearningData_Editor
 
         private void SetupTrashWatcher()
         {
-            string trashFolder = GetTrashFolder();
-
-            trashWatcher = new FileSystemWatcher(trashFolder);
-            trashWatcher.EnableRaisingEvents = true;
-
-            trashWatcher.Created += TrashWatcher_Changed;
-            trashWatcher.Deleted += TrashWatcher_Changed;
-            trashWatcher.Renamed += TrashWatcher_Changed;
+            // 이제 휴지통 목록은 실제 TrashCan 폴더가 아니라
+            // manifest JSON의 deleted_indexes를 기준으로 표시합니다.
         }
+
 
         private void TrashWatcher_Changed(object sender, FileSystemEventArgs e)
         {
@@ -1275,38 +1888,24 @@ namespace AD_AI_LearningData_Editor
             slideImages.Clear();
             currentSlideIndex = 0;
 
-            // 카탈로그/JSON 파일이 바뀌었거나 새 데이터셋을 다시 불러온 경우를 대비해
-            // angle/throttle 캐시를 비웁니다.
             drivingInfoCache.Clear();
             drivingInfoCacheSignature = "";
             drivingInfoCacheTime = DateTime.MinValue;
 
-            string targetFolder = GetUploadedFolder();
-            DirectoryInfo di = new DirectoryInfo(targetFolder);
+            string dataFolder = GetUploadedDataFolder();
+            DirectoryInfo di = new DirectoryInfo(dataFolder);
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
 
-            var folders = di.GetDirectories()
-                .OrderBy(d => d.Name, new NaturalFileNameComparer())
-                .ToList();
+            FileInfo[] files = di.GetFiles()
+                .Where(f => !IsTemporaryOrBackupImageFile(f.FullName))
+                .ToArray();
 
-            foreach (var folder in folders)
-            {
-                ListViewItem item = new ListViewItem("[폴더] " + folder.Name);
-                item.Tag = "추가된파일";
-                lstviewFileListD.Items.Add(item);
-            }
-
-            var files = di.GetFiles()
-                .Where(f => !f.Name.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !f.Name.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !f.Name.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !f.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            var filesForListView = files
+            List<FileInfo> filesForListView = files
+                .Where(f => !IsImageFile(f.FullName) || !IsDeletedByManifest(f.FullName, deletedIndexes))
                 .OrderBy(f => f.Name, new NaturalFileNameComparer())
                 .ToList();
 
-            foreach (var file in filesForListView)
+            foreach (FileInfo file in filesForListView)
             {
                 ListViewItem item = new ListViewItem(file.Name);
                 item.Tag = "추가된파일";
@@ -1315,11 +1914,14 @@ namespace AD_AI_LearningData_Editor
 
             slideImages = files
                 .Where(f => IsImageFile(f.FullName))
+                .Where(f => !IsDeletedByManifest(f.FullName, deletedIndexes))
                 .OrderBy(f => GetSlideImageSortNumber(f.Name))
                 .ThenBy(f => NormalizeDrivingImageName(f.Name), new NaturalFileNameComparer())
                 .ThenBy(f => f.Name, new NaturalFileNameComparer())
                 .Select(f => f.FullName)
                 .ToList();
+
+            RestoreListViewSelection(lstviewFileListD, preservedFileListSelection);
 
             lstviewFileListD.EndUpdate();
 
@@ -1342,6 +1944,7 @@ namespace AD_AI_LearningData_Editor
             UpdatePlayStopButtonState();
         }
 
+
         private int GetSlideImageSortNumber(string fileName)
         {
             string normalizedName = NormalizeDrivingImageName(fileName);
@@ -1357,28 +1960,18 @@ namespace AD_AI_LearningData_Editor
 
         private void LoadTrashCanFiles()
         {
+            lstviewTrash.BeginUpdate();
             lstviewTrash.Items.Clear();
 
-            string trashFolder = GetTrashFolder();
-            if (!Directory.Exists(trashFolder)) return;
-
-            DirectoryInfo di = new DirectoryInfo(trashFolder);
-
-            var folders = di.GetDirectories().OrderBy(d => d.CreationTime).ToList();
-            foreach (var folder in folders)
+            foreach (string path in GetDeletedImageFiles())
             {
-                ListViewItem item = new ListViewItem("[폴더] " + folder.Name);
-                item.Tag = "휴지통파일";
+                ListViewItem item = new ListViewItem(Path.GetFileName(path));
+                item.Tag = "제외된파일";
                 lstviewTrash.Items.Add(item);
             }
 
-            var files = di.GetFiles().OrderBy(f => f.CreationTime).ToList();
-            foreach (var file in files)
-            {
-                ListViewItem item = new ListViewItem(file.Name);
-                item.Tag = "휴지통파일";
-                lstviewTrash.Items.Add(item);
-            }
+            RestoreListViewSelection(lstviewTrash, preservedTrashSelection);
+            lstviewTrash.EndUpdate();
         }
 
 
@@ -1468,7 +2061,7 @@ namespace AD_AI_LearningData_Editor
 
         private void BuildDrivingInfoCacheIfNeeded()
         {
-            string uploadFolder = GetUploadedFolder();
+            string uploadFolder = GetUploadedDataFolder();
 
             if (!Directory.Exists(uploadFolder))
             {
@@ -2584,6 +3177,7 @@ namespace AD_AI_LearningData_Editor
 
         private void btnPlayStop_Click(object sender, EventArgs e)
         {
+            ClearAllListViewSelections();
             if (slideImages.Count == 0)
             {
                 if (videoTimer != null && videoTimer.Enabled)
@@ -2652,8 +3246,6 @@ namespace AD_AI_LearningData_Editor
 
         private void btnDel_Click(object sender, EventArgs e)
         {
-            string trashFolder = GetTrashFolder();
-            string uploadFolder = GetUploadedFolder();
             List<string> targets = new List<string>();
 
             List<string> intervalTargets = GetIntervalImageFiles();
@@ -2664,51 +3256,50 @@ namespace AD_AI_LearningData_Editor
             }
             else if (lstviewFileListD.SelectedItems.Count > 0)
             {
-                foreach (ListViewItem item in lstviewFileListD.SelectedItems)
-                {
-                    string name = item.Text.Replace("[폴더] ", "");
-                    targets.Add(Path.Combine(uploadFolder, name));
-                }
+                targets.AddRange(GetSelectedListViewImageFiles());
             }
-            else
+            else if (slideImages.Count > 0 && currentSlideIndex >= 0 && currentSlideIndex < slideImages.Count)
             {
-                if (slideImages.Count > 0 && currentSlideIndex >= 0 && currentSlideIndex < slideImages.Count)
-                {
-                    targets.Add(slideImages[currentSlideIndex]);
-                }
+                targets.Add(slideImages[currentSlideIndex]);
             }
 
             targets = targets
-                .Where(path => File.Exists(path) || Directory.Exists(path))
+                .Where(path => File.Exists(path) && IsImageFile(path))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            if (targets.Count == 0) return;
+            if (targets.Count == 0)
+            {
+                return;
+            }
 
-            if (videoTimer.Enabled) videoTimer.Stop();
+            if (videoTimer != null && videoTimer.Enabled)
+            {
+                videoTimer.Stop();
+            }
+
             UpdatePlayStopButtonState();
-            ReleaseCurrentImage();
+
+            int firstTargetVisibleIndex = GetFirstTargetSlideIndex(targets);
+            int restoreIndex = Math.Max(0, firstTargetVisibleIndex - 1);
+
+            AddDeletedIndexes(targets);
 
             foreach (string target in targets)
             {
-                try
-                {
-                    string dest = GetNonConflictingPath(Path.Combine(trashFolder, Path.GetFileName(target)));
-                    if (Directory.Exists(target))
-                    {
-                        Directory.Move(target, dest);
-                    }
-                    else if (File.Exists(target))
-                    {
-                        File.Move(target, dest);
-                    }
-                }
-                catch { }
+                preservedFileListSelection.Remove(Path.GetFileName(target));
             }
 
-            ResetSelectedInterval();
+            ReleaseCurrentImage();
             LoadUploadedFilesToD();
+            LoadTrashCanFiles();
+
+            if (slideImages.Count > 0)
+            {
+                MoveToSlideIndexAfterEdit(Math.Min(restoreIndex, slideImages.Count - 1));
+            }
         }
+
 
         private string GetNonConflictingPath(string path)
         {
@@ -2729,7 +3320,7 @@ namespace AD_AI_LearningData_Editor
 
         private void btnSave_Click(object sender, EventArgs e)
         {
-            string uploadFolder = GetUploadedFolder();
+            string uploadFolder = GetUploadedDataFolder();
 
             if (!Directory.Exists(uploadFolder)) Directory.CreateDirectory(uploadFolder);
 
@@ -2804,10 +3395,11 @@ namespace AD_AI_LearningData_Editor
                         try { Directory.Delete(mirrorBackupFolder, true); } catch { }
                     }
 
+                    ClearEditCancelBackupFolder();
                     gammaBackupPaths.Clear();
                     Array.Clear(roiState, 0, roiState.Length);
                     LoadUploadedFilesToD();
-                    MessageBox.Show("입력한 이름의 폴더를 만들고 UploadedFile 안의 파일을 이동했습니다.");
+                    MessageBox.Show("입력한 이름의 폴더를 만들고 UploadedFile\\data 안의 파일을 이동했습니다.");
                 }
                 catch (Exception ex)
                 {
@@ -2824,35 +3416,60 @@ namespace AD_AI_LearningData_Editor
 
         private void btnRestoration_Click(object sender, EventArgs e)
         {
-            if (lstviewTrash.SelectedItems.Count == 0) return;
+            if (lstviewTrash.SelectedItems.Count == 0)
+            {
+                return;
+            }
 
-            string trashFolder = GetTrashFolder();
-            string uploadFolder = GetUploadedFolder();
-
-            ReleaseCurrentImage();
+            List<string> selectedNames = new List<string>();
 
             foreach (ListViewItem item in lstviewTrash.SelectedItems)
             {
-                string fileName = item.Text.Replace("[폴더] ", "");
-                string sourcePath = Path.Combine(trashFolder, fileName);
-                string destPath = GetNonConflictingPath(Path.Combine(uploadFolder, fileName));
-
-                try
-                {
-                    if (Directory.Exists(sourcePath))
-                    {
-                        Directory.Move(sourcePath, destPath);
-                    }
-                    else if (File.Exists(sourcePath))
-                    {
-                        File.Move(sourcePath, destPath);
-                    }
-                }
-                catch { }
+                selectedNames.Add(item.Text);
             }
+
+            if (selectedNames.Count == 0)
+            {
+                return;
+            }
+
+            RemoveDeletedIndexes(selectedNames);
+
+            foreach (string name in selectedNames)
+            {
+                preservedTrashSelection.Remove(name);
+                preservedFileListSelection.Add(name);
+            }
+
+            int restoreIndex = currentSlideIndex;
 
             LoadUploadedFilesToD();
             LoadTrashCanFiles();
+
+            List<int> restoredIndexes = selectedNames
+                .Select(name => ExtractImageIndexFromFileName(name))
+                .Where(index => index >= 0)
+                .ToList();
+
+            if (restoredIndexes.Count > 0)
+            {
+                int minRestoredIndex = restoredIndexes.Min();
+                int visibleIndex = slideImages.FindIndex(path => ExtractImageIndexFromFileName(path) == minRestoredIndex);
+
+                if (visibleIndex >= 0)
+                {
+                    restoreIndex = visibleIndex;
+                }
+            }
+
+            MoveToSlideIndexAfterEdit(restoreIndex);
+        }
+
+
+        private void ShowTrashModeButtons(bool isTrashMode)
+        {
+            btnRemove.Visible = isTrashMode;
+            btnRestoration.Visible = isTrashMode;
         }
 
         private void SetupTabs()
@@ -2907,6 +3524,7 @@ namespace AD_AI_LearningData_Editor
 
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
+            ShowTrashModeButtons(false);
             lstviewFileListD.Visible = false;
             lstviewTrash.Visible = false;
             lstviewMain.Visible = true;
@@ -2931,7 +3549,7 @@ namespace AD_AI_LearningData_Editor
                 lstviewTrash.Visible = false;
 
                 SetListViewName("[파일목록]");
-                btnRestoration.Visible = false;
+                ShowTrashModeButtons(false);
             }
             else if (itemTag == "휴지통")
             {
@@ -2940,7 +3558,7 @@ namespace AD_AI_LearningData_Editor
                 lstviewTrash.Visible = true;
 
                 SetListViewName("[휴지통]");
-                btnRestoration.Visible = true;
+                ShowTrashModeButtons(true);
 
                 LoadTrashCanFiles();
             }

@@ -29,9 +29,9 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[업로드된 파일]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일추가]" }, 3, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
-            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem4 = new ListViewItem(new string[] { "[업로드된 파일]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem5 = new ListViewItem(new string[] { "[파일추가]" }, 3, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
+            ListViewItem listViewItem6 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
             sdrSeekBar = new MaterialSkin.Controls.MaterialSlider();
             pnlVideo = new Panel();
@@ -80,6 +80,7 @@
             imglst1 = new ImageList(components);
             lstviewTrash = new ListView();
             pnlCtrl = new Panel();
+            btnEditCncl = new MaterialSkin.Controls.MaterialButton();
             btnSetInterval = new MaterialSkin.Controls.MaterialButton();
             groupBox2 = new GroupBox();
             lblSetInterval = new Label();
@@ -555,7 +556,7 @@
             btnPre5F.Depth = 0;
             btnPre5F.HighEmphasis = true;
             btnPre5F.Icon = Data_Manager.Properties.Resources.arrow5_left;
-            btnPre5F.Location = new Point(5, 62);
+            btnPre5F.Location = new Point(5, 59);
             btnPre5F.Margin = new Padding(5, 7, 5, 7);
             btnPre5F.MouseState = MaterialSkin.MouseState.HOVER;
             btnPre5F.Name = "btnPre5F";
@@ -670,10 +671,10 @@
             // lstviewMain
             // 
             lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem1.Tag = "파일목록";
-            listViewItem2.Tag = "파일추가";
-            listViewItem3.Tag = "휴지통";
-            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem1, listViewItem2, listViewItem3 });
+            listViewItem4.Tag = "파일목록";
+            listViewItem5.Tag = "파일추가";
+            listViewItem6.Tag = "휴지통";
+            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem4, listViewItem5, listViewItem6 });
             lstviewMain.Location = new Point(-1, 50);
             lstviewMain.Name = "lstviewMain";
             lstviewMain.Size = new Size(551, 576);
@@ -706,6 +707,7 @@
             // 
             // pnlCtrl
             // 
+            pnlCtrl.Controls.Add(btnEditCncl);
             pnlCtrl.Controls.Add(btnSetInterval);
             pnlCtrl.Controls.Add(groupBox2);
             pnlCtrl.Controls.Add(btnSpeedPopup);
@@ -715,10 +717,31 @@
             pnlCtrl.Controls.Add(btnNxt1F);
             pnlCtrl.Controls.Add(btnPre5F);
             pnlCtrl.Controls.Add(btnDel);
-            pnlCtrl.Location = new Point(383, 704);
+            pnlCtrl.Location = new Point(263, 718);
             pnlCtrl.Name = "pnlCtrl";
-            pnlCtrl.Size = new Size(776, 204);
+            pnlCtrl.Size = new Size(990, 204);
             pnlCtrl.TabIndex = 13;
+            // 
+            // btnEditCncl
+            // 
+            btnEditCncl.AutoSize = false;
+            btnEditCncl.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnEditCncl.BackColor = SystemColors.Control;
+            btnEditCncl.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnEditCncl.Depth = 0;
+            btnEditCncl.HighEmphasis = true;
+            btnEditCncl.Icon = null;
+            btnEditCncl.Location = new Point(767, 56);
+            btnEditCncl.Margin = new Padding(5, 7, 5, 7);
+            btnEditCncl.MouseState = MaterialSkin.MouseState.HOVER;
+            btnEditCncl.Name = "btnEditCncl";
+            btnEditCncl.NoAccentTextColor = Color.Empty;
+            btnEditCncl.Size = new Size(126, 113);
+            btnEditCncl.TabIndex = 19;
+            btnEditCncl.Text = "편집 사항 취소";
+            btnEditCncl.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnEditCncl.UseAccentColor = false;
+            btnEditCncl.UseVisualStyleBackColor = false;
             // 
             // btnSetInterval
             // 
@@ -770,7 +793,7 @@
             btnSpeedPopup.Depth = 0;
             btnSpeedPopup.HighEmphasis = true;
             btnSpeedPopup.Icon = Data_Manager.Properties.Resources.speedometer8017074;
-            btnSpeedPopup.Location = new Point(5, 132);
+            btnSpeedPopup.Location = new Point(5, 129);
             btnSpeedPopup.Margin = new Padding(5, 7, 5, 7);
             btnSpeedPopup.MouseState = MaterialSkin.MouseState.HOVER;
             btnSpeedPopup.Name = "btnSpeedPopup";
@@ -790,7 +813,7 @@
             btnPre1F.Depth = 0;
             btnPre1F.HighEmphasis = true;
             btnPre1F.Icon = Data_Manager.Properties.Resources.arrow1_left;
-            btnPre1F.Location = new Point(71, 62);
+            btnPre1F.Location = new Point(71, 59);
             btnPre1F.Margin = new Padding(5, 7, 5, 7);
             btnPre1F.MouseState = MaterialSkin.MouseState.HOVER;
             btnPre1F.Name = "btnPre1F";
@@ -809,7 +832,7 @@
             btnPlayStop.Depth = 0;
             btnPlayStop.HighEmphasis = true;
             btnPlayStop.Icon = Data_Manager.Properties.Resources.PlaySlide4655096;
-            btnPlayStop.Location = new Point(137, 62);
+            btnPlayStop.Location = new Point(137, 59);
             btnPlayStop.Margin = new Padding(5, 7, 5, 7);
             btnPlayStop.MouseState = MaterialSkin.MouseState.HOVER;
             btnPlayStop.Name = "btnPlayStop";
@@ -830,7 +853,7 @@
             btnNxt5F.Depth = 0;
             btnNxt5F.HighEmphasis = true;
             btnNxt5F.Icon = Data_Manager.Properties.Resources.arrow5_right;
-            btnNxt5F.Location = new Point(324, 62);
+            btnNxt5F.Location = new Point(324, 59);
             btnNxt5F.Margin = new Padding(5, 7, 5, 7);
             btnNxt5F.MouseState = MaterialSkin.MouseState.HOVER;
             btnNxt5F.Name = "btnNxt5F";
@@ -850,7 +873,7 @@
             btnNxt1F.HighEmphasis = true;
             btnNxt1F.Icon = Data_Manager.Properties.Resources.arrow1_right;
             btnNxt1F.ImageAlign = ContentAlignment.MiddleRight;
-            btnNxt1F.Location = new Point(258, 62);
+            btnNxt1F.Location = new Point(258, 59);
             btnNxt1F.Margin = new Padding(5, 7, 5, 7);
             btnNxt1F.MouseState = MaterialSkin.MouseState.HOVER;
             btnNxt1F.Name = "btnNxt1F";
@@ -1043,5 +1066,6 @@
         private MaterialSkin.Controls.MaterialButton btnSetInterval;
         private Label lblSetInterval;
         private GroupBox groupBox2;
+        private MaterialSkin.Controls.MaterialButton btnEditCncl;
     }
 }
