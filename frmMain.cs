@@ -587,8 +587,8 @@ namespace AD_AI_LearningData_Editor
         internal static int GetPlaybackIntervalForSpeed(double speed)
         {
             return speed > 0
-                ? Math.Max(1, (int)(33 / speed))
-                : 33;
+                ? Math.Max(1, (int)(67 / speed))
+                : 67;
         }
 
         private void InitializeImageEditor()
@@ -1331,7 +1331,7 @@ namespace AD_AI_LearningData_Editor
             }
 
             videoTimer = new System.Windows.Forms.Timer();
-            videoTimer.Interval = 33;
+            videoTimer.Interval = 67;
             videoTimer.Tick += VideoTimer_Tick;
         }
 

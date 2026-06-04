@@ -474,9 +474,9 @@ namespace Data_Manager
             // 
             pliotAngleIndicator.BackColor = Color.Transparent;
             pliotAngleIndicator.ForeColor = Color.White;
-            pliotAngleIndicator.Location = new Point(398, 489);
+            pliotAngleIndicator.Location = new Point(355, 585);
             pliotAngleIndicator.Name = "pliotAngleIndicator";
-            pliotAngleIndicator.Size = new Size(720, 260);
+            pliotAngleIndicator.Size = new Size(420, 164);
             pliotAngleIndicator.TabIndex = 3;
             // 
             // pliotAiThrottleGauge
@@ -485,10 +485,10 @@ namespace Data_Manager
             pliotAiThrottleGauge.FillColor = Color.FromArgb(255, 55, 145, 255);
             pliotAiThrottleGauge.ForeColor = Color.White;
             pliotAiThrottleGauge.GaugeTitle = "AI";
-            pliotAiThrottleGauge.Location = new Point(18, 569);
+            pliotAiThrottleGauge.Location = new Point(18, 629);
             pliotAiThrottleGauge.Mirrored = true;
             pliotAiThrottleGauge.Name = "pliotAiThrottleGauge";
-            pliotAiThrottleGauge.Size = new Size(360, 180);
+            pliotAiThrottleGauge.Size = new Size(240, 120);
             pliotAiThrottleGauge.TabIndex = 2;
             // 
             // pliotTubThrottleGauge
@@ -496,11 +496,11 @@ namespace Data_Manager
             pliotTubThrottleGauge.BackColor = Color.Transparent;
             pliotTubThrottleGauge.FillColor = Color.FromArgb(255, 255, 92, 76);
             pliotTubThrottleGauge.ForeColor = Color.White;
-            pliotTubThrottleGauge.GaugeTitle = "TUB";
-            pliotTubThrottleGauge.Location = new Point(18, 377);
+            pliotTubThrottleGauge.GaugeTitle = "사람";
+            pliotTubThrottleGauge.Location = new Point(18, 499);
             pliotTubThrottleGauge.Mirrored = true;
             pliotTubThrottleGauge.Name = "pliotTubThrottleGauge";
-            pliotTubThrottleGauge.Size = new Size(360, 180);
+            pliotTubThrottleGauge.Size = new Size(240, 120);
             pliotTubThrottleGauge.TabIndex = 4;
             // 
             // pnlImageIndexOverlay

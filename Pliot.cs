@@ -32,6 +32,7 @@ namespace Data_Manager
         private bool _isUpdatingTrackBar;
         private bool _isPlaying;
         private bool _isReversePlaying;
+        private bool _isChartOpen;
         private double _playbackSpeed = 1.0;
 
         public Pliot()
@@ -101,12 +102,10 @@ namespace Data_Manager
             pliotAiThrottleGauge.GaugeTitle = "AI";
             pliotAiThrottleGauge.Mirrored = true;
             pliotAiThrottleGauge.FillColor = Color.FromArgb(255, 55, 145, 255);
-            pliotAiThrottleGauge.Size = new Size(360, 180);
 
-            pliotTubThrottleGauge.GaugeTitle = "TUB";
+            pliotTubThrottleGauge.GaugeTitle = "사람";
             pliotTubThrottleGauge.Mirrored = true;
             pliotTubThrottleGauge.FillColor = Color.FromArgb(255, 255, 92, 76);
-            pliotTubThrottleGauge.Size = new Size(360, 180);
         }
 
         private void ConfigurePlaybackTimer()
@@ -232,8 +231,6 @@ namespace Data_Manager
         private void ConfigureAngleOverlayLayout()
         {
             // Paint로 그리는 앵글 선이 라벨 배치에 잘리지 않도록 고정 크기 오버레이로 유지합니다.
-            pliotAngleIndicator.Height = 260;
-            pliotAngleIndicator.Width = Math.Max(720, pliotAngleIndicator.Width);
             pliotAngleIndicator.Anchor = AnchorStyles.Bottom;
         }
 
@@ -769,6 +766,11 @@ namespace Data_Manager
 
         private void BtnPilotChart_Click(object? sender, EventArgs e)
         {
+            if (_isChartOpen)
+            {
+                return;
+            }
+
             // The chart needs both recorded tub values and AI judgment values to compare the two lines.
             if (_selectedModel == null)
             {
@@ -793,8 +795,18 @@ namespace Data_Manager
             List<DonkeyAsyncWorker.PilotFrameData> chartFrames =
                 _frameList.Select(CloneFrame).ToList();
 
-            using PliotChart chart = new PliotChart(_selectedModel.Name, chartFrames);
-            chart.ShowDialog(this);
+            try
+            {
+                _isChartOpen = true;
+                btnPilotChart.Enabled = false;
+                using PliotChart chart = new PliotChart(_selectedModel.Name, chartFrames);
+                chart.ShowDialog(this);
+            }
+            finally
+            {
+                btnPilotChart.Enabled = true;
+                _isChartOpen = false;
+            }
         }
 
         private async Task LoadTubFramesAsync(
@@ -903,8 +915,8 @@ namespace Data_Manager
                     continue;
                 }
 
-                frame.PilotAngle = match.PilotAngle;
-                frame.PilotThrottle = match.PilotThrottle;
+                frame.PilotAngle = ClampAiJudementValue(match.PilotAngle);
+                frame.PilotThrottle = ClampAiJudementValue(match.PilotThrottle);
             }
         }
 
@@ -950,10 +962,20 @@ namespace Data_Manager
                 ImagePath = frame.ImagePath,
                 UserAngle = frame.UserAngle,
                 UserThrottle = frame.UserThrottle,
-                PilotAngle = frame.PilotAngle,
-                PilotThrottle = frame.PilotThrottle,
+                PilotAngle = ClampAiJudementValue(frame.PilotAngle),
+                PilotThrottle = ClampAiJudementValue(frame.PilotThrottle),
                 Mode = frame.Mode
             };
+        }
+
+        private static double? ClampAiJudementValue(double? value)
+        {
+            if (!value.HasValue)
+            {
+                return null;
+            }
+
+            return Math.Max(-1.0, Math.Min(1.0, value.Value));
         }
 
         #endregion
@@ -1265,16 +1287,16 @@ namespace Data_Manager
             int visibleHostHeight = GetVisibleImageHostHeight(hostHeight);
 
             ConfigureAngleOverlayLayout();
+            UpdatePilotOverlaySizes(hostWidth, visibleHostHeight);
             pnlImageIndexOverlay.Location = new Point(12, 12);
-            int throttleX = 18;
-            int throttleGap = 12;
+            int margin = Math.Max(12, (int)(hostWidth * 0.016));
+            int throttleX = margin;
+            int throttleGap = Math.Max(6, (int)(10 * GetOverlayScale(hostWidth, visibleHostHeight)));
             int aiThrottleY =
-                Math.Max(82, visibleHostHeight - pliotAiThrottleGauge.Height - 18);
+                Math.Max(82, visibleHostHeight - pliotAiThrottleGauge.Height - margin);
             int tubThrottleY =
                 Math.Max(82, aiThrottleY - pliotTubThrottleGauge.Height - throttleGap);
-            int angleX = Math.Max(
-                throttleX + pliotTubThrottleGauge.Width + 18,
-                (hostWidth - pliotAngleIndicator.Width) / 2);
+            int angleX = (hostWidth - pliotAngleIndicator.Width) / 2;
 
             pliotTubThrottleGauge.Location = new Point(
                 throttleX,
@@ -1285,9 +1307,9 @@ namespace Data_Manager
 
             pliotAngleIndicator.Location = new Point(
                 Math.Min(
-                    Math.Max(12, angleX),
-                    Math.Max(12, hostWidth - pliotAngleIndicator.Width - 12)),
-                Math.Max(12, visibleHostHeight - pliotAngleIndicator.Height - 18));
+                    Math.Max(margin, angleX),
+                    Math.Max(margin, hostWidth - pliotAngleIndicator.Width - margin)),
+                Math.Max(12, visibleHostHeight - pliotAngleIndicator.Height - margin));
 
             picPilotImage.SendToBack();
             pnlImageIndexOverlay.BringToFront();
@@ -1297,6 +1319,36 @@ namespace Data_Manager
             pliotAiThrottleGauge.Invalidate();
             pliotTubThrottleGauge.Invalidate();
             pliotAngleIndicator.Invalidate();
+        }
+
+        private void UpdatePilotOverlaySizes(int hostWidth, int visibleHostHeight)
+        {
+            double scale = GetOverlayScale(hostWidth, visibleHostHeight);
+            int throttleWidth = Math.Max(1, (int)Math.Round(240 * scale));
+            int throttleHeight = Math.Max(1, (int)Math.Round(120 * scale));
+            int angleWidth = Math.Max(1, (int)Math.Round(420 * scale));
+            int angleHeight = Math.Max(1, (int)Math.Round(164 * scale));
+
+            pliotTubThrottleGauge.Size = new Size(throttleWidth, throttleHeight);
+            pliotAiThrottleGauge.Size = new Size(throttleWidth, throttleHeight);
+            pliotAngleIndicator.Size = new Size(angleWidth, angleHeight);
+        }
+
+        private static double GetOverlayScale(int hostWidth, int visibleHostHeight)
+        {
+            double widthScale = hostWidth / 1130.0;
+            double heightScale = visibleHostHeight / 629.0;
+            double angleFitScale = Math.Max(0.1, (hostWidth - 24) / 420.0);
+            double scale = Math.Min(widthScale, heightScale);
+            scale = Math.Min(scale, angleFitScale);
+            return Math.Max(0.62, Math.Min(1.35, scale));
+        }
+
+        private static int ClampInt(int value, int min, int max)
+        {
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
         }
 
 #if false

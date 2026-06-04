@@ -88,9 +88,9 @@ namespace Data_Manager
             DrawPanelBackground(g, bounds);
 
             float centerX = bounds.Width / 2f;
-            float centerY = bounds.Height - 78f;
-            float radius = Math.Min(bounds.Width * 0.40f, bounds.Height * 0.62f);
-            float yScale = 0.50f;
+            float yScale = 0.66f;
+            float centerY = bounds.Height - 36f;
+            float radius = Math.Min((bounds.Width - 24f) / 2f, (centerY - 32f) / yScale);
 
             using Pen arcPen = new Pen(Color.FromArgb(230, 255, 255, 255), 5.5f);
             using Pen innerPen = new Pen(Color.FromArgb(105, 255, 255, 255), 1.8f);
@@ -185,17 +185,16 @@ namespace Data_Manager
 
         private static void DrawLabels(Graphics g, Rectangle bounds)
         {
-            using Font font = new Font("Segoe UI", 36f, FontStyle.Bold, GraphicsUnit.Point);
-            using Font valueFont = new Font("Segoe UI", 42f, FontStyle.Bold, GraphicsUnit.Point);
+            using Font font = new Font("Segoe UI", 18f, FontStyle.Bold, GraphicsUnit.Point);
+            using Font valueFont = new Font("Segoe UI", 21f, FontStyle.Bold, GraphicsUnit.Point);
             using Brush tubBrush = new SolidBrush(Color.FromArgb(255, 255, 92, 76));
             using Brush aiBrush = new SolidBrush(Color.FromArgb(255, 55, 145, 255));
             using Brush textBrush = new SolidBrush(Color.FromArgb(245, 255, 255, 255));
             using StringFormat left = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
             using StringFormat right = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
-            using StringFormat center = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            g.DrawString("AI", font, aiBrush, new RectangleF(20f, bounds.Height - 70f, 150f, 60f), left);
-            g.DrawString("TUB", font, tubBrush, new RectangleF(bounds.Width - 190f, bounds.Height - 70f, 170f, 60f), right);
-            g.DrawString("ANGLE", valueFont, textBrush, new RectangleF(0f, 4f, bounds.Width, 64f), center);
+            g.DrawString("AI", font, aiBrush, new RectangleF(14f, bounds.Height - 34f, 82f, 28f), left);
+            g.DrawString("사람", font, tubBrush, new RectangleF(bounds.Width - 112f, bounds.Height - 34f, 98f, 28f), right);
+            g.DrawString("방향", valueFont, textBrush, new RectangleF(14f, 8f, 110f, 34f), left);
         }
 
         private static void DrawArrow(Graphics g, float centerX, float centerY, float radius, float yScale, double? angle, Color color, float centerOffset)

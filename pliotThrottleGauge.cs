@@ -91,10 +91,10 @@ namespace Data_Manager
             DrawPanelBackground(g, bounds);
 
             RectangleF gaugeRect = new RectangleF(
-                18f,
-                76f,
-                bounds.Width - 36f,
-                bounds.Height - 104f);
+                12f,
+                38f,
+                bounds.Width - 24f,
+                bounds.Height - 54f);
 
             using GraphicsPath fullGaugePath = BuildFullGaugePath(gaugeRect, Mirrored);
             DrawGaugeBackground(g, fullGaugePath);
@@ -212,21 +212,21 @@ namespace Data_Manager
 
         private void DrawThrottleText(Graphics g, Rectangle bounds, RectangleF gaugeRect)
         {
-            using Font titleFont = new Font("Segoe UI", 34f, FontStyle.Bold, GraphicsUnit.Point);
-            using Font valueFont = new Font("Segoe UI", 38f, FontStyle.Bold, GraphicsUnit.Point);
+            using Font titleFont = new Font("Segoe UI", 17f, FontStyle.Bold, GraphicsUnit.Point);
+            using Font valueFont = new Font("Segoe UI", 19f, FontStyle.Bold, GraphicsUnit.Point);
             using Brush titleBrush = new SolidBrush(FillColor);
             using Brush labelBrush = new SolidBrush(Color.FromArgb(255, 255, 255, 255));
             using StringFormat near = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
             using StringFormat far = new StringFormat { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center };
 
-            RectangleF titleRect = new RectangleF(18f, 6f, bounds.Width - 36f, 58f);
+            RectangleF titleRect = new RectangleF(12f, 4f, bounds.Width - 24f, 30f);
             RectangleF valueRect = new RectangleF(
                 gaugeRect.Left + 10f,
                 gaugeRect.Top,
                 gaugeRect.Width - 20f,
                 gaugeRect.Height);
-            StringFormat titleFormat = Mirrored ? near : far;
-            StringFormat valueFormat = Mirrored ? far : near;
+            StringFormat titleFormat = far;
+            StringFormat valueFormat = near;
             string text = throttleValue.HasValue ? $"{throttleValue.Value:0.00}" : "--";
 
             g.DrawString(GaugeTitle, titleFont, titleBrush, titleRect, titleFormat);
