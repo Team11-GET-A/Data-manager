@@ -69,8 +69,7 @@ namespace Data_Manager
             cmbSpeed.SelectedIndexChanged += CmbSpeed_SelectedIndexChanged;
 
             pnlImageHost.Resize += (s, e) => PositionImageOverlays();
-            pnlAngleOverlay.Resize += (s, e) => ConfigureAngleOverlayLayout();
-            pnlAngleOverlay.Paint += PnlAngleOverlay_Paint;
+            pliotAngleIndicator.Resize += (s, e) => ConfigureAngleOverlayLayout();
             FormClosed += Pliot_FormClosed;
             SharedModelRegistry.ModelsChanged +=
                 SharedModelRegistry_ModelsChanged;
@@ -79,28 +78,35 @@ namespace Data_Manager
             SyncModelsFromSharedRegistry();
             ConfigureLocationTrackBar();
             ClearModelLabels();
+            ConfigurePilotValueControls();
             DrawTubRequiredMessage();
             ConfigureAngleOverlayLayout();
             EnsureImageOverlayParent();
             PositionImageOverlays();
             picPilotImage.SendToBack();
             pnlImageIndexOverlay.BringToFront();
-            pnlThrottleOverlay.BringToFront();
-            pnlAngleOverlay.BringToFront();
+            pliotAiThrottleGauge.BringToFront();
+            pliotTubThrottleGauge.BringToFront();
+            pliotAngleIndicator.BringToFront();
         }
 
         private void ApplyOverlayStyles()
         {
             pnlImageIndexOverlay.BackColor = OverlayBackColor;
-            pnlThrottleOverlay.BackColor = OverlayBackColor;
-            pnlAngleOverlay.BackColor = OverlayBackColor;
             lblImageIndexOverlay.BackColor = Color.Transparent;
-            lblUserThrottleTitle.BackColor = Color.Transparent;
-            lblUserThrottleValue.BackColor = Color.Transparent;
-            lblPilotThrottleTitle.BackColor = Color.Transparent;
-            lblPilotThrottleValue.BackColor = Color.Transparent;
-            lblUserAngleValue.BackColor = Color.Transparent;
-            lblPilotAngleValue.BackColor = Color.Transparent;
+        }
+
+        private void ConfigurePilotValueControls()
+        {
+            pliotAiThrottleGauge.GaugeTitle = "AI";
+            pliotAiThrottleGauge.Mirrored = true;
+            pliotAiThrottleGauge.FillColor = Color.FromArgb(255, 55, 145, 255);
+            pliotAiThrottleGauge.Size = new Size(360, 180);
+
+            pliotTubThrottleGauge.GaugeTitle = "TUB";
+            pliotTubThrottleGauge.Mirrored = true;
+            pliotTubThrottleGauge.FillColor = Color.FromArgb(255, 255, 92, 76);
+            pliotTubThrottleGauge.Size = new Size(360, 180);
         }
 
         private void ConfigurePlaybackTimer()
@@ -226,30 +232,30 @@ namespace Data_Manager
         private void ConfigureAngleOverlayLayout()
         {
             // Paint로 그리는 앵글 선이 라벨 배치에 잘리지 않도록 고정 크기 오버레이로 유지합니다.
-            pnlAngleOverlay.Height = 130;
-            pnlAngleOverlay.Width = Math.Max(420, pnlAngleOverlay.Width);
-            pnlAngleOverlay.Anchor = AnchorStyles.Bottom;
-            lblUserAngleValue.Dock = DockStyle.None;
-            lblPilotAngleValue.Dock = DockStyle.None;
-            lblUserAngleValue.Bounds = new Rectangle(14, pnlAngleOverlay.Height - 38, 132, 30);
-            lblPilotAngleValue.Bounds = new Rectangle(pnlAngleOverlay.Width - 146, pnlAngleOverlay.Height - 38, 132, 30);
-            lblUserAngleValue.TextAlign = ContentAlignment.MiddleLeft;
-            lblPilotAngleValue.TextAlign = ContentAlignment.MiddleRight;
-            pnlAngleCenterLine.Visible = false;
+            pliotAngleIndicator.Height = 260;
+            pliotAngleIndicator.Width = Math.Max(720, pliotAngleIndicator.Width);
+            pliotAngleIndicator.Anchor = AnchorStyles.Bottom;
         }
 
         private void EnsureImageOverlayParent()
         {
             // PictureBox child controls can show the current image through transparent overlay backgrounds.
             MoveOverlayToPictureBox(pnlImageIndexOverlay);
-            MoveOverlayToPictureBox(pnlThrottleOverlay);
-            MoveOverlayToPictureBox(pnlAngleOverlay);
+            MoveOverlayToPictureBox(pliotAiThrottleGauge);
+            MoveOverlayToPictureBox(pliotTubThrottleGauge);
+            MoveOverlayToPictureBox(pliotAngleIndicator);
         }
 
         private void MoveOverlayToPictureBox(Control overlay)
         {
             if (overlay.Parent == picPilotImage)
             {
+                overlay.Visible = true;
+                overlay.BackColor =
+                    ReferenceEquals(overlay, pnlImageIndexOverlay)
+                        ? OverlayBackColor
+                        : Color.Transparent;
+                overlay.BringToFront();
                 return;
             }
 
@@ -257,7 +263,11 @@ namespace Data_Manager
             overlay.Parent?.Controls.Remove(overlay);
             picPilotImage.Controls.Add(overlay);
             overlay.Location = location;
-            overlay.BackColor = OverlayBackColor;
+            overlay.Visible = true;
+            overlay.BackColor =
+                ReferenceEquals(overlay, pnlImageIndexOverlay)
+                    ? OverlayBackColor
+                    : Color.Transparent;
             overlay.BringToFront();
         }
 
@@ -516,10 +526,9 @@ namespace Data_Manager
             lblSelectedTubPath.Text = "-";
             lblTubPathValue.Text = "-";
             lblImageIndexOverlay.Text = "0 / 0";
-            lblUserThrottleValue.Text = "-";
-            lblPilotThrottleValue.Text = "-";
-            lblUserAngleValue.Text = "-";
-            lblPilotAngleValue.Text = "-";
+            pliotAiThrottleGauge.SetThrottleValue(null);
+            pliotTubThrottleGauge.SetThrottleValue(null);
+            pliotAngleIndicator.SetAngleValues(null, null);
         }
 
         private void SaveCurrentModelViewState()
@@ -1065,13 +1074,12 @@ namespace Data_Manager
             if (_frameList.Count == 0)
             {
                 lblImageIndexOverlay.Text = "0 / 0";
-                lblUserThrottleValue.Text = "-";
-                lblPilotThrottleValue.Text = "-";
-                lblUserAngleValue.Text = "-";
-                lblPilotAngleValue.Text = "-";
+                pliotAiThrottleGauge.SetThrottleValue(null);
+                pliotTubThrottleGauge.SetThrottleValue(null);
+                pliotAngleIndicator.SetAngleValues(null, null);
                 DrawTubRequiredMessage();
                 ConfigureLocationTrackBar();
-                pnlAngleOverlay.Invalidate();
+                pliotAngleIndicator.Invalidate();
                 return;
             }
 
@@ -1081,11 +1089,10 @@ namespace Data_Manager
             ShowImageInPictureBox(frame.ImagePath);
             PositionImageOverlays();
             lblImageIndexOverlay.Text = $"{_currentFrameIndex + 1} / {_frameList.Count}";
-            lblUserThrottleValue.Text = FormatNullable(frame.UserThrottle);
-            lblPilotThrottleValue.Text = FormatNullable(frame.PilotThrottle);
-            lblUserAngleValue.Text = FormatNullable(frame.UserAngle);
-            lblPilotAngleValue.Text = FormatNullable(frame.PilotAngle);
-            pnlAngleOverlay.Invalidate();
+            pliotAiThrottleGauge.SetThrottleValue(frame.PilotThrottle);
+            pliotTubThrottleGauge.SetThrottleValue(frame.UserThrottle);
+            pliotAngleIndicator.SetAngleValues(frame.UserAngle, frame.PilotAngle);
+            pliotAngleIndicator.Invalidate();
 
             _isUpdatingTrackBar = true;
             trbLocation.Value = _currentFrameIndex;
@@ -1157,11 +1164,6 @@ namespace Data_Manager
                 picPilotImage.Image = null;
                 oldImage.Dispose();
             }
-        }
-
-        private static string FormatNullable(double? value)
-        {
-            return value.HasValue ? value.Value.ToString("0.00") : "-";
         }
 
         #endregion
@@ -1247,13 +1249,7 @@ namespace Data_Manager
 
         private int GetPlaybackInterval()
         {
-            return _playbackSpeed switch
-            {
-                0.5 => 300,
-                2.0 => 75,
-                3.0 => 50,
-                _ => 150
-            };
+            return AD_AI_LearningData_Editor.frmMain.GetPlaybackIntervalForSpeed(_playbackSpeed);
         }
 
         #endregion
@@ -1266,24 +1262,44 @@ namespace Data_Manager
 
             int hostWidth = picPilotImage.ClientSize.Width;
             int hostHeight = picPilotImage.ClientSize.Height;
+            int visibleHostHeight = GetVisibleImageHostHeight(hostHeight);
 
             ConfigureAngleOverlayLayout();
             pnlImageIndexOverlay.Location = new Point(12, 12);
-            pnlThrottleOverlay.Location = new Point(
-                12,
-                Math.Max(82, (hostHeight - pnlThrottleOverlay.Height) / 2));
+            int throttleX = 18;
+            int throttleGap = 12;
+            int aiThrottleY =
+                Math.Max(82, visibleHostHeight - pliotAiThrottleGauge.Height - 18);
+            int tubThrottleY =
+                Math.Max(82, aiThrottleY - pliotTubThrottleGauge.Height - throttleGap);
+            int angleX = Math.Max(
+                throttleX + pliotTubThrottleGauge.Width + 18,
+                (hostWidth - pliotAngleIndicator.Width) / 2);
 
-            pnlAngleOverlay.Location = new Point(
-                Math.Max(12, (hostWidth - pnlAngleOverlay.Width) / 2),
-                Math.Max(12, hostHeight - (pnlAngleOverlay.Height * 2) - 18));
+            pliotTubThrottleGauge.Location = new Point(
+                throttleX,
+                tubThrottleY);
+            pliotAiThrottleGauge.Location = new Point(
+                throttleX,
+                aiThrottleY);
+
+            pliotAngleIndicator.Location = new Point(
+                Math.Min(
+                    Math.Max(12, angleX),
+                    Math.Max(12, hostWidth - pliotAngleIndicator.Width - 12)),
+                Math.Max(12, visibleHostHeight - pliotAngleIndicator.Height - 18));
 
             picPilotImage.SendToBack();
             pnlImageIndexOverlay.BringToFront();
-            pnlThrottleOverlay.BringToFront();
-            pnlAngleOverlay.BringToFront();
-            pnlAngleOverlay.Invalidate();
+            pliotAiThrottleGauge.BringToFront();
+            pliotTubThrottleGauge.BringToFront();
+            pliotAngleIndicator.BringToFront();
+            pliotAiThrottleGauge.Invalidate();
+            pliotTubThrottleGauge.Invalidate();
+            pliotAngleIndicator.Invalidate();
         }
 
+#if false
         private void PnlAngleOverlay_Paint(object? sender, PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
@@ -1333,6 +1349,21 @@ namespace Data_Manager
             graphics.DrawLine(pen, centerX, centerY, endX, endY);
             using Brush brush = new SolidBrush(pen.Color);
             graphics.FillEllipse(brush, endX - 5, endY - 5, 10, 10);
+        }
+#endif
+
+        private int GetVisibleImageHostHeight(int fallbackHeight)
+        {
+            if (pnlTrackBar.Parent == pnlPilotCard && pnlImageHost.Parent == pnlPilotCard)
+            {
+                int coveredStartY = pnlTrackBar.Top - pnlImageHost.Top;
+                if (coveredStartY > 0)
+                {
+                    return Math.Max(120, Math.Min(fallbackHeight, coveredStartY - 8));
+                }
+            }
+
+            return fallbackHeight;
         }
 
         #endregion

@@ -2166,8 +2166,8 @@ namespace Data_Manager
                         ImagePath = node["image_path"]?.ToString() ?? string.Empty,
                         UserAngle = node["user_angle"]?.GetValue<double?>(),
                         UserThrottle = node["user_throttle"]?.GetValue<double?>(),
-                        PilotAngle = node["pilot_angle"]?.GetValue<double?>(),
-                        PilotThrottle = node["pilot_throttle"]?.GetValue<double?>(),
+                        PilotAngle = ClampPilotValue(node["pilot_angle"]?.GetValue<double?>()),
+                        PilotThrottle = ClampPilotValue(node["pilot_throttle"]?.GetValue<double?>()),
                         AngleError = node["angle_error"]?.GetValue<double?>(),
                         ThrottleError = node["throttle_error"]?.GetValue<double?>(),
                         Mode = node["mode"]?.ToString() ?? string.Empty
@@ -2179,6 +2179,16 @@ namespace Data_Manager
             }
 
             return records;
+        }
+
+        private static double? ClampPilotValue(double? value)
+        {
+            if (!value.HasValue)
+            {
+                return null;
+            }
+
+            return Math.Max(-1.0, Math.Min(1.0, value.Value));
         }
 
         private static async Task<string> EnsurePythonScriptAsync(
@@ -2501,17 +2511,26 @@ namespace Data_Manager
             sb.AppendLine("        arr = np.asarray(img)");
             sb.AppendLine("    return arr");
             sb.AppendLine("");
+            sb.AppendLine("def clamp_pilot_value(value):");
+            sb.AppendLine("    try:");
+            sb.AppendLine("        value = float(value)");
+            sb.AppendLine("    except Exception:");
+            sb.AppendLine("        return 0.0");
+            sb.AppendLine("    if not np.isfinite(value):");
+            sb.AppendLine("        return 0.0");
+            sb.AppendLine("    return max(-1.0, min(1.0, value))");
+            sb.AppendLine("");
             sb.AppendLine("def predict_model(model, image_arr):");
             sb.AppendLine("    input_arr = np.expand_dims(image_arr, axis=0)");
             sb.AppendLine("    pred = model.predict(input_arr)");
             sb.AppendLine("    if isinstance(pred, list):");
-            sb.AppendLine("        angle = float(pred[0][0])");
-            sb.AppendLine("        throttle = float(pred[1][0]) if len(pred) > 1 else 0.0");
+            sb.AppendLine("        angle = clamp_pilot_value(pred[0][0])");
+            sb.AppendLine("        throttle = clamp_pilot_value(pred[1][0]) if len(pred) > 1 else 0.0");
             sb.AppendLine("        return angle, throttle");
             sb.AppendLine("    pred = pred[0]");
             sb.AppendLine("    if len(pred) >= 2:");
-            sb.AppendLine("        return float(pred[0]), float(pred[1])");
-            sb.AppendLine("    return float(pred[0]), 0.0");
+            sb.AppendLine("        return clamp_pilot_value(pred[0]), clamp_pilot_value(pred[1])");
+            sb.AppendLine("    return clamp_pilot_value(pred[0]), 0.0");
             sb.AppendLine("");
             sb.AppendLine("def predict_batch(model, image_arrs):");
             sb.AppendLine("    if not image_arrs:");
@@ -2523,16 +2542,16 @@ namespace Data_Manager
             sb.AppendLine("        angles = pred[0]");
             sb.AppendLine("        throttles = pred[1] if len(pred) > 1 else None");
             sb.AppendLine("        for i in range(len(image_arrs)):");
-            sb.AppendLine("            angle = float(np.asarray(angles[i]).reshape(-1)[0])");
-            sb.AppendLine("            throttle = float(np.asarray(throttles[i]).reshape(-1)[0]) if throttles is not None else 0.0");
+            sb.AppendLine("            angle = clamp_pilot_value(np.asarray(angles[i]).reshape(-1)[0])");
+            sb.AppendLine("            throttle = clamp_pilot_value(np.asarray(throttles[i]).reshape(-1)[0]) if throttles is not None else 0.0");
             sb.AppendLine("            results.append((angle, throttle))");
             sb.AppendLine("        return results");
             sb.AppendLine("    for row in pred:");
             sb.AppendLine("        row = np.asarray(row).reshape(-1)");
             sb.AppendLine("        if len(row) >= 2:");
-            sb.AppendLine("            results.append((float(row[0]), float(row[1])))");
+            sb.AppendLine("            results.append((clamp_pilot_value(row[0]), clamp_pilot_value(row[1])))");
             sb.AppendLine("        else:");
-            sb.AppendLine("            results.append((float(row[0]), 0.0))");
+            sb.AppendLine("            results.append((clamp_pilot_value(row[0]), 0.0))");
             sb.AppendLine("    return results");
             sb.AppendLine("");
             sb.AppendLine("def append_result(results, tub, idx, obj, image_path, angle, throttle):");

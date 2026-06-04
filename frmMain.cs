@@ -580,8 +580,15 @@ namespace AD_AI_LearningData_Editor
 
             if (speed > 0 && videoTimer != null)
             {
-                videoTimer.Interval = Math.Max(1, (int)(33 / speed));
+                videoTimer.Interval = GetPlaybackIntervalForSpeed(speed);
             }
+        }
+
+        internal static int GetPlaybackIntervalForSpeed(double speed)
+        {
+            return speed > 0
+                ? Math.Max(1, (int)(33 / speed))
+                : 33;
         }
 
         private void InitializeImageEditor()
