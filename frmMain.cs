@@ -1,5 +1,4 @@
-﻿#nullable disable
-using Data_Manager;
+﻿using Data_Manager;
 using MaterialSkin;
 using MaterialSkin.Controls;
 using System;
@@ -387,27 +386,11 @@ namespace AD_AI_LearningData_Editor
 
         private List<string> GetTargetImageFilesForEdit()
         {
-            // 편집 대상 우선순위:
-            // 1) btnSetInterval로 두 지점을 찍어 만든 구간 전체
-            // 2) btnSetInterval로 한 지점만 찍은 경우 그 한 장
-            // 3) lstviewFileListD에서 사용자가 선택한 이미지
-            // 4) 아무 범위/선택이 없으면 현재 슬라이드 한 장
-            //
-            // 기존처럼 UploadedFile 전체를 기본 대상으로 삼지 않습니다.
-            // 수천~수만 장을 실수로 한 번에 편집해서 프로그램이 멈추는 문제를 막기 위한 처리입니다.
-
             List<string> intervalTargets = GetIntervalImageFiles();
 
             if (intervalTargets.Count > 0)
             {
                 return intervalTargets;
-            }
-
-            List<string> singleIntervalPointTargets = GetSingleIntervalPointImageFiles();
-
-            if (singleIntervalPointTargets.Count > 0)
-            {
-                return singleIntervalPointTargets;
             }
 
             List<string> selectedTargets = GetSelectedListViewImageFiles();
@@ -417,62 +400,7 @@ namespace AD_AI_LearningData_Editor
                 return selectedTargets;
             }
 
-            return GetCurrentSlideImageFile();
-        }
-
-        private List<string> GetSingleIntervalPointImageFiles()
-        {
-            List<string> targets = new List<string>();
-
-            if (HasSelectedInterval())
-            {
-                return targets;
-            }
-
-            if (intervalPointIndices == null || intervalPointIndices.Count != 1)
-            {
-                return targets;
-            }
-
-            int index = intervalPointIndices[0];
-
-            if (index < 0 || index >= slideImages.Count)
-            {
-                return targets;
-            }
-
-            string path = slideImages[index];
-
-            if (File.Exists(path) && IsImageFile(path))
-            {
-                targets.Add(path);
-            }
-
-            return targets;
-        }
-
-        private List<string> GetCurrentSlideImageFile()
-        {
-            List<string> targets = new List<string>();
-
-            if (slideImages == null || slideImages.Count == 0)
-            {
-                return targets;
-            }
-
-            if (currentSlideIndex < 0 || currentSlideIndex >= slideImages.Count)
-            {
-                return targets;
-            }
-
-            string path = slideImages[currentSlideIndex];
-
-            if (File.Exists(path) && IsImageFile(path))
-            {
-                targets.Add(path);
-            }
-
-            return targets;
+            return GetUploadedImageFiles();
         }
 
         private void SelectIntervalItemsInListView()
@@ -865,14 +793,12 @@ namespace AD_AI_LearningData_Editor
                 }
 
                 LoadUploadedFilesToD();
-                MoveToSlideIndexAfterEdit(restoreIndex);
                 SelectIntervalItemsInListView();
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"상하 반전 처리 중 오류가 발생했습니다: {ex.Message}");
                 LoadUploadedFilesToD();
-                MoveToSlideIndexAfterEdit(restoreIndex);
                 SelectIntervalItemsInListView();
             }
         }
