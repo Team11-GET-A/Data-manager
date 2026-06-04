@@ -20,7 +20,7 @@
 
 <br/>
 
-## 👥 작업 분담 계획 (Team 11)
+## 👥 작업 분담 (Team 11)
 | 담당 | 주요 역할 |
 |:---:|---|
 | **민승호(팀장) & 최상훈** | C# WinForms 기반 UI/UX 설계, 비파괴 데이터 정제 로직 개발, 이미지 렌더링 최적화, WSL 연동 공통 함수 설계 |
@@ -36,7 +36,7 @@
 > **주행 데이터 불러오기, 프레임 탐색, 비파괴 편집, 여러 tub 병합, edit_tubs 저장**
 
 <div align="center">
-  [gif1: Manager 기능 구동 화면]
+  <img src="img/Man1.gif" alt="Manager 화면" width="600"/>
 </div>
 
 * **직관적인 탐색:** 이미지와 steering/throttle 값을 동기화하여 표시하며, 슬라이드 재생과 프레임 이동을 원활하게 지원합니다.
@@ -46,7 +46,8 @@
 > **학습 데이터 선택, train.py 실행, 학습 로그 저장, 모델 및 메타데이터 관리**
 
 <div align="center">
-  [gif2: Trainer 기능 구동 화면]
+  <img src="img/Tra1.gif" alt="Trainer 화면 1" width="600"/>
+  <img src="img/Tra2.gif" alt="Trainer 화면 2" width="600"/>
 </div>
 
 * **원클릭 학습 제어:** 정제된 데이터를 선택 후, C# 버튼으로 WSL의 `e2e_env`를 활성화하고 `train.py`를 즉시 백그라운드 실행합니다.
@@ -56,7 +57,7 @@
 > **모델 불러오기, 시뮬레이터/주행 테스트, AI 판단값 추출, 실제 조작값과 비교**
 
 <div align="center">
-  [gif3: Pilot 기능 구동 화면]
+  <img src="img/Pil1.gif" alt="Pilot 화면" width="600"/>
 </div>
 
 * **1:1 프레임 매칭 검증:** 모델이 예측한 데이터를 추출하여 원본 record의 `user_angle`, `user_throttle` 값과 프레임 인덱스 기준으로 정밀 비교합니다.
