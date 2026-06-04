@@ -8,7 +8,7 @@ using System.Windows.Forms;
 namespace Data_Manager
 {
     // Pilot 화면의 프레임 데이터를 그래프로 보여주는 비교 창입니다.
-    // 위쪽은 angle, 아래쪽은 throttle의 사용자 값과 AI 예측 값을 한눈에 그립니다.
+    // 위쪽은 방향, 아래쪽은 쓰로틀의 사람 값과 AI 예측 값을 함께 그립니다.
     public partial class PliotChart : Form
     {
         private readonly List<DonkeyAsyncWorker.PilotFrameData> _frames;
@@ -42,9 +42,22 @@ namespace Data_Manager
         private string BuildSummaryText()
         {
             int total = _frames.Count;
-            int angleAi = _frames.Count(frame => frame.PilotAngle.HasValue);
-            int throttleAi = _frames.Count(frame => frame.PilotThrottle.HasValue);
-            return $"프레임 {total:N0} | AI 방향 {angleAi:N0} | AI 쓰로틀 {throttleAi:N0}";
+            double maxAngle =
+                _frames
+                    .Select(frame => frame.PilotAngle)
+                    .Where(value => value.HasValue)
+                    .Select(value => Math.Abs(value!.Value))
+                    .DefaultIfEmpty(0.0)
+                    .Max();
+            double maxThrottle =
+                _frames
+                    .Select(frame => frame.PilotThrottle)
+                    .Where(value => value.HasValue)
+                    .Select(value => Math.Abs(value!.Value))
+                    .DefaultIfEmpty(0.0)
+                    .Max();
+
+            return $"프레임 {total:N0} | AI 방향 최대 {maxAngle:0.###} | AI 쓰로틀 최대 {maxThrottle:0.###}";
         }
 
         private void PnlChart_Paint(object? sender, PaintEventArgs e)
@@ -176,12 +189,7 @@ namespace Data_Manager
                     .DefaultIfEmpty(1.0)
                     .Max();
 
-            if (maxValue <= 0.0)
-            {
-                return 1.0;
-            }
-
-            return maxValue;
+            return maxValue <= 0.0 ? 1.0 : maxValue;
         }
 
         private static void DrawLegend(
@@ -242,11 +250,7 @@ namespace Data_Manager
 
         private static int MapY(double value, Rectangle plot, double axisLimit)
         {
-            double safeLimit =
-                axisLimit <= 0.0
-                    ? 1.0
-                    : axisLimit;
-
+            double safeLimit = axisLimit <= 0.0 ? 1.0 : axisLimit;
             double clamped = Math.Max(-safeLimit, Math.Min(safeLimit, value));
             double ratio = (safeLimit - clamped) / (safeLimit * 2.0);
             return plot.Top + (int)Math.Round(plot.Height * ratio);
