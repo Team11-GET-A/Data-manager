@@ -7,6 +7,8 @@ using System.Windows.Forms;
 
 namespace Data_Manager
 {
+    // Pilot 화면의 프레임 데이터를 그래프로 보여주는 비교 창입니다.
+    // 위쪽은 angle, 아래쪽은 throttle을 사용자 값과 AI 예측값 두 선으로 그립니다.
     public partial class PliotChart : Form
     {
         private readonly List<DonkeyAsyncWorker.PilotFrameData> _frames;
@@ -22,8 +24,8 @@ namespace Data_Manager
                 .ToList();
 
             lblTitle.Text = string.IsNullOrWhiteSpace(modelName)
-                ? "Pilot Chart"
-                : $"{modelName} Chart";
+                ? "파일럿 그래프"
+                : $"{modelName} 그래프";
             lblSummary.Text = BuildSummaryText();
 
             // A single paint surface draws both value groups, so the chart is created once per form.
@@ -36,7 +38,7 @@ namespace Data_Manager
             int total = _frames.Count;
             int angleAi = _frames.Count(frame => frame.PilotAngle.HasValue);
             int throttleAi = _frames.Count(frame => frame.PilotThrottle.HasValue);
-            return $"Frames {total:N0} | AI Angle {angleAi:N0} | AI Throttle {throttleAi:N0}";
+            return $"프레임 {total:N0} | AI 방향 {angleAi:N0} | AI 속력 {throttleAi:N0}";
         }
 
         private void PnlChart_Paint(object? sender, PaintEventArgs e)
@@ -63,8 +65,8 @@ namespace Data_Manager
                 bounds.Right - 14,
                 angleBounds.Bottom + gap + chartHeight);
 
-            DrawSeriesChart(e.Graphics, angleBounds, "Angle", frame => frame.UserAngle, frame => frame.PilotAngle);
-            DrawSeriesChart(e.Graphics, throttleBounds, "Throttle", frame => frame.UserThrottle, frame => frame.PilotThrottle);
+            DrawSeriesChart(e.Graphics, angleBounds, "방향", frame => frame.UserAngle, frame => frame.PilotAngle);
+            DrawSeriesChart(e.Graphics, throttleBounds, "속력", frame => frame.UserThrottle, frame => frame.PilotThrottle);
         }
 
         private void DrawSeriesChart(
@@ -74,6 +76,7 @@ namespace Data_Manager
             Func<DonkeyAsyncWorker.PilotFrameData, double?> userSelector,
             Func<DonkeyAsyncWorker.PilotFrameData, double?> pilotSelector)
         {
+            // 같은 그리기 함수를 angle/throttle에 재사용하기 위해 값 선택 함수를 인자로 받습니다.
             Rectangle plot = Rectangle.FromLTRB(
                 bounds.Left + 58,
                 bounds.Top + 38,
@@ -89,16 +92,22 @@ namespace Data_Manager
             using Pen zeroPen = new Pen(Color.FromArgb(110, Color.White), 1);
             using Pen userPen = new Pen(Color.Lime, 2.4F);
             using Pen pilotPen = new Pen(Color.DeepSkyBlue, 2.4F);
+            double axisLimit =
+                CalculateAxisLimit(
+                    userSelector,
+                    pilotSelector);
 
             graphics.DrawString(title, titleFont, textBrush, bounds.Left + 14, bounds.Top + 11);
             DrawLegend(graphics, bounds, userPen, pilotPen, smallFont, textBrush);
 
             for (int i = 0; i <= 4; i++)
             {
-                double value = 1.0 - (i * 0.5);
-                int y = MapY(value, plot);
+                double value =
+                    axisLimit - (i * axisLimit / 2.0);
+
+                int y = MapY(value, plot, axisLimit);
                 graphics.DrawLine(Math.Abs(value) < double.Epsilon ? zeroPen : gridPen, plot.Left, y, plot.Right, y);
-                graphics.DrawString(value.ToString("0.0"), smallFont, mutedBrush, bounds.Left + 14, y - 8);
+                graphics.DrawString(value.ToString("0.###"), smallFont, mutedBrush, bounds.Left + 14, y - 8);
             }
 
             graphics.DrawRectangle(borderPen, plot);
@@ -109,8 +118,34 @@ namespace Data_Manager
                 return;
             }
 
-            DrawSeries(graphics, plot, userSelector, userPen);
-            DrawSeries(graphics, plot, pilotSelector, pilotPen);
+            DrawSeries(graphics, plot, userSelector, userPen, axisLimit);
+            DrawSeries(graphics, plot, pilotSelector, pilotPen, axisLimit);
+        }
+
+        private double CalculateAxisLimit(
+            Func<DonkeyAsyncWorker.PilotFrameData, double?> userSelector,
+            Func<DonkeyAsyncWorker.PilotFrameData, double?> pilotSelector)
+        {
+            double maxValue =
+                _frames
+                    .SelectMany(
+                        frame =>
+                            new double?[]
+                            {
+                                userSelector(frame),
+                                pilotSelector(frame)
+                            })
+                    .Where(value => value.HasValue)
+                    .Select(value => Math.Abs(value!.Value))
+                    .DefaultIfEmpty(1.0)
+                    .Max();
+
+            if (maxValue <= 0.0)
+            {
+                return 1.0;
+            }
+
+            return maxValue;
         }
 
         private static void DrawLegend(
@@ -125,7 +160,7 @@ namespace Data_Manager
             int y = bounds.Top + 18;
 
             graphics.DrawLine(userPen, x, y + 6, x + 28, y + 6);
-            graphics.DrawString("User", font, textBrush, x + 36, y - 3);
+            graphics.DrawString("사용자", font, textBrush, x + 36, y - 3);
 
             graphics.DrawLine(pilotPen, x + 92, y + 6, x + 120, y + 6);
             graphics.DrawString("AI", font, textBrush, x + 128, y - 3);
@@ -135,7 +170,8 @@ namespace Data_Manager
             Graphics graphics,
             Rectangle plot,
             Func<DonkeyAsyncWorker.PilotFrameData, double?> selector,
-            Pen pen)
+            Pen pen,
+            double axisLimit)
         {
             PointF? previous = null;
 
@@ -148,7 +184,7 @@ namespace Data_Manager
                     continue;
                 }
 
-                PointF current = new PointF(MapX(i, plot), MapY(value.Value, plot));
+                PointF current = new PointF(MapX(i, plot), MapY(value.Value, plot, axisLimit));
                 if (previous.HasValue)
                 {
                     graphics.DrawLine(pen, previous.Value, current);
@@ -168,16 +204,21 @@ namespace Data_Manager
             return plot.Left + (float)(plot.Width * (framePosition / (double)(_frames.Count - 1)));
         }
 
-        private static int MapY(double value, Rectangle plot)
+        private static int MapY(double value, Rectangle plot, double axisLimit)
         {
-            double clamped = Math.Max(-1.0, Math.Min(1.0, value));
-            double ratio = (1.0 - clamped) / 2.0;
+            double safeLimit =
+                axisLimit <= 0.0
+                    ? 1.0
+                    : axisLimit;
+
+            double clamped = Math.Max(-safeLimit, Math.Min(safeLimit, value));
+            double ratio = (safeLimit - clamped) / (safeLimit * 2.0);
             return plot.Top + (int)Math.Round(plot.Height * ratio);
         }
 
         private static void DrawEmptyMessage(Graphics graphics, Rectangle plot, Font font, Brush brush)
         {
-            const string message = "No chart data";
+            const string message = "그래프 데이터 없음";
             SizeF size = graphics.MeasureString(message, font);
             graphics.DrawString(
                 message,

@@ -5,9 +5,11 @@ using System.Windows.Forms;
 
 namespace Data_Manager
 {
+    // Pilot 화면에서 모델 하나를 카드 형태로 표시하는 재사용 컨트롤입니다.
+    // 모델/tub 선택 버튼과 현재 프레임 이미지, 사용자/모델 throttle 비교 표시를 포함합니다.
     public class PilotCardControl : UserControl
     {
-        // UI Controls
+        // 카드 내부 UI 컨트롤입니다.
         private Label lblModelNameTitle;
         private Label lblModelName;
         private Button btnTubSelect;
@@ -27,7 +29,7 @@ namespace Data_Manager
         private Label lblModelThrottleVal;
         private Label lblModelThrottleDir;
 
-        // Data Storage
+        // 카드가 가리키는 모델/tub 경로와 현재 비교 값입니다.
         private double driveAngle = 0;
         private double modelAngle = 0;
         private double driveThrottle = 0;
@@ -36,7 +38,7 @@ namespace Data_Manager
         private string modelFilePath = string.Empty;
         private string tubFolderPath = string.Empty;
 
-        // Events
+        // 부모 화면이 카드의 삭제/모델 선택/tub 선택 요청을 처리하도록 이벤트로 전달합니다.
         public event Action<PilotCardControl> RemoveRequested;
         public event Action<PilotCardControl> ModelSelectRequested;
         public event Action<PilotCardControl> TubSelectRequested;
@@ -89,6 +91,8 @@ namespace Data_Manager
 
         private void BuildUi()
         {
+            // Designer 없이 코드로 카드 UI를 구성합니다.
+            // 카드가 여러 개 동적으로 만들어질 수 있어서 UserControl 내부에서 직접 배치합니다.
             this.Size = new Size(386, 542);
             this.BackColor = Color.White;
             this.BorderStyle = BorderStyle.FixedSingle;

@@ -9,12 +9,17 @@ using System.Windows.Forms;
 
 namespace Data_Manager
 {
+    // Pilot 화면입니다.
+    // 학습된 모델을 선택하고 tub 데이터를 연결한 뒤,
+    // 실제 주행값과 AI 추론값(angle/throttle)을 프레임 단위로 비교합니다.
     public partial class Pliot : Form
     {
         private const int OverlayAlpha = 120;
         private static readonly Color OverlayBackColor = Color.FromArgb(OverlayAlpha, 22, 26, 32);
 
         private readonly List<ModelListItem> _models = new List<ModelListItem>();
+
+        // 현재 선택 모델에 연결된 tub/AI 추론 결과를 프레임 단위로 합친 목록입니다.
         private readonly List<DonkeyAsyncWorker.PilotFrameData> _frameList =
             new List<DonkeyAsyncWorker.PilotFrameData>();
 
@@ -39,6 +44,7 @@ namespace Data_Manager
 
         private void InitializePilotUi()
         {
+            // Designer 파일은 배치만 담당하고, 이벤트 연결과 초기 화면 상태는 여기서 모읍니다.
             cmbSpeed.SelectedIndex = 1;
             ApplyOverlayStyles();
             ConfigurePlaybackTimer();
@@ -66,8 +72,11 @@ namespace Data_Manager
             pnlAngleOverlay.Resize += (s, e) => ConfigureAngleOverlayLayout();
             pnlAngleOverlay.Paint += PnlAngleOverlay_Paint;
             FormClosed += Pliot_FormClosed;
+            SharedModelRegistry.ModelsChanged +=
+                SharedModelRegistry_ModelsChanged;
 
             ResizeModelColumns();
+            SyncModelsFromSharedRegistry();
             ConfigureLocationTrackBar();
             ClearModelLabels();
             DrawTubRequiredMessage();
@@ -263,14 +272,10 @@ namespace Data_Manager
 
             if (existing == null)
             {
-                existing = new ModelListItem(modelName, modelPath);
-                _models.Add(existing);
-
-                ListViewItem item = new ListViewItem(_models.Count.ToString());
-                item.SubItems.Add(modelName);
-                item.SubItems.Add(modelPath);
-                item.Tag = existing;
-                lvModelList.Items.Add(item);
+                existing =
+                    AddModelToList(
+                        modelName,
+                        modelPath);
             }
 
             foreach (ListViewItem item in lvModelList.Items)
@@ -280,6 +285,7 @@ namespace Data_Manager
             }
 
             _selectedModel = existing;
+            UpsertSharedModel(modelName, modelPath);
             ResizeModelColumns();
         }
 
@@ -292,7 +298,26 @@ namespace Data_Manager
                 return false;
             }
 
-            ModelListItem model = new ModelListItem(modelName, modelPath);
+            AddModelToList(
+                modelName,
+                modelPath);
+
+            UpsertSharedModel(
+                modelName,
+                modelPath);
+
+            return true;
+        }
+
+        private ModelListItem AddModelToList(
+            string modelName,
+            string modelPath)
+        {
+            ModelListItem model =
+                new ModelListItem(
+                    modelName,
+                    modelPath);
+
             _models.Add(model);
 
             ListViewItem item = new ListViewItem(_models.Count.ToString());
@@ -300,7 +325,115 @@ namespace Data_Manager
             item.SubItems.Add(modelPath);
             item.Tag = model;
             lvModelList.Items.Add(item);
-            return true;
+
+            return model;
+        }
+
+        private void UpsertSharedModel(
+            string modelName,
+            string modelPath)
+        {
+            if (
+                string.IsNullOrWhiteSpace(modelPath) ||
+                !File.Exists(modelPath))
+            {
+                return;
+            }
+
+            SharedModelRegistry.Upsert(
+                new SharedModelRegistryEntry()
+                {
+                    Name = Path.GetFileName(modelPath),
+                    WindowsPath = modelPath,
+                    CreatedAt = File.GetCreationTime(modelPath)
+                });
+        }
+
+        private void SharedModelRegistry_ModelsChanged(
+            object? sender,
+            EventArgs e)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            BeginInvoke(
+                new Action(
+                    () =>
+                    {
+                        if (!IsDisposed)
+                        {
+                            SyncModelsFromSharedRegistry();
+                        }
+                    }));
+        }
+
+        private void SyncModelsFromSharedRegistry()
+        {
+            List<SharedModelRegistryEntry> sharedModels =
+                SharedModelRegistry.Load();
+
+            HashSet<string> sharedPaths =
+                sharedModels
+                    .Select(model => model.WindowsPath)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = _models.Count - 1; i >= 0; i--)
+            {
+                if (sharedPaths.Contains(_models[i].Path))
+                {
+                    continue;
+                }
+
+                bool wasSelected =
+                    ReferenceEquals(_selectedModel, _models[i]);
+
+                _models.RemoveAt(i);
+                lvModelList.Items.RemoveAt(i);
+
+                if (wasSelected)
+                {
+                    _selectedModel = null;
+                    ClearModelLabels();
+                    _frameList.Clear();
+                    ConfigureLocationTrackBar();
+                    DrawTubRequiredMessage();
+                }
+            }
+
+            foreach (SharedModelRegistryEntry sharedModel in sharedModels)
+            {
+                bool exists =
+                    _models.Any(
+                        model =>
+                            string.Equals(
+                                model.Path,
+                                sharedModel.WindowsPath,
+                                StringComparison.OrdinalIgnoreCase));
+
+                if (exists)
+                {
+                    continue;
+                }
+
+                AddModelToList(
+                    Path.GetFileNameWithoutExtension(
+                        sharedModel.WindowsPath),
+                    sharedModel.WindowsPath);
+            }
+
+            RenumberModelListItems();
+            ResizeModelColumns();
+        }
+
+        private void RenumberModelListItems()
+        {
+            for (int i = 0; i < lvModelList.Items.Count; i++)
+            {
+                lvModelList.Items[i].Text =
+                    (i + 1).ToString();
+            }
         }
 
         private async void LvModelList_SelectedIndexChanged(object? sender, EventArgs e)
@@ -410,6 +543,8 @@ namespace Data_Manager
 
         private async Task LoadSelectedModelAsync(ModelListItem model)
         {
+            // 모델 registry/database에서 모델 정보와 이전에 연결했던 tub 상태를 읽어 화면에 복원합니다.
+            // tub가 이미 연결돼 있으면 프레임도 즉시 다시 로드합니다.
             // Each model owns its cached card/frame state; switching models should not reparse loaded tubs.
             _loadCts?.Cancel();
             _loadCts = new CancellationTokenSource();
@@ -501,6 +636,8 @@ namespace Data_Manager
 
         private async void BtnTubInput_Click(object? sender, EventArgs e)
         {
+            // 사용자가 선택한 tub 폴더를 WSL 경로로 저장하고,
+            // catalog/record/image 정보를 파싱해 프레임 리스트에 올립니다.
             if (_cardState == null)
             {
                 if (_selectedModel == null)
@@ -572,6 +709,8 @@ namespace Data_Manager
 
         private async void BtnGenerateJudement_Click(object? sender, EventArgs e)
         {
+            // 선택 모델과 tub를 Python 추론 스크립트에 넘겨 judement 결과 JSON을 생성하거나 로드합니다.
+            // 이후 사용자 주행값과 AI 예측값을 같은 프레임 인덱스로 병합합니다.
             if (_cardState == null || _selectedModel == null)
             {
                 MessageBox.Show("먼저 모델을 선택해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -624,13 +763,13 @@ namespace Data_Manager
             // The chart needs both recorded tub values and AI judgment values to compare the two lines.
             if (_selectedModel == null)
             {
-                MessageBox.Show("먼저 모델을 선택해 주세요.", "Chart", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("먼저 모델을 선택해 주세요.", "그래프", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
             if (_frameList.Count == 0)
             {
-                MessageBox.Show("먼저 TUB 데이터를 연결해 주세요.", "Chart", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("먼저 TUB 데이터를 연결해 주세요.", "그래프", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -638,7 +777,7 @@ namespace Data_Manager
                 frame.PilotAngle.HasValue || frame.PilotThrottle.HasValue);
             if (!hasAiJudement)
             {
-                MessageBox.Show("AI 판단 데이터를 먼저 생성하거나 불러와 주세요.", "Chart", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("AI 판단 데이터를 먼저 생성하거나 불러와 주세요.", "그래프", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -922,6 +1061,7 @@ namespace Data_Manager
 
         private void ShowCurrentFrame()
         {
+            // 현재 프레임의 이미지, 사용자 조향/스로틀, AI 조향/스로틀을 한 화면에 반영합니다.
             if (_frameList.Count == 0)
             {
                 lblImageIndexOverlay.Text = "0 / 0";
@@ -1161,8 +1301,8 @@ namespace Data_Manager
 
             e.Graphics.DrawLine(centerPen, centerX, 18, centerX, centerY + 18);
             e.Graphics.DrawLine(axisPen, centerX - length, centerY, centerX + length, centerY);
-            e.Graphics.DrawString("User Angle", titleFont, titleBrush, 14, 12);
-            e.Graphics.DrawString("AI Angle", titleFont, titleBrush, pnlAngleOverlay.Width - 82, 12);
+            e.Graphics.DrawString("사용자 방향", titleFont, titleBrush, 14, 12);
+            e.Graphics.DrawString("AI 방향", titleFont, titleBrush, pnlAngleOverlay.Width - 66, 12);
             DrawAngleLine(e.Graphics, userPen, centerX, centerY, length, GetCurrentAngleValue(true));
             DrawAngleLine(e.Graphics, pilotPen, centerX, centerY, length, GetCurrentAngleValue(false));
         }
@@ -1209,6 +1349,9 @@ namespace Data_Manager
 
         private void Pliot_FormClosed(object? sender, FormClosedEventArgs e)
         {
+            SharedModelRegistry.ModelsChanged -=
+                SharedModelRegistry_ModelsChanged;
+
             _loadCts?.Cancel();
             _loadCts?.Dispose();
             _playbackTimer?.Stop();

@@ -4,6 +4,7 @@ using System.Windows.Forms;
 namespace Data_Manager
 {
     // Long-running model/tub jobs report their current step through this reusable dialog.
+    // Pilot 화면의 tub 파싱, 모델 로드, 추론 생성처럼 시간이 걸리는 작업에서 공통으로 사용합니다.
     public partial class ProgressStatusForm : Form
     {
         public event Action? CancelRequested;

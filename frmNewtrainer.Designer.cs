@@ -31,7 +31,6 @@
             pnlHeader = new Panel();
             lblTitle = new Label();
             btnLoadData = new Button();
-            btnDetectAnomalies = new Button();
             lstCatalogRows = new ListBox();
             picDriveImage = new PictureBox();
             pnlPlayback = new Panel();
@@ -44,6 +43,12 @@
             btnRestoreData = new Button();
             btnTrain = new Button();
             btnDrive = new Button();
+            lstModels = new ListView();
+            colModelNo = new ColumnHeader();
+            colModelName = new ColumnHeader();
+            colModelPath = new ColumnHeader();
+            btnModelDlt = new Button();
+            btnNameCh = new Button();
             pnlHeader.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)picDriveImage).BeginInit();
             pnlPlayback.SuspendLayout();
@@ -56,7 +61,7 @@
             pnlHeader.Dock = DockStyle.Top;
             pnlHeader.Location = new Point(0, 0);
             pnlHeader.Name = "pnlHeader";
-            pnlHeader.Size = new Size(1584, 50);
+            pnlHeader.Size = new Size(1584, 56);
             pnlHeader.TabIndex = 0;
             // 
             // lblTitle
@@ -64,48 +69,38 @@
             lblTitle.AutoSize = true;
             lblTitle.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
             lblTitle.ForeColor = Color.White;
-            lblTitle.Location = new Point(15, 13);
+            lblTitle.Location = new Point(18, 15);
             lblTitle.Name = "lblTitle";
-            lblTitle.Size = new Size(321, 21);
+            lblTitle.Size = new Size(92, 21);
             lblTitle.TabIndex = 0;
-            lblTitle.Text = "🏎️ DonkeyCar Advanced Data Manager";
+            lblTitle.Text = "🏎️ Trainer";
             // 
             // btnLoadData
             // 
-            btnLoadData.Location = new Point(20, 70);
+            btnLoadData.Location = new Point(12, 758);
             btnLoadData.Name = "btnLoadData";
-            btnLoadData.Size = new Size(220, 40);
+            btnLoadData.Size = new Size(500, 46);
             btnLoadData.TabIndex = 1;
             btnLoadData.Text = "📁 데이터 폴더 로드";
             btnLoadData.UseVisualStyleBackColor = true;
             btnLoadData.Click += BtnLoadData_Click;
             // 
-            // btnDetectAnomalies
-            // 
-            btnDetectAnomalies.Location = new Point(250, 70);
-            btnDetectAnomalies.Name = "btnDetectAnomalies";
-            btnDetectAnomalies.Size = new Size(220, 40);
-            btnDetectAnomalies.TabIndex = 2;
-            btnDetectAnomalies.Text = "🚨 이상 데이터 탐지";
-            btnDetectAnomalies.UseVisualStyleBackColor = true;
-            btnDetectAnomalies.Click += BtnDetectAnomalies_Click;
-            // 
             // lstCatalogRows
             // 
             lstCatalogRows.Font = new Font("Consolas", 9F);
             lstCatalogRows.FormattingEnabled = true;
-            lstCatalogRows.Location = new Point(20, 125);
+            lstCatalogRows.Location = new Point(12, 90);
             lstCatalogRows.Name = "lstCatalogRows";
-            lstCatalogRows.Size = new Size(470, 438);
+            lstCatalogRows.Size = new Size(500, 648);
             lstCatalogRows.TabIndex = 3;
             lstCatalogRows.SelectedIndexChanged += LstCatalogRows_SelectedIndexChanged;
             // 
             // picDriveImage
             // 
             picDriveImage.BorderStyle = BorderStyle.FixedSingle;
-            picDriveImage.Location = new Point(510, 125);
+            picDriveImage.Location = new Point(532, 90);
             picDriveImage.Name = "picDriveImage";
-            picDriveImage.Size = new Size(450, 300);
+            picDriveImage.Size = new Size(500, 375);
             picDriveImage.SizeMode = PictureBoxSizeMode.Zoom;
             picDriveImage.TabIndex = 4;
             picDriveImage.TabStop = false;
@@ -118,14 +113,14 @@
             pnlPlayback.Controls.Add(btnStop);
             pnlPlayback.Controls.Add(lblSpeed);
             pnlPlayback.Controls.Add(cmbSpeed);
-            pnlPlayback.Location = new Point(510, 435);
+            pnlPlayback.Location = new Point(532, 480);
             pnlPlayback.Name = "pnlPlayback";
-            pnlPlayback.Size = new Size(450, 45);
+            pnlPlayback.Size = new Size(500, 48);
             pnlPlayback.TabIndex = 5;
             // 
             // btnPlay
             // 
-            btnPlay.Location = new Point(10, 7);
+            btnPlay.Location = new Point(18, 8);
             btnPlay.Name = "btnPlay";
             btnPlay.Size = new Size(60, 30);
             btnPlay.TabIndex = 0;
@@ -134,7 +129,7 @@
             // 
             // btnPause
             // 
-            btnPause.Location = new Point(80, 7);
+            btnPause.Location = new Point(88, 8);
             btnPause.Name = "btnPause";
             btnPause.Size = new Size(60, 30);
             btnPause.TabIndex = 1;
@@ -143,7 +138,7 @@
             // 
             // btnStop
             // 
-            btnStop.Location = new Point(150, 7);
+            btnStop.Location = new Point(158, 8);
             btnStop.Name = "btnStop";
             btnStop.Size = new Size(60, 30);
             btnStop.TabIndex = 2;
@@ -154,7 +149,7 @@
             // lblSpeed
             // 
             lblSpeed.AutoSize = true;
-            lblSpeed.Location = new Point(230, 12);
+            lblSpeed.Location = new Point(306, 14);
             lblSpeed.Name = "lblSpeed";
             lblSpeed.Size = new Size(34, 15);
             lblSpeed.TabIndex = 3;
@@ -165,7 +160,7 @@
             cmbSpeed.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbSpeed.FormattingEnabled = true;
             cmbSpeed.Items.AddRange(new object[] { "0.5x", "1.0x", "2.0x", "5.0x" });
-            cmbSpeed.Location = new Point(270, 8);
+            cmbSpeed.Location = new Point(350, 10);
             cmbSpeed.Name = "cmbSpeed";
             cmbSpeed.Size = new Size(120, 23);
             cmbSpeed.TabIndex = 4;
@@ -173,9 +168,9 @@
             // 
             // btnCleanData
             // 
-            btnCleanData.Location = new Point(510, 495);
+            btnCleanData.Location = new Point(532, 550);
             btnCleanData.Name = "btnCleanData";
-            btnCleanData.Size = new Size(220, 45);
+            btnCleanData.Size = new Size(245, 48);
             btnCleanData.TabIndex = 6;
             btnCleanData.Text = "✂️ 선택 프레임 제외";
             btnCleanData.UseVisualStyleBackColor = true;
@@ -183,9 +178,9 @@
             // 
             // btnRestoreData
             // 
-            btnRestoreData.Location = new Point(740, 495);
+            btnRestoreData.Location = new Point(787, 550);
             btnRestoreData.Name = "btnRestoreData";
-            btnRestoreData.Size = new Size(220, 45);
+            btnRestoreData.Size = new Size(245, 48);
             btnRestoreData.TabIndex = 7;
             btnRestoreData.Text = "⏪ 선택 프레임 복원";
             btnRestoreData.UseVisualStyleBackColor = true;
@@ -196,9 +191,9 @@
             btnTrain.BackColor = Color.FromArgb(43, 108, 176);
             btnTrain.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
             btnTrain.ForeColor = Color.White;
-            btnTrain.Location = new Point(510, 560);
+            btnTrain.Location = new Point(532, 620);
             btnTrain.Name = "btnTrain";
-            btnTrain.Size = new Size(220, 60);
+            btnTrain.Size = new Size(245, 68);
             btnTrain.TabIndex = 8;
             btnTrain.Text = "\U0001f9e0 AI 학습 시작";
             btnTrain.UseVisualStyleBackColor = false;
@@ -209,13 +204,68 @@
             btnDrive.BackColor = Color.FromArgb(34, 139, 34);
             btnDrive.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
             btnDrive.ForeColor = Color.White;
-            btnDrive.Location = new Point(740, 560);
+            btnDrive.Location = new Point(787, 620);
             btnDrive.Name = "btnDrive";
-            btnDrive.Size = new Size(220, 60);
+            btnDrive.Size = new Size(245, 68);
             btnDrive.TabIndex = 9;
             btnDrive.Text = "🚗 자율주행 시작";
             btnDrive.UseVisualStyleBackColor = false;
             btnDrive.Click += BtnDrive_Click;
+            // 
+            // lstModels
+            // 
+            lstModels.Columns.AddRange(new ColumnHeader[] { colModelNo, colModelName, colModelPath });
+            lstModels.Font = new Font("Consolas", 9F);
+            lstModels.FullRowSelect = true;
+            lstModels.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            lstModels.Location = new Point(1052, 90);
+            lstModels.MultiSelect = false;
+            lstModels.Name = "lstModels";
+            lstModels.Size = new Size(520, 650);
+            lstModels.TabIndex = 10;
+            lstModels.UseCompatibleStateImageBehavior = false;
+            lstModels.View = View.Details;
+            // 
+            // colModelNo
+            // 
+            colModelNo.Text = "번호";
+            colModelNo.Width = 55;
+            // 
+            // colModelName
+            // 
+            colModelName.Text = "모델 이름";
+            colModelName.Width = 170;
+            // 
+            // colModelPath
+            // 
+            colModelPath.Text = "경로";
+            colModelPath.Width = 285;
+            // 
+            // btnModelDlt
+            // 
+            btnModelDlt.BackColor = Color.Red;
+            btnModelDlt.Font = new Font("맑은 고딕", 9F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            btnModelDlt.ForeColor = Color.White;
+            btnModelDlt.Location = new Point(1052, 758);
+            btnModelDlt.Margin = new Padding(2);
+            btnModelDlt.Name = "btnModelDlt";
+            btnModelDlt.Size = new Size(160, 52);
+            btnModelDlt.TabIndex = 11;
+            btnModelDlt.Text = "모델 삭제";
+            btnModelDlt.UseVisualStyleBackColor = false;
+            // 
+            // btnNameCh
+            // 
+            btnNameCh.BackColor = Color.FromArgb(0, 192, 0);
+            btnNameCh.Font = new Font("맑은 고딕", 9F, FontStyle.Bold, GraphicsUnit.Point, 129);
+            btnNameCh.ForeColor = Color.Black;
+            btnNameCh.Location = new Point(1222, 758);
+            btnNameCh.Margin = new Padding(2);
+            btnNameCh.Name = "btnNameCh";
+            btnNameCh.Size = new Size(160, 52);
+            btnNameCh.TabIndex = 12;
+            btnNameCh.Text = "이름 변경";
+            btnNameCh.UseVisualStyleBackColor = false;
             // 
             // frmNewtrainer
             // 
@@ -223,6 +273,9 @@
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = Color.FromArgb(245, 247, 250);
             ClientSize = new Size(1584, 861);
+            Controls.Add(btnNameCh);
+            Controls.Add(btnModelDlt);
+            Controls.Add(lstModels);
             Controls.Add(btnDrive);
             Controls.Add(btnTrain);
             Controls.Add(btnRestoreData);
@@ -230,7 +283,6 @@
             Controls.Add(pnlPlayback);
             Controls.Add(picDriveImage);
             Controls.Add(lstCatalogRows);
-            Controls.Add(btnDetectAnomalies);
             Controls.Add(btnLoadData);
             Controls.Add(pnlHeader);
             Name = "frmNewtrainer";
@@ -249,7 +301,6 @@
         private Panel pnlHeader;
         private Label lblTitle;
         private Button btnLoadData;
-        private Button btnDetectAnomalies;
         private ListBox lstCatalogRows;
         private PictureBox picDriveImage;
         private Panel pnlPlayback;
@@ -262,5 +313,11 @@
         private Button btnRestoreData;
         private Button btnTrain;
         private Button btnDrive;
+        private ListView lstModels;
+        private ColumnHeader colModelNo;
+        private ColumnHeader colModelName;
+        private ColumnHeader colModelPath;
+        private Button btnModelDlt;
+        private Button btnNameCh;
     }
 }

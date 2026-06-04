@@ -540,7 +540,7 @@ namespace Data_Manager
             lblUserThrottleTitle.Name = "lblUserThrottleTitle";
             lblUserThrottleTitle.Size = new Size(97, 19);
             lblUserThrottleTitle.TabIndex = 0;
-            lblUserThrottleTitle.Text = "User Throttle";
+            lblUserThrottleTitle.Text = "사용자 속력";
             // 
             // lblUserThrottleValue
             // 
@@ -562,7 +562,7 @@ namespace Data_Manager
             lblPilotThrottleTitle.Name = "lblPilotThrottleTitle";
             lblPilotThrottleTitle.Size = new Size(81, 19);
             lblPilotThrottleTitle.TabIndex = 2;
-            lblPilotThrottleTitle.Text = "AI Throttle";
+            lblPilotThrottleTitle.Text = "AI 속력";
             // 
             // lblPilotThrottleValue
             // 
@@ -626,7 +626,7 @@ namespace Data_Manager
             btnPilotChart.Name = "btnPilotChart";
             btnPilotChart.Size = new Size(126, 36);
             btnPilotChart.TabIndex = 4;
-            btnPilotChart.Text = "Chart";
+            btnPilotChart.Text = "그래프";
             btnPilotChart.UseVisualStyleBackColor = true;
             // 
             // btnTubInput

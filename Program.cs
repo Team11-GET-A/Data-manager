@@ -1,5 +1,7 @@
 ﻿namespace Data_Manager
 {
+    // 프로그램 시작점입니다.
+    // WinForms 기본 설정을 초기화한 뒤 메인 데이터 관리 화면(frmMain)을 실행합니다.
     internal static class Program
     {
         /// <summary>
