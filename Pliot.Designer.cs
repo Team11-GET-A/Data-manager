@@ -60,18 +60,12 @@ namespace Data_Manager
             btnNextImage = new Button();
             btnJumpNext5 = new Button();
             pnlImageHost = new Panel();
-            pnlAngleOverlay = new Panel();
-            pnlAngleCenterLine = new Panel();
-            lblUserAngleValue = new Label();
-            lblPilotAngleValue = new Label();
-            pnlThrottleOverlay = new Panel();
-            lblUserThrottleTitle = new Label();
-            lblUserThrottleValue = new Label();
-            lblPilotThrottleTitle = new Label();
-            lblPilotThrottleValue = new Label();
+            picPilotImage = new PictureBox();
+            pliotAngleIndicator = new pliotAngleDicatoer();
+            pliotAiThrottleGauge = new pliotThrottleGauge();
+            pliotTubThrottleGauge = new pliotThrottleGauge();
             pnlImageIndexOverlay = new Panel();
             lblImageIndexOverlay = new Label();
-            picPilotImage = new PictureBox();
             pnlPilotHeader = new Panel();
             btnGenerateJudement = new Button();
             btnPilotChart = new Button();
@@ -92,10 +86,9 @@ namespace Data_Manager
             ((System.ComponentModel.ISupportInitialize)trbLocation).BeginInit();
             pnlPlaybackControls.SuspendLayout();
             pnlImageHost.SuspendLayout();
-            pnlAngleOverlay.SuspendLayout();
-            pnlThrottleOverlay.SuspendLayout();
-            pnlImageIndexOverlay.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)picPilotImage).BeginInit();
+            picPilotImage.SuspendLayout();
+            pnlImageIndexOverlay.SuspendLayout();
             pnlPilotHeader.SuspendLayout();
             SuspendLayout();
             // 
@@ -462,103 +455,53 @@ namespace Data_Manager
             pnlImageHost.Size = new Size(1130, 767);
             pnlImageHost.TabIndex = 1;
             // 
-            // pnlAngleOverlay
+            // picPilotImage
             // 
-            pnlAngleOverlay.BackColor = Color.FromArgb(120, 22, 26, 32);
-            pnlAngleOverlay.Controls.Add(pnlAngleCenterLine);
-            pnlAngleOverlay.Controls.Add(lblUserAngleValue);
-            pnlAngleOverlay.Controls.Add(lblPilotAngleValue);
-            pnlAngleOverlay.Location = new Point(374, 233);
-            pnlAngleOverlay.Name = "pnlAngleOverlay";
-            pnlAngleOverlay.Size = new Size(420, 130);
-            pnlAngleOverlay.TabIndex = 3;
+            picPilotImage.BackColor = Color.FromArgb(35, 39, 44);
+            picPilotImage.Controls.Add(pliotAngleIndicator);
+            picPilotImage.Controls.Add(pliotAiThrottleGauge);
+            picPilotImage.Controls.Add(pliotTubThrottleGauge);
+            picPilotImage.Controls.Add(pnlImageIndexOverlay);
+            picPilotImage.Dock = DockStyle.Fill;
+            picPilotImage.Location = new Point(0, 0);
+            picPilotImage.Name = "picPilotImage";
+            picPilotImage.Size = new Size(1130, 767);
+            picPilotImage.SizeMode = PictureBoxSizeMode.Zoom;
+            picPilotImage.TabIndex = 0;
+            picPilotImage.TabStop = false;
             // 
-            // pnlAngleCenterLine
+            // pliotAngleIndicator
             // 
-            pnlAngleCenterLine.BackColor = Color.Gainsboro;
-            pnlAngleCenterLine.Location = new Point(209, 18);
-            pnlAngleCenterLine.Name = "pnlAngleCenterLine";
-            pnlAngleCenterLine.Size = new Size(3, 74);
-            pnlAngleCenterLine.TabIndex = 1;
-            pnlAngleCenterLine.Visible = false;
+            pliotAngleIndicator.BackColor = Color.Transparent;
+            pliotAngleIndicator.ForeColor = Color.White;
+            pliotAngleIndicator.Location = new Point(355, 585);
+            pliotAngleIndicator.Name = "pliotAngleIndicator";
+            pliotAngleIndicator.Size = new Size(420, 164);
+            pliotAngleIndicator.TabIndex = 3;
             // 
-            // lblUserAngleValue
+            // pliotAiThrottleGauge
             // 
-            lblUserAngleValue.Font = new Font("맑은 고딕", 14F, FontStyle.Bold);
-            lblUserAngleValue.ForeColor = Color.Lime;
-            lblUserAngleValue.Location = new Point(14, 92);
-            lblUserAngleValue.Name = "lblUserAngleValue";
-            lblUserAngleValue.Size = new Size(132, 30);
-            lblUserAngleValue.TabIndex = 0;
-            lblUserAngleValue.Text = "-0.25";
-            lblUserAngleValue.TextAlign = ContentAlignment.MiddleLeft;
+            pliotAiThrottleGauge.BackColor = Color.Transparent;
+            pliotAiThrottleGauge.FillColor = Color.FromArgb(255, 55, 145, 255);
+            pliotAiThrottleGauge.ForeColor = Color.White;
+            pliotAiThrottleGauge.GaugeTitle = "AI";
+            pliotAiThrottleGauge.Location = new Point(18, 629);
+            pliotAiThrottleGauge.Mirrored = true;
+            pliotAiThrottleGauge.Name = "pliotAiThrottleGauge";
+            pliotAiThrottleGauge.Size = new Size(240, 120);
+            pliotAiThrottleGauge.TabIndex = 2;
             // 
-            // lblPilotAngleValue
+            // pliotTubThrottleGauge
             // 
-            lblPilotAngleValue.Font = new Font("맑은 고딕", 14F, FontStyle.Bold);
-            lblPilotAngleValue.ForeColor = Color.DeepSkyBlue;
-            lblPilotAngleValue.Location = new Point(274, 92);
-            lblPilotAngleValue.Name = "lblPilotAngleValue";
-            lblPilotAngleValue.Size = new Size(132, 30);
-            lblPilotAngleValue.TabIndex = 2;
-            lblPilotAngleValue.Text = "-0.23";
-            lblPilotAngleValue.TextAlign = ContentAlignment.MiddleRight;
-            // 
-            // pnlThrottleOverlay
-            // 
-            pnlThrottleOverlay.BackColor = Color.FromArgb(120, 22, 26, 32);
-            pnlThrottleOverlay.Controls.Add(lblUserThrottleTitle);
-            pnlThrottleOverlay.Controls.Add(lblUserThrottleValue);
-            pnlThrottleOverlay.Controls.Add(lblPilotThrottleTitle);
-            pnlThrottleOverlay.Controls.Add(lblPilotThrottleValue);
-            pnlThrottleOverlay.Location = new Point(12, 420);
-            pnlThrottleOverlay.Name = "pnlThrottleOverlay";
-            pnlThrottleOverlay.Size = new Size(220, 92);
-            pnlThrottleOverlay.TabIndex = 2;
-            // 
-            // lblUserThrottleTitle
-            // 
-            lblUserThrottleTitle.AutoSize = true;
-            lblUserThrottleTitle.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            lblUserThrottleTitle.ForeColor = Color.White;
-            lblUserThrottleTitle.Location = new Point(14, 18);
-            lblUserThrottleTitle.Name = "lblUserThrottleTitle";
-            lblUserThrottleTitle.Size = new Size(97, 19);
-            lblUserThrottleTitle.TabIndex = 0;
-            lblUserThrottleTitle.Text = "사용자 속력";
-            // 
-            // lblUserThrottleValue
-            // 
-            lblUserThrottleValue.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            lblUserThrottleValue.ForeColor = Color.Lime;
-            lblUserThrottleValue.Location = new Point(128, 18);
-            lblUserThrottleValue.Name = "lblUserThrottleValue";
-            lblUserThrottleValue.Size = new Size(74, 19);
-            lblUserThrottleValue.TabIndex = 1;
-            lblUserThrottleValue.Text = "0.42";
-            lblUserThrottleValue.TextAlign = ContentAlignment.MiddleRight;
-            // 
-            // lblPilotThrottleTitle
-            // 
-            lblPilotThrottleTitle.AutoSize = true;
-            lblPilotThrottleTitle.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            lblPilotThrottleTitle.ForeColor = Color.White;
-            lblPilotThrottleTitle.Location = new Point(14, 54);
-            lblPilotThrottleTitle.Name = "lblPilotThrottleTitle";
-            lblPilotThrottleTitle.Size = new Size(81, 19);
-            lblPilotThrottleTitle.TabIndex = 2;
-            lblPilotThrottleTitle.Text = "AI 속력";
-            // 
-            // lblPilotThrottleValue
-            // 
-            lblPilotThrottleValue.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            lblPilotThrottleValue.ForeColor = Color.DeepSkyBlue;
-            lblPilotThrottleValue.Location = new Point(128, 54);
-            lblPilotThrottleValue.Name = "lblPilotThrottleValue";
-            lblPilotThrottleValue.Size = new Size(74, 19);
-            lblPilotThrottleValue.TabIndex = 3;
-            lblPilotThrottleValue.Text = "0.41";
-            lblPilotThrottleValue.TextAlign = ContentAlignment.MiddleRight;
+            pliotTubThrottleGauge.BackColor = Color.Transparent;
+            pliotTubThrottleGauge.FillColor = Color.FromArgb(255, 255, 92, 76);
+            pliotTubThrottleGauge.ForeColor = Color.White;
+            pliotTubThrottleGauge.GaugeTitle = "사람";
+            pliotTubThrottleGauge.Location = new Point(18, 499);
+            pliotTubThrottleGauge.Mirrored = true;
+            pliotTubThrottleGauge.Name = "pliotTubThrottleGauge";
+            pliotTubThrottleGauge.Size = new Size(240, 120);
+            pliotTubThrottleGauge.TabIndex = 4;
             // 
             // pnlImageIndexOverlay
             // 
@@ -580,20 +523,6 @@ namespace Data_Manager
             lblImageIndexOverlay.TabIndex = 0;
             lblImageIndexOverlay.Text = "123 / 3456";
             lblImageIndexOverlay.TextAlign = ContentAlignment.MiddleCenter;
-            // 
-            // picPilotImage
-            // 
-            picPilotImage.BackColor = Color.FromArgb(35, 39, 44);
-            picPilotImage.Controls.Add(pnlAngleOverlay);
-            picPilotImage.Controls.Add(pnlThrottleOverlay);
-            picPilotImage.Controls.Add(pnlImageIndexOverlay);
-            picPilotImage.Dock = DockStyle.Fill;
-            picPilotImage.Location = new Point(0, 0);
-            picPilotImage.Name = "picPilotImage";
-            picPilotImage.Size = new Size(1130, 767);
-            picPilotImage.SizeMode = PictureBoxSizeMode.Zoom;
-            picPilotImage.TabIndex = 0;
-            picPilotImage.TabStop = false;
             // 
             // pnlPilotHeader
             // 
@@ -655,7 +584,7 @@ namespace Data_Manager
             lblTubPathTitle.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
             lblTubPathTitle.Location = new Point(0, 14);
             lblTubPathTitle.Name = "lblTubPathTitle";
-            lblTubPathTitle.Size = new Size(64, 20);
+            lblTubPathTitle.Size = new Size(58, 20);
             lblTubPathTitle.TabIndex = 0;
             lblTubPathTitle.Text = "모델명:";
             // 
@@ -667,7 +596,6 @@ namespace Data_Manager
             Controls.Add(splitMain);
             Font = new Font("맑은 고딕", 11.25F);
             Margin = new Padding(2);
-            MinimumSize = new Size(1100, 700);
             Name = "Pliot";
             Padding = new Padding(8);
             Text = "파일럿";
@@ -683,14 +611,13 @@ namespace Data_Manager
             pnlRight.ResumeLayout(false);
             pnlPilotCard.ResumeLayout(false);
             pnlTrackBar.ResumeLayout(false);
+            pnlTrackBar.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trbLocation).EndInit();
             pnlPlaybackControls.ResumeLayout(false);
             pnlImageHost.ResumeLayout(false);
-            pnlAngleOverlay.ResumeLayout(false);
-            pnlThrottleOverlay.ResumeLayout(false);
-            pnlThrottleOverlay.PerformLayout();
-            pnlImageIndexOverlay.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)picPilotImage).EndInit();
+            picPilotImage.ResumeLayout(false);
+            pnlImageIndexOverlay.ResumeLayout(false);
             pnlPilotHeader.ResumeLayout(false);
             pnlPilotHeader.PerformLayout();
             ResumeLayout(false);
@@ -729,15 +656,9 @@ namespace Data_Manager
         private PictureBox picPilotImage;
         private Panel pnlImageIndexOverlay;
         private Label lblImageIndexOverlay;
-        private Panel pnlThrottleOverlay;
-        private Label lblUserThrottleTitle;
-        private Label lblUserThrottleValue;
-        private Label lblPilotThrottleTitle;
-        private Label lblPilotThrottleValue;
-        private Panel pnlAngleOverlay;
-        private Label lblUserAngleValue;
-        private Panel pnlAngleCenterLine;
-        private Label lblPilotAngleValue;
+        private pliotAngleDicatoer pliotAngleIndicator;
+        private pliotThrottleGauge pliotAiThrottleGauge;
+        private pliotThrottleGauge pliotTubThrottleGauge;
         private Panel pnlTrackBar;
         private TrackBar trbLocation;
         private Panel pnlPlaybackControls;

@@ -64,6 +64,7 @@ namespace DonkeyDataManager
 
         private Process wslProcess = null;
         private Process browserProcess = null;
+        private int trainingProcessWslPid;
 
         private System.Windows.Forms.Timer browserMonitorTimer =
             new System.Windows.Forms.Timer();
@@ -1798,6 +1799,7 @@ namespace DonkeyDataManager
             // 4. 로그를 파일과 상태창에 동시에 남기고, 성공 시 모델 registry에 등록
             TrainerStatus statusForm = null;
             bool trainingCancelled = false;
+            bool trainingStopRequested = false;
             string modelName = "";
             string modelWindowsPath = "";
 
@@ -1897,6 +1899,7 @@ namespace DonkeyDataManager
 
                 statusForm =
                     new TrainerStatus();
+                trainingProcessWslPid = 0;
 
                 statusForm.CancelRequested +=
                     (cancelSender, cancelArgs) =>
@@ -1905,6 +1908,14 @@ namespace DonkeyDataManager
                         statusForm.AppendLog(
                             "학습 취소 요청됨. 실행 중인 WSL 학습 프로세스를 종료합니다.");
                         TryTerminateTrainingProcess();
+                    };
+                statusForm.StopTrainingRequested +=
+                    (stopSender, stopArgs) =>
+                    {
+                        trainingStopRequested = true;
+                        statusForm.AppendLog(
+                            "학습 중단 요청됨. 현재까지의 학습 결과로 모델 저장을 시도합니다.");
+                        TryRequestTrainingStop(statusForm);
                     };
 
                 statusForm.SetStatus(
@@ -1949,12 +1960,12 @@ namespace DonkeyDataManager
 
                 if (wslProcess.ExitCode != 0)
                 {
-                    CleanupGeneratedModel(
-                        modelName,
-                        modelWindowsPath);
-
                     if (trainingCancelled)
                     {
+                        CleanupGeneratedModel(
+                            modelName,
+                            modelWindowsPath);
+
                         statusForm.AppendLog(
                             "학습이 취소되어 생성 중이던 모델 데이터를 정리했습니다.");
 
@@ -1965,19 +1976,31 @@ namespace DonkeyDataManager
                         return;
                     }
 
-                    statusForm.SetStatus(
-                        "학습 실패",
-                        selectedDataPath,
-                        modelWindowsPath,
-                        trainingLogPath);
+                    if (trainingStopRequested && File.Exists(modelWindowsPath))
+                    {
+                        statusForm.AppendLog(
+                            "학습 중단 후 모델 파일이 생성되어 등록을 계속합니다.");
+                    }
+                    else
+                    {
+                        CleanupGeneratedModel(
+                            modelName,
+                            modelWindowsPath);
 
-                    statusForm.MarkFinished(
-                        "학습 실패");
+                        statusForm.SetStatus(
+                            "학습 실패",
+                            selectedDataPath,
+                            modelWindowsPath,
+                            trainingLogPath);
 
-                    throw new InvalidOperationException(
-                        "train.py 실행이 실패했습니다.\n\n" +
-                        "자세한 내용은 로그 파일을 확인하세요.\n" +
-                        trainingLogPath);
+                        statusForm.MarkFinished(
+                            "학습 실패");
+
+                        throw new InvalidOperationException(
+                            "train.py 실행이 실패했습니다.\n\n" +
+                            "자세한 내용은 로그 파일을 확인하세요.\n" +
+                            trainingLogPath);
+                    }
                 }
 
                 if (!File.Exists(modelWindowsPath))
@@ -2002,13 +2025,13 @@ namespace DonkeyDataManager
                 AddOrUpdateModelList(model);
 
                 statusForm.SetStatus(
-                    "학습 완료",
+                    trainingStopRequested ? "학습 중단 후 모델 생성 완료" : "학습 완료",
                     selectedDataPath,
                     modelWindowsPath,
                     trainingLogPath);
 
                 statusForm.MarkFinished(
-                    "학습 완료");
+                    trainingStopRequested ? "학습 중단 후 모델 생성 완료" : "학습 완료");
 
                 if (!statusForm.IsDisposed)
                 {
@@ -2100,10 +2123,91 @@ namespace DonkeyDataManager
                 "echo \"Saving model: " +
                 EscapeForDoubleQuotedBash(modelRelativePath) +
                 "\"; " +
-                "python train.py --tubs " +
+                "setsid python train.py --tubs " +
                 QuoteForBash(selectedTubWslPath) +
                 " --model " +
-                QuoteForBash(modelRelativePath);
+                QuoteForBash(modelRelativePath) +
+                " & TRAIN_PID=$!; " +
+                "echo __TRAIN_PID__:$TRAIN_PID; " +
+                "wait $TRAIN_PID";
+        }
+
+        private void TryRequestTrainingStop(TrainerStatus statusForm)
+        {
+            try
+            {
+                if (trainingProcessWslPid <= 0)
+                {
+                    statusForm.AppendLog(
+                        "학습 프로세스 PID를 아직 확인하지 못해 중단 신호를 보내지 못했습니다.");
+                    return;
+                }
+
+                ProcessStartInfo psi =
+                    new ProcessStartInfo
+                    {
+                        FileName = "wsl.exe",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+
+                AddWslArguments(
+                    psi,
+                    BuildStopTrainingCommand(trainingProcessWslPid));
+
+                using (Process proc = Process.Start(psi))
+                {
+                    if (proc == null)
+                    {
+                        statusForm.AppendLog(
+                            "학습 중단 신호 전송 실패: wsl.exe를 시작하지 못했습니다.");
+                        return;
+                    }
+
+                    proc.WaitForExit();
+
+                    if (proc.ExitCode == 0)
+                    {
+                        statusForm.AppendLog(
+                            "학습 프로세스 그룹에 중단 신호를 보냈습니다. 모델 저장을 기다립니다.");
+                    }
+                    else
+                    {
+                        string error =
+                            proc.StandardError
+                                .ReadToEnd()
+                                .Replace("\0", "")
+                                .Trim();
+
+                        statusForm.AppendLog(
+                            "학습 중단 신호 전송 실패: " +
+                            (string.IsNullOrWhiteSpace(error) ? "알 수 없는 오류" : error));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                statusForm.AppendLog(
+                    "학습 중단 신호 전송 오류: " + ex.Message);
+            }
+        }
+
+        private string BuildStopTrainingCommand(int pid)
+        {
+            string pidText = pid.ToString();
+            return
+                "PID=" + pidText + "; " +
+                "PGID=$(ps -o pgid= -p \"$PID\" 2>/dev/null | tr -d ' '); " +
+                "if [ -z \"$PGID\" ]; then PGID=\"$PID\"; fi; " +
+                "echo \"Stopping training pid=$PID pgid=$PGID\"; " +
+                "kill -INT -- -\"$PGID\" 2>/dev/null || kill -INT \"$PID\" 2>/dev/null || true; " +
+                "sleep 5; " +
+                "if kill -0 \"$PID\" 2>/dev/null; then " +
+                "echo \"Training did not stop after INT. Sending TERM.\"; " +
+                "kill -TERM -- -\"$PGID\" 2>/dev/null || kill -TERM \"$PID\" 2>/dev/null || true; " +
+                "fi";
         }
 
         private void TryTerminateTrainingProcess()
@@ -2822,16 +2926,24 @@ namespace DonkeyDataManager
                     {
                         while ((line = reader.ReadLine()) != null)
                         {
+                            string cleanLine =
+                                line.Replace("\0", "");
+
+                            if (TryCaptureTrainingProcessPid(cleanLine, logPath, statusForm))
+                            {
+                                continue;
+                            }
+
                             AppendTrainingLog(
                                 logPath,
-                                line.Replace("\0", ""));
+                                cleanLine);
 
                             if (
                                 statusForm != null &&
                                 !statusForm.IsDisposed)
                             {
                                 statusForm.AppendLog(
-                                    line.Replace("\0", ""));
+                                    cleanLine);
                             }
                         }
                     }
@@ -2846,6 +2958,43 @@ namespace DonkeyDataManager
 
                     }
                 });
+        }
+
+        private bool TryCaptureTrainingProcessPid(
+            string line,
+            string logPath,
+            TrainerStatus? statusForm)
+        {
+            const string prefix = "__TRAIN_PID__:";
+
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string value =
+                line.Substring(prefix.Length).Trim();
+
+            if (int.TryParse(value, out int pid) && pid > 0)
+            {
+                trainingProcessWslPid = pid;
+
+                string message =
+                    "학습 프로세스 PID 확인: " + pid;
+
+                AppendTrainingLog(
+                    logPath,
+                    message);
+
+                if (
+                    statusForm != null &&
+                    !statusForm.IsDisposed)
+                {
+                    statusForm.AppendLog(message);
+                }
+            }
+
+            return true;
         }
 
         private void AppendTrainingLog(
