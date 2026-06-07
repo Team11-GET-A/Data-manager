@@ -69,6 +69,7 @@ namespace AD_AI_LearningData_Editor
         private bool isEditCancelRestoring = false;
         private bool isUpdatingListSelection = false;
         private bool suppressListSelectionSync = false;
+        private int lastPlaybackScrollBucket = -1;
         private DonkeyDataManager.frmNewtrainer trainerForm;
 
         // 큰 이미지가 많은 화면에서 리사이즈/전환 시 깜빡임을 줄이기 위한 Win32 스타일입니다.
@@ -1143,6 +1144,11 @@ namespace AD_AI_LearningData_Editor
 
         private void SelectListViewItemByPath(ListView listView, string imagePath)
         {
+            SelectListViewItemByPath(listView, imagePath, true);
+        }
+
+        private void SelectListViewItemByPath(ListView listView, string imagePath, bool ensureVisible)
+        {
             if (listView == null || string.IsNullOrWhiteSpace(imagePath))
             {
                 return;
@@ -1164,7 +1170,10 @@ namespace AD_AI_LearningData_Editor
                     if (selected)
                     {
                         item.Focused = true;
-                        item.EnsureVisible();
+                        if (ensureVisible)
+                        {
+                            item.EnsureVisible();
+                        }
                     }
                 }
             }
@@ -2189,7 +2198,7 @@ namespace AD_AI_LearningData_Editor
             if (slideImages.Count > 0)
             {
                 sdrSeekBar.RangeMin = 0;
-                sdrSeekBar.RangeMax = slideImages.Count - 1;
+                sdrSeekBar.RangeMax = GetMaxImageIndex(slideImages);
                 UpdateSlideDisplay();
             }
             else
@@ -2198,7 +2207,7 @@ namespace AD_AI_LearningData_Editor
                 sdrSeekBar.RangeMin = 0;
                 sdrSeekBar.RangeMax = 0;
                 sdrSeekBar.Value = 0;
-                sdrSeekBar.Text = "0/0";
+                sdrSeekBar.Text = "업로드 0/0";
                 SetTempDrivingInfoText("", "");
             }
 
@@ -3079,15 +3088,19 @@ namespace AD_AI_LearningData_Editor
             if (currentSlideIndex >= slideImages.Count) currentSlideIndex = slideImages.Count - 1;
 
             string currentImagePath = slideImages[currentSlideIndex];
+            int currentImageIndex = GetSlideDisplayIndexAt(currentSlideIndex);
+            int maxImageIndex = GetMaxImageIndex(slideImages);
 
             isUpdatingSlider = true;
-            sdrSeekBar.Value = currentSlideIndex;
-            sdrSeekBar.Text = $"{GetSlideDisplayIndexAt(currentSlideIndex)}/{slideImages.Count}";
+            sdrSeekBar.RangeMin = 0;
+            sdrSeekBar.RangeMax = maxImageIndex;
+            sdrSeekBar.Value = Math.Max(sdrSeekBar.RangeMin, Math.Min(currentImageIndex, sdrSeekBar.RangeMax));
+            sdrSeekBar.Text = $"업로드 {currentImageIndex}/{maxImageIndex}";
             isUpdatingSlider = false;
 
             if (!IsTrashListMode() && !suppressListSelectionSync)
             {
-                SelectListViewItemByPath(lstviewFileListD, currentImagePath);
+                SelectListViewItemByPath(lstviewFileListD, currentImagePath, ShouldEnsureListItemVisible(currentSlideIndex));
             }
 
             if (!File.Exists(currentImagePath))
@@ -3121,7 +3134,7 @@ namespace AD_AI_LearningData_Editor
                 sdrSeekBar.RangeMin = 0;
                 sdrSeekBar.RangeMax = 0;
                 sdrSeekBar.Value = 0;
-                sdrSeekBar.Text = "0/0";
+                sdrSeekBar.Text = "휴지통 0";
                 SetTempDrivingInfoText("", "");
                 UpdatePlayStopButtonState();
                 return;
@@ -3137,7 +3150,7 @@ namespace AD_AI_LearningData_Editor
             sdrSeekBar.RangeMax = Math.Max(0, trashImages.Count - 1);
             sdrSeekBar.Value = currentTrashIndex;
             int displayIndex = ExtractImageIndexFromFileName(currentImagePath);
-            sdrSeekBar.Text = $"{(displayIndex >= 0 ? displayIndex : currentTrashIndex)}/{trashImages.Count}";
+            sdrSeekBar.Text = $"휴지통 {(displayIndex >= 0 ? displayIndex : currentTrashIndex)}";
             isUpdatingSlider = false;
 
             if (!File.Exists(currentImagePath))
@@ -3180,6 +3193,58 @@ namespace AD_AI_LearningData_Editor
             return slidePosition;
         }
 
+        private int GetMaxImageIndex(List<string> images)
+        {
+            if (images == null || images.Count == 0)
+            {
+                return 0;
+            }
+
+            int max = 0;
+            for (int i = 0; i < images.Count; i++)
+            {
+                int imageIndex = ExtractImageIndexFromFileName(images[i]);
+                max = Math.Max(max, imageIndex >= 0 ? imageIndex : i);
+            }
+
+            return max;
+        }
+
+        private int FindImagePositionByDisplayedIndex(List<string> images, int displayedIndex)
+        {
+            if (images == null || images.Count == 0)
+            {
+                return -1;
+            }
+
+            int fallback = -1;
+            int bestDistance = int.MaxValue;
+
+            for (int i = 0; i < images.Count; i++)
+            {
+                int imageIndex = ExtractImageIndexFromFileName(images[i]);
+                if (imageIndex < 0)
+                {
+                    imageIndex = i;
+                }
+
+                if (imageIndex == displayedIndex)
+                {
+                    return i;
+                }
+
+                int distance = Math.Abs(imageIndex - displayedIndex);
+                if (distance < bestDistance ||
+                    (distance == bestDistance && imageIndex > displayedIndex && fallback >= 0))
+                {
+                    bestDistance = distance;
+                    fallback = i;
+                }
+            }
+
+            return fallback;
+        }
+
 
         private void VideoArea_Click(object sender, EventArgs e)
         {
@@ -3218,7 +3283,7 @@ namespace AD_AI_LearningData_Editor
             if (picVideoBox != null)
             {
                 picVideoBox.OverlayIcon = GetResourceImageByName("PlaySlide4655096");
-                picVideoBox.ShowOverlayIcon = !isPlaying && slideImages.Count > 0;
+                picVideoBox.ShowOverlayIcon = !isPlaying && GetActiveImageCount() > 0;
                 picVideoBox.Invalidate();
             }
         }
@@ -3597,8 +3662,8 @@ namespace AD_AI_LearningData_Editor
 
         private void btnPlayStop_Click(object sender, EventArgs e)
         {
-            ClearAllListViewSelections();
-            if (slideImages.Count == 0)
+            int activeCount = GetActiveImageCount();
+            if (activeCount == 0)
             {
                 if (videoTimer != null && videoTimer.Enabled)
                 {
@@ -3615,7 +3680,17 @@ namespace AD_AI_LearningData_Editor
             }
             else
             {
-                if (currentSlideIndex >= slideImages.Count - 1)
+                lastPlaybackScrollBucket = -1;
+
+                if (IsTrashListMode())
+                {
+                    if (currentTrashIndex >= trashImages.Count - 1)
+                    {
+                        currentTrashIndex = 0;
+                        UpdateTrashDisplay();
+                    }
+                }
+                else if (currentSlideIndex >= slideImages.Count - 1)
                 {
                     currentSlideIndex = 0;
                     UpdateSlideDisplay();
@@ -3629,7 +3704,22 @@ namespace AD_AI_LearningData_Editor
 
         private void VideoTimer_Tick(object sender, EventArgs e)
         {
-            if (currentSlideIndex >= slideImages.Count - 1)
+            if (IsTrashListMode())
+            {
+                if (trashImages.Count == 0 || currentTrashIndex >= trashImages.Count - 1)
+                {
+                    videoTimer.Stop();
+                    UpdatePlayStopButtonState();
+                    return;
+                }
+
+                currentTrashIndex++;
+                SelectListViewItemByPath(lstviewTrash, trashImages[currentTrashIndex], ShouldEnsureListItemVisible(currentTrashIndex));
+                UpdateTrashDisplay();
+                return;
+            }
+
+            if (slideImages.Count == 0 || currentSlideIndex >= slideImages.Count - 1)
             {
                 videoTimer.Stop();
                 UpdatePlayStopButtonState();
@@ -3658,7 +3748,10 @@ namespace AD_AI_LearningData_Editor
             }
 
             if (slideImages.Count == 0) return;
-            currentSlideIndex = newValue;
+            int targetIndex = FindImagePositionByDisplayedIndex(slideImages, newValue);
+            if (targetIndex < 0) return;
+
+            currentSlideIndex = targetIndex;
             UpdateSlideDisplay();
         }
 
@@ -3670,6 +3763,20 @@ namespace AD_AI_LearningData_Editor
 
         private void MoveSlide(int frames)
         {
+            if (IsTrashListMode())
+            {
+                if (trashImages.Count == 0) return;
+
+                currentTrashIndex += frames;
+
+                if (currentTrashIndex < 0) currentTrashIndex = 0;
+                if (currentTrashIndex >= trashImages.Count) currentTrashIndex = trashImages.Count - 1;
+
+                SelectListViewItemByPath(lstviewTrash, trashImages[currentTrashIndex]);
+                UpdateTrashDisplay();
+                return;
+            }
+
             if (slideImages.Count == 0) return;
 
             currentSlideIndex += frames;
@@ -3678,6 +3785,28 @@ namespace AD_AI_LearningData_Editor
             if (currentSlideIndex >= slideImages.Count) currentSlideIndex = slideImages.Count - 1;
 
             UpdateSlideDisplay();
+        }
+
+        private int GetActiveImageCount()
+        {
+            return IsTrashListMode() ? trashImages.Count : slideImages.Count;
+        }
+
+        private bool ShouldEnsureListItemVisible(int itemIndex)
+        {
+            if (videoTimer == null || !videoTimer.Enabled)
+            {
+                return true;
+            }
+
+            int bucket = Math.Max(0, itemIndex) / 5;
+            if (bucket == lastPlaybackScrollBucket)
+            {
+                return false;
+            }
+
+            lastPlaybackScrollBucket = bucket;
+            return true;
         }
 
         private void btnNxt1F_Click(object sender, EventArgs e) { MoveSlide(1); }

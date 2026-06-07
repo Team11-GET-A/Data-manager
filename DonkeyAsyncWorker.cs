@@ -2287,6 +2287,16 @@ namespace Data_Manager
             return records;
         }
 
+        private static double? ClampPilotValue(double? value)
+        {
+            if (!value.HasValue)
+            {
+                return null;
+            }
+
+            return Math.Max(-1.0, Math.Min(1.0, value.Value));
+        }
+
         private static List<JudementRecord> FilterJudementRecordsByDeletedIndexes(
             List<JudementRecord> records,
             PilotCardState cardState)
