@@ -1411,6 +1411,7 @@ namespace DonkeyDataManager
             selectedDataPath = folderPath;
             integratedCatalogList.Clear();
             lstCatalogRows.Items.Clear();
+            HashSet<int> deletedIndexes = ReadDeletedIndexesFromTubFolder(selectedDataPath);
 
             string[] catalogFiles =
                 Directory.GetFiles(
@@ -1457,6 +1458,12 @@ namespace DonkeyDataManager
                                     "_index")
                         };
 
+                    int recordIndex = GetRecordIndex(record, i);
+                    if (deletedIndexes.Contains(recordIndex))
+                    {
+                        continue;
+                    }
+
                     integratedCatalogList.Add(record);
                     UpdateListBoxItem(record);
                 }
@@ -1477,6 +1484,100 @@ namespace DonkeyDataManager
         // =====================================================
         // LIST UPDATE
         // =====================================================
+
+        private HashSet<int> ReadDeletedIndexesFromTubFolder(string folderPath)
+        {
+            HashSet<int> deletedIndexes = new HashSet<int>();
+
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                return deletedIndexes;
+            }
+
+            string[] manifestCandidates =
+            {
+                Path.Combine(folderPath, "manifest.json"),
+                Path.Combine(folderPath, "catalog_manifest.json")
+            };
+
+            foreach (string manifestPath in manifestCandidates)
+            {
+                if (!File.Exists(manifestPath))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    foreach (string line in File.ReadLines(manifestPath))
+                    {
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            continue;
+                        }
+
+                        using JsonDocument document = JsonDocument.Parse(line);
+
+                        if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                            !TryGetDeletedIndexesElement(document.RootElement, out JsonElement deletedElement) ||
+                            deletedElement.ValueKind != JsonValueKind.Array)
+                        {
+                            continue;
+                        }
+
+                        foreach (JsonElement item in deletedElement.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out int number))
+                            {
+                                deletedIndexes.Add(number);
+                            }
+                            else if (int.TryParse(item.ToString(), out number))
+                            {
+                                deletedIndexes.Add(number);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return deletedIndexes;
+        }
+
+        private bool TryGetDeletedIndexesElement(JsonElement root, out JsonElement deletedElement)
+        {
+            foreach (JsonProperty property in root.EnumerateObject())
+            {
+                if (IsDeletedIndexesProperty(property.Name))
+                {
+                    deletedElement = property.Value;
+                    return true;
+                }
+            }
+
+            deletedElement = default;
+            return false;
+        }
+
+        private bool IsDeletedIndexesProperty(string propertyName)
+        {
+            return string.Equals(propertyName, "deleted_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_index", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "deleted_index", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private int GetRecordIndex(CatalogRecord record, int fallbackIndex)
+        {
+            if (record != null && int.TryParse(record.Index, out int index))
+            {
+                return index;
+            }
+
+            return fallbackIndex;
+        }
 
         private void UpdateListBoxItem(
             CatalogRecord record)

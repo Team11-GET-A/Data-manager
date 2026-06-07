@@ -270,6 +270,20 @@ namespace Data_Manager
                     rootFrames = BuildFramesFromImagesOnly(rootWsl, tubRoot);
                 }
 
+                HashSet<int> deletedIndexes = ReadDeletedIndexesFromTubRoot(tubRoot);
+                if (deletedIndexes.Count > 0)
+                {
+                    int beforeCount = rootFrames.Count;
+                    rootFrames = rootFrames
+                        .Where(frame => !deletedIndexes.Contains(frame.Index))
+                        .ToList();
+
+                    progress?.Report(new ProgressReport
+                    {
+                        Log = $"manifest 제외 인덱스 적용: {beforeCount - rootFrames.Count}개 제외"
+                    });
+                }
+
                 frames.AddRange(rootFrames);
 
                 progress?.Report(new ProgressReport
@@ -385,6 +399,84 @@ namespace Data_Manager
             });
 
             return frames;
+        }
+
+        private static HashSet<int> ReadDeletedIndexesFromTubRoot(string tubRoot)
+        {
+            HashSet<int> deletedIndexes = new HashSet<int>();
+
+            if (string.IsNullOrWhiteSpace(tubRoot) || !Directory.Exists(tubRoot))
+            {
+                return deletedIndexes;
+            }
+
+            string[] manifestCandidates =
+            {
+                Path.Combine(tubRoot, "manifest.json"),
+                Path.Combine(tubRoot, "catalog_manifest.json")
+            };
+
+            foreach (string manifestPath in manifestCandidates.Where(File.Exists))
+            {
+                try
+                {
+                    foreach (string line in File.ReadLines(manifestPath))
+                    {
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            continue;
+                        }
+
+                        using JsonDocument document = JsonDocument.Parse(line);
+                        if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                            !TryGetDeletedIndexesElement(document.RootElement, out JsonElement deletedElement) ||
+                            deletedElement.ValueKind != JsonValueKind.Array)
+                        {
+                            continue;
+                        }
+
+                        foreach (JsonElement item in deletedElement.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out int number))
+                            {
+                                deletedIndexes.Add(number);
+                            }
+                            else if (int.TryParse(item.ToString(), out number))
+                            {
+                                deletedIndexes.Add(number);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return deletedIndexes;
+        }
+
+        private static bool TryGetDeletedIndexesElement(JsonElement root, out JsonElement deletedElement)
+        {
+            foreach (JsonProperty property in root.EnumerateObject())
+            {
+                if (IsDeletedIndexesProperty(property.Name))
+                {
+                    deletedElement = property.Value;
+                    return true;
+                }
+            }
+
+            deletedElement = default;
+            return false;
+        }
+
+        private static bool IsDeletedIndexesProperty(string propertyName)
+        {
+            return string.Equals(propertyName, "deleted_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_index", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "deleted_index", StringComparison.OrdinalIgnoreCase);
         }
 
         private static async Task<List<PilotFrameData>> ParseRecordJsonFilesAsFramesAsync(
@@ -1196,6 +1288,13 @@ namespace Data_Manager
 
             string json = await File.ReadAllTextAsync(judementPath, cancellationToken);
             List<JudementRecord> records = ParseJudementRecords(json);
+            HashSet<int> deletedIndexes = GetDeletedIndexesForPilotCardState(cardState);
+            if (deletedIndexes.Count > 0)
+            {
+                RemoveDeletedJudementRecordsFromFile(judementPath, deletedIndexes);
+            }
+
+            records = FilterJudementRecordsByDeletedIndexes(records, cardState);
             return new OperationResult<List<JudementRecord>>
             {
                 Success = true,
@@ -1282,6 +1381,13 @@ namespace Data_Manager
 
             string json = await File.ReadAllTextAsync(judementPath, cancellationToken);
             List<JudementRecord> records = ParseJudementRecords(json);
+            HashSet<int> generatedDeletedIndexes = GetDeletedIndexesForPilotCardState(cardState);
+            if (generatedDeletedIndexes.Count > 0)
+            {
+                RemoveDeletedJudementRecordsFromFile(judementPath, generatedDeletedIndexes);
+            }
+
+            records = FilterJudementRecordsByDeletedIndexes(records, cardState);
             return new OperationResult<List<JudementRecord>>
             {
                 Success = true,
@@ -2179,6 +2285,109 @@ namespace Data_Manager
             }
 
             return records;
+        }
+
+        private static List<JudementRecord> FilterJudementRecordsByDeletedIndexes(
+            List<JudementRecord> records,
+            PilotCardState cardState)
+        {
+            if (records == null || records.Count == 0)
+            {
+                return new List<JudementRecord>();
+            }
+
+            HashSet<int> deletedIndexes = GetDeletedIndexesForPilotCardState(cardState);
+            if (deletedIndexes.Count == 0)
+            {
+                return records;
+            }
+
+            return records
+                .Where(record => !deletedIndexes.Contains(record.Index))
+                .ToList();
+        }
+
+        private static void RemoveDeletedJudementRecordsFromFile(
+            string judementPath,
+            HashSet<int> deletedIndexes)
+        {
+            if (string.IsNullOrWhiteSpace(judementPath) ||
+                deletedIndexes == null ||
+                deletedIndexes.Count == 0 ||
+                !File.Exists(judementPath))
+            {
+                return;
+            }
+
+            try
+            {
+                JsonNode? root = JsonNode.Parse(File.ReadAllText(judementPath));
+                if (root is not JsonObject rootObject ||
+                    rootObject["records"] is not JsonArray recordsArray)
+                {
+                    return;
+                }
+
+                for (int i = recordsArray.Count - 1; i >= 0; i--)
+                {
+                    JsonNode? node = recordsArray[i];
+                    int? index = node?["index"]?.GetValue<int>();
+
+                    if (index.HasValue && deletedIndexes.Contains(index.Value))
+                    {
+                        recordsArray.RemoveAt(i);
+                    }
+                }
+
+                File.WriteAllText(
+                    judementPath,
+                    rootObject.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch
+            {
+            }
+        }
+
+        private static HashSet<int> GetDeletedIndexesForPilotCardState(PilotCardState cardState)
+        {
+            HashSet<int> deletedIndexes = new HashSet<int>();
+
+            if (cardState?.TrainingTubPaths == null)
+            {
+                return deletedIndexes;
+            }
+
+            foreach (string tubPath in cardState.TrainingTubPaths)
+            {
+                if (string.IsNullOrWhiteSpace(tubPath))
+                {
+                    continue;
+                }
+
+                string windowsPath = tubPath.StartsWith("/", StringComparison.Ordinal)
+                    ? ToWindowsPathFromWslPath(tubPath, cardState.WslDistroName)
+                    : tubPath;
+
+                windowsPath = ResolveExistingWindowsPath(windowsPath);
+
+                if (!Directory.Exists(windowsPath))
+                {
+                    continue;
+                }
+
+                List<string> roots = FindTubRoots(windowsPath, null);
+                if (roots.Count == 0)
+                {
+                    roots.Add(windowsPath);
+                }
+
+                foreach (string root in roots)
+                {
+                    deletedIndexes.UnionWith(ReadDeletedIndexesFromTubRoot(root));
+                }
+            }
+
+            return deletedIndexes;
         }
 
         private static async Task<string> EnsurePythonScriptAsync(

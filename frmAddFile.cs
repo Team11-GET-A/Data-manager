@@ -676,12 +676,19 @@ namespace Data_Manager
                                         Path.DirectorySeparatorChar,
                                         Path.AltDirectorySeparatorChar));
 
-                            destinationRoot =
-                                GetNonConflictingPath(
+                            bool copyRootContentsToUploadData =
+                                string.Equals(rootName, "data", StringComparison.OrdinalIgnoreCase);
+
+                            destinationRoot = copyRootContentsToUploadData
+                                ? targetFolder
+                                : GetNonConflictingPath(
                                     Path.Combine(targetFolder, rootName));
 
                             destinationRoots[plan.SourceRoot] = destinationRoot;
-                            rollbackRootFolders.Add(destinationRoot);
+                            if (!copyRootContentsToUploadData)
+                            {
+                                rollbackRootFolders.Add(destinationRoot);
+                            }
                             copiedRootFolders.Add(destinationRoot);
                         }
 
