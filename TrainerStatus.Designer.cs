@@ -26,6 +26,7 @@ namespace DonkeyDataManager
             lblProgress = new Label();
             progressBar = new ProgressBar();
             txtLog = new TextBox();
+            lblShortcutGuide = new Label();
             btnStopTraining = new Button();
             btnCancel = new Button();
             SuspendLayout();
@@ -124,6 +125,17 @@ namespace DonkeyDataManager
             txtLog.TabIndex = 9;
             txtLog.WordWrap = false;
             // 
+            // lblShortcutGuide
+            // 
+            lblShortcutGuide.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            lblShortcutGuide.AutoSize = true;
+            lblShortcutGuide.ForeColor = Color.FromArgb(64, 64, 64);
+            lblShortcutGuide.Location = new Point(26, 872);
+            lblShortcutGuide.Name = "lblShortcutGuide";
+            lblShortcutGuide.Size = new Size(164, 25);
+            lblShortcutGuide.TabIndex = 12;
+            lblShortcutGuide.Text = "Esc: 학습 취소";
+            // 
             // btnStopTraining
             // 
             btnStopTraining.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
@@ -155,6 +167,7 @@ namespace DonkeyDataManager
             AutoScaleDimensions = new SizeF(10F, 25F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1280, 920);
+            Controls.Add(lblShortcutGuide);
             Controls.Add(btnCancel);
             Controls.Add(btnStopTraining);
             Controls.Add(txtLog);
@@ -186,6 +199,7 @@ namespace DonkeyDataManager
         private Label lblProgress;
         private ProgressBar progressBar;
         private TextBox txtLog;
+        private Label lblShortcutGuide;
         private Button btnStopTraining;
         private Button btnCancel;
     }

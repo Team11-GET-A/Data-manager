@@ -55,6 +55,8 @@ namespace Data_Manager
 
             btnCancle.Visible = false;
             btnDone.Visible = true;
+            btnDone.Enabled = true;
+            AcceptButton = btnDone;
             txtbWait.Text = "작업이 완료되었습니다.";
         }
 

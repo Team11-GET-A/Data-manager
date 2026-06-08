@@ -487,13 +487,25 @@ namespace Data_Manager
             lblSelectedModelPath.Text = model.Path;
             lblSelectedModelType.Text = string.IsNullOrWhiteSpace(model.ModelType) ? "-" : model.ModelType;
             lblTubPathValue.Text = model.Name;
-            SetTubPathLabels(model.TubPath);
+            SetTubPathLabels(SplitTubPathList(model.TubPath));
         }
 
         private void SetTubPathLabels(string? tubPath)
         {
             string displayPath = GetDisplayTubPath(tubPath);
             lblSelectedTubPath.Text = displayPath;
+        }
+
+        private void SetTubPathLabels(IEnumerable<string>? tubPaths)
+        {
+            List<string> paths = tubPaths?
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(GetDisplayTubPath)
+                .ToList() ?? new List<string>();
+
+            lblSelectedTubPath.Text = paths.Count == 0
+                ? "-"
+                : string.Join("; ", paths);
         }
 
         private string GetDisplayTubPath(string? tubPath)
@@ -513,6 +525,20 @@ namespace Data_Manager
             }
 
             return trimmed;
+        }
+
+        private List<string> SplitTubPathList(string? tubPaths)
+        {
+            if (string.IsNullOrWhiteSpace(tubPaths))
+            {
+                return new List<string>();
+            }
+
+            return tubPaths
+                .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(path => path.Trim())
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .ToList();
         }
 
         private void ClearModelLabels()
@@ -607,8 +633,8 @@ namespace Data_Manager
                 CacheCurrentModelInfo();
                 ApplyModelInfoToLabels(model);
 
-                string tubPath = _cardState.TrainingTubPaths.FirstOrDefault() ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(tubPath))
+                List<string> tubPaths = _cardState.TrainingTubPaths ?? new List<string>();
+                if (tubPaths.Count == 0)
                 {
                     _frameList.Clear();
                     ConfigureLocationTrackBar();
@@ -618,7 +644,8 @@ namespace Data_Manager
                     return;
                 }
 
-                await LoadTubFramesAsync(tubPath, progress, token);
+                SetTubPathLabels(tubPaths);
+                await LoadTubFramesAsync(tubPaths, progress, token);
                 await LoadAndMergeJudementAsync(progress, token);
                 ConfigureLocationTrackBar();
                 MoveToFrame(0);
@@ -685,10 +712,22 @@ namespace Data_Manager
                 return;
             }
 
-            string selectedPathWsl = DonkeyAsyncWorker.ToWslPathFromWindowsPath(dialog.SelectedPath);
-            _cardState.TrainingTubPaths = new List<string> { selectedPathWsl };
+            List<string> selectedTubFolders = FindTubFolders(dialog.SelectedPath);
+            if (selectedTubFolders.Count == 0)
+            {
+                MessageBox.Show("선택한 폴더에서 tub 데이터를 찾지 못했습니다.", "TUB 입력", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            List<string> selectedPathWsls = selectedTubFolders
+                .Select(DonkeyAsyncWorker.ToWslPathFromWindowsPath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            _cardState.TrainingTubPaths = selectedPathWsls;
             CacheCurrentModelInfo();
-            SetTubPathLabels(selectedPathWsl);
+            SetTubPathLabels(selectedPathWsls);
 
             using ProgressStatusForm progressForm = new ProgressStatusForm();
             progressForm.SetTitle("tub 데이터 연결 중...");
@@ -699,7 +738,7 @@ namespace Data_Manager
 
             try
             {
-                await LoadTubFramesAsync(selectedPathWsl, progress, CancellationToken.None);
+                await LoadTubFramesAsync(selectedPathWsls, progress, CancellationToken.None);
                 await LoadAndMergeJudementAsync(progress, CancellationToken.None);
                 ConfigureLocationTrackBar();
                 MoveToFrame(0);
@@ -861,6 +900,97 @@ namespace Data_Manager
             _currentFrameIndex = 0;
         }
 
+        private async Task LoadTubFramesAsync(
+            List<string> tubPaths,
+            IProgress<DonkeyAsyncWorker.ProgressReport> progress,
+            CancellationToken token)
+        {
+            _frameList.Clear();
+
+            foreach (string tubPath in tubPaths.Where(path => !string.IsNullOrWhiteSpace(path)))
+            {
+                token.ThrowIfCancellationRequested();
+
+                DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.PilotFrameData>> tubResult =
+                    await DonkeyAsyncWorker.ParseSingleTubFolderAsync(
+                        tubPath,
+                        _cardState?.WslDistroName ?? string.Empty,
+                        progress,
+                        token);
+
+                if ((!tubResult.Success || tubResult.Data == null || tubResult.Data.Count == 0)
+                    && tubPath.StartsWith("/", StringComparison.Ordinal))
+                {
+                    string windowsTubPath = DonkeyAsyncWorker.ToWindowsPathFromWslPath(
+                        tubPath,
+                        _cardState?.WslDistroName ?? string.Empty);
+
+                    if (!string.IsNullOrWhiteSpace(windowsTubPath)
+                        && !string.Equals(windowsTubPath, tubPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        tubResult = await DonkeyAsyncWorker.ParseSingleTubFolderAsync(
+                            windowsTubPath,
+                            _cardState?.WslDistroName ?? string.Empty,
+                            progress,
+                            token);
+                    }
+                }
+
+                if (tubResult.Success && tubResult.Data != null && tubResult.Data.Count > 0)
+                {
+                    _frameList.AddRange(tubResult.Data);
+                }
+            }
+
+            if (_frameList.Count == 0)
+            {
+                ConfigureLocationTrackBar();
+                DrawTubRequiredMessage();
+                return;
+            }
+
+            _currentFrameIndex = 0;
+        }
+
+        private List<string> FindTubFolders(string folderPath)
+        {
+            List<string> result = new List<string>();
+
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                return result;
+            }
+
+            void Search(string path)
+            {
+                if (IsTubDataFolder(path))
+                {
+                    result.Add(Path.GetFullPath(path));
+                    return;
+                }
+
+                foreach (string child in Directory.GetDirectories(path))
+                {
+                    Search(child);
+                }
+            }
+
+            Search(folderPath);
+
+            return result
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private bool IsTubDataFolder(string folderPath)
+        {
+            return !string.IsNullOrWhiteSpace(folderPath) &&
+                Directory.Exists(folderPath) &&
+                Directory.GetFiles(folderPath, "catalog_*.catalog", SearchOption.TopDirectoryOnly).Length > 0 &&
+                File.Exists(Path.Combine(folderPath, "manifest.json"));
+        }
+
         private async Task LoadAndMergeJudementAsync(
             IProgress<DonkeyAsyncWorker.ProgressReport> progress,
             CancellationToken token)
@@ -888,10 +1018,11 @@ namespace Data_Manager
 
         private void MergeJudementRecords(List<DonkeyAsyncWorker.JudementRecord> records)
         {
-            // Prefer exact frame index, then fall back to image file name for regenerated judgment files.
-            Dictionary<int, DonkeyAsyncWorker.JudementRecord> byIndex =
-                records.GroupBy(record => record.Index)
-                    .ToDictionary(group => group.Key, group => group.Last());
+            // Prefer tub path + frame index, then fall back to image file name for regenerated judgment files.
+            Dictionary<string, DonkeyAsyncWorker.JudementRecord> byTubAndIndex =
+                records.Where(record => !string.IsNullOrWhiteSpace(record.TubPath))
+                    .GroupBy(record => BuildTubFrameKey(record.TubPath, record.Index), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
 
             Dictionary<string, DonkeyAsyncWorker.JudementRecord> byImage =
                 records.Where(record => !string.IsNullOrWhiteSpace(record.ImagePath))
@@ -901,7 +1032,7 @@ namespace Data_Manager
             foreach (DonkeyAsyncWorker.PilotFrameData frame in _frameList)
             {
                 DonkeyAsyncWorker.JudementRecord? match = null;
-                if (!byIndex.TryGetValue(frame.Index, out match))
+                if (!byTubAndIndex.TryGetValue(BuildTubFrameKey(frame.TubPath, frame.Index), out match))
                 {
                     string fileName = Path.GetFileName(frame.ImagePath);
                     if (!string.IsNullOrWhiteSpace(fileName))
@@ -920,6 +1051,19 @@ namespace Data_Manager
             }
         }
 
+        private string BuildTubFrameKey(string tubPath, int index)
+        {
+            return NormalizeTubPathKey(tubPath) + "#" + index.ToString();
+        }
+
+        private string NormalizeTubPathKey(string tubPath)
+        {
+            return (tubPath ?? string.Empty)
+                .Trim()
+                .Replace('\\', '/')
+                .TrimEnd('/');
+        }
+
         #endregion
 
         #region Model Cache
@@ -933,7 +1077,7 @@ namespace Data_Manager
 
             _selectedModel.CardState = _cardState;
             _selectedModel.ModelType = _cardState.ModelType;
-            _selectedModel.TubPath = _cardState.TrainingTubPaths.FirstOrDefault() ?? string.Empty;
+            _selectedModel.TubPath = string.Join(";", _cardState.TrainingTubPaths ?? new List<string>());
         }
 
         private void CacheCurrentModelFrames()
@@ -945,7 +1089,7 @@ namespace Data_Manager
 
             _selectedModel.CardState = _cardState;
             _selectedModel.ModelType = _cardState.ModelType;
-            _selectedModel.TubPath = _cardState.TrainingTubPaths.FirstOrDefault() ?? string.Empty;
+            _selectedModel.TubPath = string.Join(";", _cardState.TrainingTubPaths ?? new List<string>());
             // Cache loaded frames so switching back to a model does not parse the tub again.
             _selectedModel.Frames = _frameList.Select(CloneFrame).ToList();
             _selectedModel.CurrentFrameIndex = _currentFrameIndex;

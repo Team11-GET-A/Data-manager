@@ -1,4 +1,4 @@
-﻿#nullable disable
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -44,12 +44,12 @@ namespace Data_Manager
             ".catalog",
             ".catalog_manifest"
         };
-
         private class CopyPlanItem
         {
             public string SourceRoot { get; set; } = "";
             public string SourcePath { get; set; } = "";
             public string RelativePath { get; set; } = "";
+            public bool CopyRootContentsDirectly { get; set; }
         }
 
         public frmAddFile()
@@ -422,10 +422,7 @@ namespace Data_Manager
 
             try
             {
-                roots.AddRange(
-                    Directory.GetDirectories(selectedFolder)
-                        .Where(IsTubRoot)
-                        .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase));
+                roots.AddRange(FindTubRootsUnderFolder(selectedFolder));
             }
             catch
             {
@@ -438,6 +435,43 @@ namespace Data_Manager
 
             return roots
                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private List<string> FindTubRootsUnderFolder(string selectedFolder)
+        {
+            List<string> roots = new List<string>();
+
+            void Search(string folder)
+            {
+                string folderName = Path.GetFileName(
+                    folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+                if (ShouldSkipDirectory(folderName))
+                {
+                    return;
+                }
+
+                if (IsTubRoot(folder))
+                {
+                    roots.Add(folder);
+                    return;
+                }
+
+                foreach (string child in Directory.GetDirectories(folder))
+                {
+                    Search(child);
+                }
+            }
+
+            foreach (string child in Directory.GetDirectories(selectedFolder))
+            {
+                Search(child);
+            }
+
+            return roots
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
 
@@ -606,9 +640,28 @@ namespace Data_Manager
                 {
                     SourceRoot = root,
                     SourcePath = path,
-                    RelativePath = relativePath
+                    RelativePath = relativePath,
+                    CopyRootContentsDirectly = ShouldCopyRootContentsDirectly(root)
                 });
             }
+        }
+
+        private bool ShouldCopyRootContentsDirectly(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                return false;
+            }
+
+            string rootName = Path.GetFileName(
+                root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+            if (string.Equals(rootName, "data", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return selectedSourceRoots.Count == 1 && IsTubRoot(root);
         }
 
         private async void btnAddFile_Click(object sender, EventArgs e)
@@ -628,6 +681,18 @@ namespace Data_Manager
             if (!Directory.Exists(targetFolder))
             {
                 Directory.CreateDirectory(targetFolder);
+            }
+
+            if (Directory.EnumerateFileSystemEntries(targetFolder).Any())
+            {
+                MessageBox.Show("UploadedFile\\data 폴더가 비어 있을 때만 데이터를 추가할 수 있습니다.\r\n기존 데이터를 저장하거나 비운 뒤 다시 추가하세요.");
+                return;
+            }
+
+            if (selectedSourceRoots.Count > 1 && selectedSourceRoots.All(IsTubRoot))
+            {
+                MessageBox.Show("매니저 편집용 UploadedFile\\data에는 한 번에 하나의 tub 데이터만 추가할 수 있습니다.\r\n여러 tub 학습은 트레이너의 학습 tub 목록에서 선택하세요.");
+                return;
             }
 
             List<string> rollbackPaths = new List<string>();
@@ -677,7 +742,7 @@ namespace Data_Manager
                                         Path.AltDirectorySeparatorChar));
 
                             bool copyRootContentsToUploadData =
-                                string.Equals(rootName, "data", StringComparison.OrdinalIgnoreCase);
+                                plan.CopyRootContentsDirectly;
 
                             destinationRoot = copyRootContentsToUploadData
                                 ? targetFolder
@@ -703,7 +768,7 @@ namespace Data_Manager
                             Directory.CreateDirectory(destinationDirectory);
                         }
 
-                        File.Copy(plan.SourcePath, destinationPath, overwrite: true);
+                        File.Copy(plan.SourcePath, destinationPath, overwrite: false);
                         rollbackPaths.Add(destinationPath);
 
                         int progress = (int)(((double)(i + 1) / copyPlanItems.Count) * 100);

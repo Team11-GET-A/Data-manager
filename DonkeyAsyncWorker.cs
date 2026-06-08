@@ -458,13 +458,9 @@ namespace Data_Manager
 
         private static bool TryGetDeletedIndexesElement(JsonElement root, out JsonElement deletedElement)
         {
-            foreach (JsonProperty property in root.EnumerateObject())
+            if (root.TryGetProperty("deleted_index", out deletedElement))
             {
-                if (IsDeletedIndexesProperty(property.Name))
-                {
-                    deletedElement = property.Value;
-                    return true;
-                }
+                return true;
             }
 
             deletedElement = default;
@@ -1978,7 +1974,14 @@ namespace Data_Manager
                 return;
             }
 
-            results.Add(trimmed);
+            foreach (string part in trimmed.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string path = part.Trim();
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    results.Add(path);
+                }
+            }
         }
 
         private static string NormalizeTubPath(string tubPath, string? carPathFromConfig, string myCarPath)
@@ -2699,8 +2702,39 @@ namespace Data_Manager
             sb.AppendLine("                    obj = parse_json_line(line)");
             sb.AppendLine("                    if not obj:");
             sb.AppendLine("                        continue");
-            sb.AppendLine("                    records.append((idx, obj))");
+            sb.AppendLine("                    record_idx = obj.get('_index', obj.get('index', idx))");
+            sb.AppendLine("                    records.append((record_idx, obj))");
             sb.AppendLine("    return records");
+            sb.AppendLine("");
+            sb.AppendLine("def load_deleted_index(tub_path):");
+            sb.AppendLine("    deleted = set()");
+            sb.AppendLine("    for name in ['manifest.json', 'catalog_manifest.json']:");
+            sb.AppendLine("        path = os.path.join(tub_path, name)");
+            sb.AppendLine("        if not os.path.exists(path):");
+            sb.AppendLine("            continue");
+            sb.AppendLine("        try:");
+            sb.AppendLine("            with open(path, 'r', encoding='utf-8') as f:");
+            sb.AppendLine("                for line in f:");
+            sb.AppendLine("                    line = line.strip()");
+            sb.AppendLine("                    if not line:");
+            sb.AppendLine("                        continue");
+            sb.AppendLine("                    obj = json.loads(line)");
+            sb.AppendLine("                    values = obj.get('deleted_index')");
+            sb.AppendLine("                    if isinstance(values, list):");
+            sb.AppendLine("                        for value in values:");
+            sb.AppendLine("                            try:");
+            sb.AppendLine("                                deleted.add(int(value))");
+            sb.AppendLine("                            except Exception:");
+            sb.AppendLine("                                pass");
+            sb.AppendLine("        except Exception:");
+            sb.AppendLine("            pass");
+            sb.AppendLine("    return deleted");
+            sb.AppendLine("");
+            sb.AppendLine("def is_deleted_record(idx, deleted_index):");
+            sb.AppendLine("    try:");
+            sb.AppendLine("        return int(idx) in deleted_index");
+            sb.AppendLine("    except Exception:");
+            sb.AppendLine("        return False");
             sb.AppendLine("");
             sb.AppendLine("def load_records_from_files(record_files):");
             sb.AppendLine("    records = []");
@@ -2846,10 +2880,15 @@ namespace Data_Manager
             sb.AppendLine("            print(f'progress: completed={processed_count}, skipped={skipped_count}, total={total_count}', flush=True)");
             sb.AppendLine("            last_report_at = now");
             sb.AppendLine("    for tub in tubs:");
+            sb.AppendLine("        deleted_index = load_deleted_index(tub)");
             sb.AppendLine("        record_files = collect_records(tub)");
             sb.AppendLine("        records = load_records_from_files(record_files)");
             sb.AppendLine("        if not records:");
             sb.AppendLine("            records = load_records_from_catalog(tub)");
+            sb.AppendLine("        if deleted_index:");
+            sb.AppendLine("            before = len(records)");
+            sb.AppendLine("            records = [(idx, obj) for idx, obj in records if not is_deleted_record(idx, deleted_index)]");
+            sb.AppendLine("            print(f'skip deleted indexes: {tub} -> {before - len(records)}', flush=True)");
             sb.AppendLine("        total_count += len(records)");
             sb.AppendLine("        print(f'tub records: {tub} -> {len(records)}', flush=True)");
             sb.AppendLine("        batch_meta = []");

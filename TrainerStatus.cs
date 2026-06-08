@@ -19,6 +19,23 @@ namespace DonkeyDataManager
             InitializeComponent();
         }
 
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Enter && !trainingActive && btnCancel.Enabled)
+            {
+                BtnCancel_Click(this, EventArgs.Empty);
+                return true;
+            }
+
+            if (keyData == Keys.Escape && trainingActive && btnCancel.Enabled)
+            {
+                BtnCancel_Click(this, EventArgs.Empty);
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
         public void SetStatus(
             string status,
             string dataPath,
@@ -60,8 +77,9 @@ namespace DonkeyDataManager
                     }
 
                     btnStopTraining.Enabled = false;
-                    btnCancel.Enabled = false;
+                    btnCancel.Enabled = true;
                     btnCancel.Text = "완료";
+                    AcceptButton = btnCancel;
                 });
         }
 
@@ -84,6 +102,7 @@ namespace DonkeyDataManager
         {
             if (!trainingActive)
             {
+                Close();
                 return;
             }
 
