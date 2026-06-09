@@ -28,8 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
-            pnlHeader = new Panel();
-            lblTitle = new Label();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmNewtrainer));
             lstTubFolders = new CheckedListBox();
             btnAddTubFolder = new Button();
             btnRemoveTubFolder = new Button();
@@ -37,8 +36,8 @@
             lblCatalogShortcutGuide = new Label();
             picDriveImage = new PictureBox();
             pnlPlayback = new Panel();
-            btnPlay = new Button();
             btnLeft = new Button();
+            btnPlay = new Button();
             btnRight = new Button();
             lblSpeed = new Label();
             cmbSpeed = new ComboBox();
@@ -59,41 +58,18 @@
             btnNameCh = new Button();
             btnModelRestore = new Button();
             lblTrainerShortcutGuide = new Label();
-            pnlHeader.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)picDriveImage).BeginInit();
             pnlPlayback.SuspendLayout();
             SuspendLayout();
-            // 
-            // pnlHeader
-            // 
-            pnlHeader.BackColor = Color.FromArgb(26, 54, 93);
-            pnlHeader.Controls.Add(lblTitle);
-            pnlHeader.Dock = DockStyle.Top;
-            pnlHeader.Location = new Point(0, 0);
-            pnlHeader.Name = "pnlHeader";
-            pnlHeader.Size = new Size(1600, 56);
-            pnlHeader.TabIndex = 0;
-            // 
-            // lblTitle
-            // 
-            lblTitle.AutoSize = true;
-            lblTitle.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
-            lblTitle.ForeColor = Color.White;
-            lblTitle.Location = new Point(18, 15);
-            lblTitle.Name = "lblTitle";
-            lblTitle.Size = new Size(92, 21);
-            lblTitle.TabIndex = 0;
-            lblTitle.Text = "🏎️ Trainer";
             // 
             // lstTubFolders
             // 
             lstTubFolders.CheckOnClick = true;
             lstTubFolders.Font = new Font("맑은 고딕", 9F);
             lstTubFolders.FormattingEnabled = true;
-            lstTubFolders.ItemHeight = 15;
-            lstTubFolders.Location = new Point(12, 90);
+            lstTubFolders.Location = new Point(20, 20);
             lstTubFolders.Name = "lstTubFolders";
-            lstTubFolders.Size = new Size(500, 320);
+            lstTubFolders.Size = new Size(500, 330);
             lstTubFolders.TabIndex = 2;
             lstTubFolders.SelectedIndexChanged += LstTubFolders_SelectedIndexChanged;
             // 
@@ -105,7 +81,7 @@
             btnAddTubFolder.FlatStyle = FlatStyle.Flat;
             btnAddTubFolder.Font = new Font("맑은 고딕", 9F, FontStyle.Bold);
             btnAddTubFolder.ForeColor = Color.White;
-            btnAddTubFolder.Location = new Point(12, 420);
+            btnAddTubFolder.Location = new Point(20, 365);
             btnAddTubFolder.Name = "btnAddTubFolder";
             btnAddTubFolder.Size = new Size(245, 48);
             btnAddTubFolder.TabIndex = 13;
@@ -121,7 +97,7 @@
             btnRemoveTubFolder.FlatStyle = FlatStyle.Flat;
             btnRemoveTubFolder.Font = new Font("맑은 고딕", 9F, FontStyle.Bold);
             btnRemoveTubFolder.ForeColor = Color.White;
-            btnRemoveTubFolder.Location = new Point(267, 420);
+            btnRemoveTubFolder.Location = new Point(275, 365);
             btnRemoveTubFolder.Name = "btnRemoveTubFolder";
             btnRemoveTubFolder.Size = new Size(245, 48);
             btnRemoveTubFolder.TabIndex = 14;
@@ -133,10 +109,10 @@
             // 
             lstCatalogRows.Font = new Font("Consolas", 9F);
             lstCatalogRows.FormattingEnabled = true;
-            lstCatalogRows.Location = new Point(12, 490);
+            lstCatalogRows.Location = new Point(20, 430);
             lstCatalogRows.Name = "lstCatalogRows";
             lstCatalogRows.SelectionMode = SelectionMode.MultiExtended;
-            lstCatalogRows.Size = new Size(500, 320);
+            lstCatalogRows.Size = new Size(500, 380);
             lstCatalogRows.TabIndex = 3;
             lstCatalogRows.SelectedIndexChanged += LstCatalogRows_SelectedIndexChanged;
             // 
@@ -144,7 +120,7 @@
             // 
             lblCatalogShortcutGuide.Font = new Font("맑은 고딕", 9F);
             lblCatalogShortcutGuide.ForeColor = Color.FromArgb(64, 64, 64);
-            lblCatalogShortcutGuide.Location = new Point(12, 815);
+            lblCatalogShortcutGuide.Location = new Point(20, 820);
             lblCatalogShortcutGuide.Name = "lblCatalogShortcutGuide";
             lblCatalogShortcutGuide.Size = new Size(500, 60);
             lblCatalogShortcutGuide.TabIndex = 17;
@@ -154,9 +130,9 @@
             // picDriveImage
             // 
             picDriveImage.BorderStyle = BorderStyle.FixedSingle;
-            picDriveImage.Location = new Point(532, 90);
+            picDriveImage.Location = new Point(550, 20);
             picDriveImage.Name = "picDriveImage";
-            picDriveImage.Size = new Size(500, 375);
+            picDriveImage.Size = new Size(500, 430);
             picDriveImage.SizeMode = PictureBoxSizeMode.Zoom;
             picDriveImage.TabIndex = 4;
             picDriveImage.TabStop = false;
@@ -169,7 +145,7 @@
             pnlPlayback.Controls.Add(btnRight);
             pnlPlayback.Controls.Add(lblSpeed);
             pnlPlayback.Controls.Add(cmbSpeed);
-            pnlPlayback.Location = new Point(532, 480);
+            pnlPlayback.Location = new Point(550, 465);
             pnlPlayback.Name = "pnlPlayback";
             pnlPlayback.Size = new Size(500, 48);
             pnlPlayback.TabIndex = 5;
@@ -181,8 +157,7 @@
             btnLeft.FlatAppearance.BorderSize = 0;
             btnLeft.FlatStyle = FlatStyle.Flat;
             btnLeft.ForeColor = Color.FromArgb(26, 54, 93);
-            btnLeft.Image = AD_AI_LearningData_Editor.IconProperty.ResizeImage(Data_Manager.Properties.Resources.arrow1_left, 28, 18);
-            btnLeft.ImageAlign = ContentAlignment.MiddleCenter;
+            btnLeft.Image = (Image)resources.GetObject("btnLeft.Image");
             btnLeft.Location = new Point(18, 8);
             btnLeft.Name = "btnLeft";
             btnLeft.Size = new Size(60, 30);
@@ -197,8 +172,7 @@
             btnPlay.FlatAppearance.BorderSize = 0;
             btnPlay.FlatStyle = FlatStyle.Flat;
             btnPlay.ForeColor = Color.FromArgb(26, 54, 93);
-            btnPlay.Image = AD_AI_LearningData_Editor.IconProperty.ResizeImage(Data_Manager.Properties.Resources.PlaySlide4655096, 28, 18);
-            btnPlay.ImageAlign = ContentAlignment.MiddleCenter;
+            btnPlay.Image = (Image)resources.GetObject("btnPlay.Image");
             btnPlay.Location = new Point(88, 8);
             btnPlay.Name = "btnPlay";
             btnPlay.Size = new Size(60, 30);
@@ -212,8 +186,7 @@
             btnRight.FlatAppearance.BorderSize = 0;
             btnRight.FlatStyle = FlatStyle.Flat;
             btnRight.ForeColor = Color.FromArgb(26, 54, 93);
-            btnRight.Image = AD_AI_LearningData_Editor.IconProperty.ResizeImage(Data_Manager.Properties.Resources.arrow1_right, 28, 18);
-            btnRight.ImageAlign = ContentAlignment.MiddleCenter;
+            btnRight.Image = (Image)resources.GetObject("btnRight.Image");
             btnRight.Location = new Point(158, 8);
             btnRight.Name = "btnRight";
             btnRight.Size = new Size(60, 30);
@@ -249,7 +222,7 @@
             btnCleanData.FlatStyle = FlatStyle.Flat;
             btnCleanData.Font = new Font("맑은 고딕", 9F, FontStyle.Bold);
             btnCleanData.ForeColor = Color.White;
-            btnCleanData.Location = new Point(532, 550);
+            btnCleanData.Location = new Point(550, 530);
             btnCleanData.Name = "btnCleanData";
             btnCleanData.Size = new Size(245, 48);
             btnCleanData.TabIndex = 6;
@@ -265,7 +238,7 @@
             btnRestoreData.FlatStyle = FlatStyle.Flat;
             btnRestoreData.Font = new Font("맑은 고딕", 9F, FontStyle.Bold);
             btnRestoreData.ForeColor = Color.White;
-            btnRestoreData.Location = new Point(787, 550);
+            btnRestoreData.Location = new Point(805, 530);
             btnRestoreData.Name = "btnRestoreData";
             btnRestoreData.Size = new Size(245, 48);
             btnRestoreData.TabIndex = 7;
@@ -281,7 +254,7 @@
             btnTrain.FlatStyle = FlatStyle.Flat;
             btnTrain.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
             btnTrain.ForeColor = Color.White;
-            btnTrain.Location = new Point(532, 620);
+            btnTrain.Location = new Point(550, 595);
             btnTrain.Name = "btnTrain";
             btnTrain.Size = new Size(245, 68);
             btnTrain.TabIndex = 8;
@@ -297,7 +270,7 @@
             btnDrive.FlatStyle = FlatStyle.Flat;
             btnDrive.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
             btnDrive.ForeColor = Color.White;
-            btnDrive.Location = new Point(787, 620);
+            btnDrive.Location = new Point(805, 595);
             btnDrive.Name = "btnDrive";
             btnDrive.Size = new Size(245, 68);
             btnDrive.TabIndex = 9;
@@ -311,10 +284,9 @@
             lstModels.Font = new Font("Consolas", 9F);
             lstModels.FullRowSelect = true;
             lstModels.HeaderStyle = ColumnHeaderStyle.Nonclickable;
-            lstModels.Location = new Point(1052, 90);
-            lstModels.MultiSelect = true;
+            lstModels.Location = new Point(1080, 20);
             lstModels.Name = "lstModels";
-            lstModels.Size = new Size(520, 320);
+            lstModels.Size = new Size(500, 790);
             lstModels.TabIndex = 10;
             lstModels.UseCompatibleStateImageBehavior = false;
             lstModels.View = View.Details;
@@ -340,10 +312,9 @@
             lstModelTrash.Font = new Font("Consolas", 9F);
             lstModelTrash.FullRowSelect = true;
             lstModelTrash.HeaderStyle = ColumnHeaderStyle.Nonclickable;
-            lstModelTrash.Location = new Point(1052, 490);
-            lstModelTrash.MultiSelect = true;
+            lstModelTrash.Location = new Point(1080, 430);
             lstModelTrash.Name = "lstModelTrash";
-            lstModelTrash.Size = new Size(520, 320);
+            lstModelTrash.Size = new Size(500, 380);
             lstModelTrash.TabIndex = 15;
             lstModelTrash.UseCompatibleStateImageBehavior = false;
             lstModelTrash.View = View.Details;
@@ -371,7 +342,7 @@
             btnImportModel.FlatStyle = FlatStyle.Flat;
             btnImportModel.Font = new Font("맑은 고딕", 9F, FontStyle.Bold, GraphicsUnit.Point, 129);
             btnImportModel.ForeColor = Color.White;
-            btnImportModel.Location = new Point(1052, 420);
+            btnImportModel.Location = new Point(1080, 365);
             btnImportModel.Margin = new Padding(2);
             btnImportModel.Name = "btnImportModel";
             btnImportModel.Size = new Size(255, 48);
@@ -387,10 +358,10 @@
             btnModelDlt.FlatStyle = FlatStyle.Flat;
             btnModelDlt.Font = new Font("맑은 고딕", 9F, FontStyle.Bold, GraphicsUnit.Point, 129);
             btnModelDlt.ForeColor = Color.White;
-            btnModelDlt.Location = new Point(1052, 825);
+            btnModelDlt.Location = new Point(1250, 825);
             btnModelDlt.Margin = new Padding(2);
             btnModelDlt.Name = "btnModelDlt";
-            btnModelDlt.Size = new Size(255, 52);
+            btnModelDlt.Size = new Size(160, 52);
             btnModelDlt.TabIndex = 11;
             btnModelDlt.Text = "모델 삭제";
             btnModelDlt.UseVisualStyleBackColor = false;
@@ -403,26 +374,26 @@
             btnNameCh.FlatStyle = FlatStyle.Flat;
             btnNameCh.Font = new Font("맑은 고딕", 9F, FontStyle.Bold, GraphicsUnit.Point, 129);
             btnNameCh.ForeColor = Color.White;
-            btnNameCh.Location = new Point(1317, 420);
+            btnNameCh.Location = new Point(1080, 825);
             btnNameCh.Margin = new Padding(2);
             btnNameCh.Name = "btnNameCh";
-            btnNameCh.Size = new Size(255, 48);
+            btnNameCh.Size = new Size(160, 52);
             btnNameCh.TabIndex = 12;
             btnNameCh.Text = "이름 변경";
             btnNameCh.UseVisualStyleBackColor = false;
             // 
             // btnModelRestore
             // 
-            btnModelRestore.BackColor = Color.FromArgb(75, 143, 112);
+            btnModelRestore.BackColor = Color.FromArgb(56, 118, 198);
             btnModelRestore.Cursor = Cursors.Hand;
             btnModelRestore.FlatAppearance.BorderSize = 0;
             btnModelRestore.FlatStyle = FlatStyle.Flat;
             btnModelRestore.Font = new Font("맑은 고딕", 9F, FontStyle.Bold, GraphicsUnit.Point, 129);
             btnModelRestore.ForeColor = Color.White;
-            btnModelRestore.Location = new Point(1317, 825);
+            btnModelRestore.Location = new Point(1420, 825);
             btnModelRestore.Margin = new Padding(2);
             btnModelRestore.Name = "btnModelRestore";
-            btnModelRestore.Size = new Size(255, 52);
+            btnModelRestore.Size = new Size(160, 52);
             btnModelRestore.TabIndex = 16;
             btnModelRestore.Text = "모델 복원";
             btnModelRestore.UseVisualStyleBackColor = false;
@@ -431,11 +402,11 @@
             // 
             lblTrainerShortcutGuide.Font = new Font("맑은 고딕", 9F);
             lblTrainerShortcutGuide.ForeColor = Color.FromArgb(64, 64, 64);
-            lblTrainerShortcutGuide.Location = new Point(532, 705);
+            lblTrainerShortcutGuide.Location = new Point(550, 680);
             lblTrainerShortcutGuide.Name = "lblTrainerShortcutGuide";
-            lblTrainerShortcutGuide.Size = new Size(500, 95);
+            lblTrainerShortcutGuide.Size = new Size(500, 130);
             lblTrainerShortcutGuide.TabIndex = 18;
-            lblTrainerShortcutGuide.Text = "단축키: tub 선택 후 Enter 학습 시작\r\n모델 선택 후 Delete 제외 목록 이동 / Ctrl+N 이름 변경\r\n제외 모델 선택 후 Ctrl+R 복원";
+            lblTrainerShortcutGuide.Text = "단축키: tub 선택 후 Enter 학습 시작\r\n모델 선택 후 Delete 삭제 / Ctrl+N 이름 변경";
             lblTrainerShortcutGuide.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // frmNewtrainer
@@ -449,8 +420,6 @@
             Controls.Add(btnModelRestore);
             Controls.Add(btnNameCh);
             Controls.Add(btnModelDlt);
-            Controls.Add(btnImportModel);
-            Controls.Add(lstModelTrash);
             Controls.Add(lstModels);
             Controls.Add(btnDrive);
             Controls.Add(btnTrain);
@@ -462,12 +431,9 @@
             Controls.Add(btnRemoveTubFolder);
             Controls.Add(btnAddTubFolder);
             Controls.Add(lstTubFolders);
-            Controls.Add(pnlHeader);
             Name = "frmNewtrainer";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "🏎️ DonkeyCar Advanced Data Manager";
-            pnlHeader.ResumeLayout(false);
-            pnlHeader.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)picDriveImage).EndInit();
             pnlPlayback.ResumeLayout(false);
             pnlPlayback.PerformLayout();
@@ -476,8 +442,6 @@
 
         #endregion
 
-        private Panel pnlHeader;
-        private Label lblTitle;
         private CheckedListBox lstTubFolders;
         private Button btnAddTubFolder;
         private Button btnRemoveTubFolder;

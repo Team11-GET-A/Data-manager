@@ -44,9 +44,7 @@ namespace Data_Manager
             colModelNo = new ColumnHeader();
             colModelName = new ColumnHeader();
             colModelPath = new ColumnHeader();
-            pnlModelLoad = new Panel();
-            btnModelLoad = new Button();
-            lblModelListTitle = new Label();
+            btnImportModel = new Button();
             pnlRight = new Panel();
             pnlPilotCard = new Panel();
             pnlTrackBar = new Panel();
@@ -79,7 +77,6 @@ namespace Data_Manager
             pnlLeft.SuspendLayout();
             grpSelectedModel.SuspendLayout();
             tblSelectedModel.SuspendLayout();
-            pnlModelLoad.SuspendLayout();
             pnlRight.SuspendLayout();
             pnlPilotCard.SuspendLayout();
             pnlTrackBar.SuspendLayout();
@@ -95,7 +92,6 @@ namespace Data_Manager
             // splitMain
             // 
             splitMain.Dock = DockStyle.Fill;
-            splitMain.FixedPanel = FixedPanel.Panel1;
             splitMain.Location = new Point(8, 8);
             splitMain.Name = "splitMain";
             // 
@@ -108,20 +104,20 @@ namespace Data_Manager
             // 
             splitMain.Panel2.Controls.Add(pnlRight);
             splitMain.Panel2MinSize = 600;
-            splitMain.Size = new Size(1568, 845);
-            splitMain.SplitterDistance = 400;
+            splitMain.Size = new Size(1584, 884);
+            splitMain.SplitterDistance = 404;
             splitMain.TabIndex = 0;
             // 
             // pnlLeft
             // 
             pnlLeft.Controls.Add(grpSelectedModel);
             pnlLeft.Controls.Add(lvModelList);
-            pnlLeft.Controls.Add(pnlModelLoad);
+            pnlLeft.Controls.Add(btnImportModel);
             pnlLeft.Dock = DockStyle.Fill;
             pnlLeft.Location = new Point(0, 0);
             pnlLeft.Name = "pnlLeft";
             pnlLeft.Padding = new Padding(0, 0, 8, 0);
-            pnlLeft.Size = new Size(400, 845);
+            pnlLeft.Size = new Size(404, 884);
             pnlLeft.TabIndex = 0;
             // 
             // grpSelectedModel
@@ -129,10 +125,10 @@ namespace Data_Manager
             grpSelectedModel.Controls.Add(tblSelectedModel);
             grpSelectedModel.Dock = DockStyle.Bottom;
             grpSelectedModel.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            grpSelectedModel.Location = new Point(0, 645);
+            grpSelectedModel.Location = new Point(0, 684);
             grpSelectedModel.Name = "grpSelectedModel";
             grpSelectedModel.Padding = new Padding(10, 8, 10, 10);
-            grpSelectedModel.Size = new Size(392, 200);
+            grpSelectedModel.Size = new Size(396, 200);
             grpSelectedModel.TabIndex = 2;
             grpSelectedModel.TabStop = false;
             grpSelectedModel.Text = "선택된 모델 정보";
@@ -158,7 +154,7 @@ namespace Data_Manager
             tblSelectedModel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             tblSelectedModel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             tblSelectedModel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
-            tblSelectedModel.Size = new Size(372, 164);
+            tblSelectedModel.Size = new Size(376, 164);
             tblSelectedModel.TabIndex = 0;
             // 
             // lblSelectedModelNameTitle
@@ -211,7 +207,7 @@ namespace Data_Manager
             lblSelectedModelName.Font = new Font("맑은 고딕", 9F);
             lblSelectedModelName.Location = new Point(93, 0);
             lblSelectedModelName.Name = "lblSelectedModelName";
-            lblSelectedModelName.Size = new Size(276, 41);
+            lblSelectedModelName.Size = new Size(280, 41);
             lblSelectedModelName.TabIndex = 4;
             lblSelectedModelName.Text = "model_20260531_001";
             lblSelectedModelName.TextAlign = ContentAlignment.MiddleLeft;
@@ -222,7 +218,7 @@ namespace Data_Manager
             lblSelectedModelPath.Font = new Font("맑은 고딕", 9F);
             lblSelectedModelPath.Location = new Point(93, 41);
             lblSelectedModelPath.Name = "lblSelectedModelPath";
-            lblSelectedModelPath.Size = new Size(276, 41);
+            lblSelectedModelPath.Size = new Size(280, 41);
             lblSelectedModelPath.TabIndex = 5;
             lblSelectedModelPath.Text = "C:\\data\\model_20260531_001.h5";
             lblSelectedModelPath.TextAlign = ContentAlignment.MiddleLeft;
@@ -233,7 +229,7 @@ namespace Data_Manager
             lblSelectedModelType.Font = new Font("맑은 고딕", 9F);
             lblSelectedModelType.Location = new Point(93, 82);
             lblSelectedModelType.Name = "lblSelectedModelType";
-            lblSelectedModelType.Size = new Size(276, 41);
+            lblSelectedModelType.Size = new Size(280, 41);
             lblSelectedModelType.TabIndex = 6;
             lblSelectedModelType.Text = "linear";
             lblSelectedModelType.TextAlign = ContentAlignment.MiddleLeft;
@@ -244,7 +240,7 @@ namespace Data_Manager
             lblSelectedTubPath.Font = new Font("맑은 고딕", 9F);
             lblSelectedTubPath.Location = new Point(93, 123);
             lblSelectedTubPath.Name = "lblSelectedTubPath";
-            lblSelectedTubPath.Size = new Size(276, 41);
+            lblSelectedTubPath.Size = new Size(280, 41);
             lblSelectedTubPath.TabIndex = 7;
             lblSelectedTubPath.Text = "/mnt/c/Users/cheon/.../data";
             lblSelectedTubPath.TextAlign = ContentAlignment.MiddleLeft;
@@ -255,13 +251,29 @@ namespace Data_Manager
             lvModelList.Dock = DockStyle.Fill;
             lvModelList.FullRowSelect = true;
             lvModelList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
-            lvModelList.Location = new Point(0, 92);
+            lvModelList.Location = new Point(0, 0);
             lvModelList.MultiSelect = false;
             lvModelList.Name = "lvModelList";
-            lvModelList.Size = new Size(392, 753);
+            lvModelList.Size = new Size(396, 684);
             lvModelList.TabIndex = 1;
             lvModelList.UseCompatibleStateImageBehavior = false;
             lvModelList.View = View.Details;
+            // 
+            // btnImportModel
+            // 
+            btnImportModel.BackColor = Color.FromArgb(62, 150, 255);
+            btnImportModel.Cursor = Cursors.Hand;
+            btnImportModel.Dock = DockStyle.Top;
+            btnImportModel.FlatAppearance.BorderColor = Color.FromArgb(96, 172, 255);
+            btnImportModel.FlatStyle = FlatStyle.Flat;
+            btnImportModel.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            btnImportModel.ForeColor = Color.White;
+            btnImportModel.Location = new Point(0, 0);
+            btnImportModel.Name = "btnImportModel";
+            btnImportModel.Size = new Size(396, 48);
+            btnImportModel.TabIndex = 0;
+            btnImportModel.Text = "모델 가져오기";
+            btnImportModel.UseVisualStyleBackColor = false;
             // 
             // colModelNo
             // 
@@ -278,37 +290,6 @@ namespace Data_Manager
             colModelPath.Text = "경로";
             colModelPath.Width = 200;
             // 
-            // pnlModelLoad
-            // 
-            pnlModelLoad.Controls.Add(btnModelLoad);
-            pnlModelLoad.Controls.Add(lblModelListTitle);
-            pnlModelLoad.Dock = DockStyle.Top;
-            pnlModelLoad.Location = new Point(0, 0);
-            pnlModelLoad.Name = "pnlModelLoad";
-            pnlModelLoad.Padding = new Padding(8);
-            pnlModelLoad.Size = new Size(392, 92);
-            pnlModelLoad.TabIndex = 0;
-            // 
-            // btnModelLoad
-            // 
-            btnModelLoad.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            btnModelLoad.Location = new Point(12, 38);
-            btnModelLoad.Name = "btnModelLoad";
-            btnModelLoad.Size = new Size(366, 38);
-            btnModelLoad.TabIndex = 1;
-            btnModelLoad.Text = "모델 파일 선택";
-            btnModelLoad.UseVisualStyleBackColor = true;
-            // 
-            // lblModelListTitle
-            // 
-            lblModelListTitle.AutoSize = true;
-            lblModelListTitle.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            lblModelListTitle.Location = new Point(12, 10);
-            lblModelListTitle.Name = "lblModelListTitle";
-            lblModelListTitle.Size = new Size(84, 19);
-            lblModelListTitle.TabIndex = 0;
-            lblModelListTitle.Text = "모델 리스트";
-            // 
             // pnlRight
             // 
             pnlRight.Controls.Add(pnlPilotCard);
@@ -316,7 +297,7 @@ namespace Data_Manager
             pnlRight.Location = new Point(0, 0);
             pnlRight.Name = "pnlRight";
             pnlRight.Padding = new Padding(8, 0, 0, 0);
-            pnlRight.Size = new Size(1164, 845);
+            pnlRight.Size = new Size(1176, 884);
             pnlRight.TabIndex = 0;
             // 
             // pnlPilotCard
@@ -330,16 +311,16 @@ namespace Data_Manager
             pnlPilotCard.Location = new Point(8, 0);
             pnlPilotCard.Name = "pnlPilotCard";
             pnlPilotCard.Padding = new Padding(12);
-            pnlPilotCard.Size = new Size(1156, 845);
+            pnlPilotCard.Size = new Size(1168, 884);
             pnlPilotCard.TabIndex = 0;
             // 
             // pnlTrackBar
             // 
             pnlTrackBar.Controls.Add(trbLocation);
             pnlTrackBar.Dock = DockStyle.Bottom;
-            pnlTrackBar.Location = new Point(12, 701);
+            pnlTrackBar.Location = new Point(12, 740);
             pnlTrackBar.Name = "pnlTrackBar";
-            pnlTrackBar.Size = new Size(1130, 57);
+            pnlTrackBar.Size = new Size(1142, 57);
             pnlTrackBar.TabIndex = 2;
             // 
             // trbLocation
@@ -349,7 +330,7 @@ namespace Data_Manager
             trbLocation.Location = new Point(0, 7);
             trbLocation.Maximum = 0;
             trbLocation.Name = "trbLocation";
-            trbLocation.Size = new Size(1130, 45);
+            trbLocation.Size = new Size(1142, 45);
             trbLocation.TabIndex = 1;
             // 
             // pnlPlaybackControls
@@ -362,9 +343,9 @@ namespace Data_Manager
             pnlPlaybackControls.Controls.Add(btnNextImage);
             pnlPlaybackControls.Controls.Add(btnJumpNext5);
             pnlPlaybackControls.Dock = DockStyle.Bottom;
-            pnlPlaybackControls.Location = new Point(12, 758);
+            pnlPlaybackControls.Location = new Point(12, 797);
             pnlPlaybackControls.Name = "pnlPlaybackControls";
-            pnlPlaybackControls.Size = new Size(1130, 73);
+            pnlPlaybackControls.Size = new Size(1142, 73);
             pnlPlaybackControls.TabIndex = 3;
             // 
             // btnJumpPrev5
@@ -452,7 +433,7 @@ namespace Data_Manager
             pnlImageHost.Dock = DockStyle.Fill;
             pnlImageHost.Location = new Point(12, 64);
             pnlImageHost.Name = "pnlImageHost";
-            pnlImageHost.Size = new Size(1130, 767);
+            pnlImageHost.Size = new Size(1142, 806);
             pnlImageHost.TabIndex = 1;
             // 
             // picPilotImage
@@ -465,7 +446,7 @@ namespace Data_Manager
             picPilotImage.Dock = DockStyle.Fill;
             picPilotImage.Location = new Point(0, 0);
             picPilotImage.Name = "picPilotImage";
-            picPilotImage.Size = new Size(1130, 767);
+            picPilotImage.Size = new Size(1142, 806);
             picPilotImage.SizeMode = PictureBoxSizeMode.Zoom;
             picPilotImage.TabIndex = 0;
             picPilotImage.TabStop = false;
@@ -534,13 +515,13 @@ namespace Data_Manager
             pnlPilotHeader.Dock = DockStyle.Top;
             pnlPilotHeader.Location = new Point(12, 12);
             pnlPilotHeader.Name = "pnlPilotHeader";
-            pnlPilotHeader.Size = new Size(1130, 52);
+            pnlPilotHeader.Size = new Size(1142, 52);
             pnlPilotHeader.TabIndex = 0;
             // 
             // btnGenerateJudement
             // 
             btnGenerateJudement.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnGenerateJudement.Location = new Point(868, 8);
+            btnGenerateJudement.Location = new Point(880, 8);
             btnGenerateJudement.Name = "btnGenerateJudement";
             btnGenerateJudement.Size = new Size(126, 36);
             btnGenerateJudement.TabIndex = 3;
@@ -550,7 +531,7 @@ namespace Data_Manager
             // btnPilotChart
             // 
             btnPilotChart.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnPilotChart.Location = new Point(736, 8);
+            btnPilotChart.Location = new Point(748, 8);
             btnPilotChart.Name = "btnPilotChart";
             btnPilotChart.Size = new Size(126, 36);
             btnPilotChart.TabIndex = 4;
@@ -560,7 +541,7 @@ namespace Data_Manager
             // btnTubInput
             // 
             btnTubInput.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnTubInput.Location = new Point(1000, 8);
+            btnTubInput.Location = new Point(1012, 8);
             btnTubInput.Name = "btnTubInput";
             btnTubInput.Size = new Size(126, 36);
             btnTubInput.TabIndex = 2;
@@ -573,7 +554,7 @@ namespace Data_Manager
             lblTubPathValue.Font = new Font("맑은 고딕", 11F);
             lblTubPathValue.Location = new Point(90, 12);
             lblTubPathValue.Name = "lblTubPathValue";
-            lblTubPathValue.Size = new Size(640, 28);
+            lblTubPathValue.Size = new Size(652, 28);
             lblTubPathValue.TabIndex = 1;
             lblTubPathValue.Text = "model_20260531_001";
             lblTubPathValue.TextAlign = ContentAlignment.MiddleLeft;
@@ -592,7 +573,7 @@ namespace Data_Manager
             // 
             AutoScaleDimensions = new SizeF(9F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1584, 861);
+            ClientSize = new Size(1600, 900);
             Controls.Add(splitMain);
             Font = new Font("맑은 고딕", 11.25F);
             Margin = new Padding(2);
@@ -606,7 +587,6 @@ namespace Data_Manager
             splitMain.BackColor = Color.White;
             pnlLeft.BackColor = Color.White;
             pnlRight.BackColor = Color.White;
-            pnlModelLoad.BackColor = Color.White;
             pnlPilotCard.BackColor = Color.White;
             pnlPilotCard.BorderStyle = BorderStyle.None;
             pnlPilotHeader.BackColor = Color.White;
@@ -618,9 +598,6 @@ namespace Data_Manager
             grpSelectedModel.ForeColor = Color.FromArgb(30, 39, 50);
             grpSelectedModel.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
             grpSelectedModel.Text = "선택한 모델 정보";
-            lblModelListTitle.Text = "모델 리스트";
-            lblModelListTitle.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
-            lblModelListTitle.ForeColor = Color.FromArgb(30, 39, 50);
             lblSelectedModelNameTitle.Text = "모델명";
             lblSelectedModelPathTitle.Text = "파일 경로";
             lblSelectedModelTypeTitle.Text = "타입";
@@ -649,12 +626,6 @@ namespace Data_Manager
             colModelNo.Text = "번호";
             colModelName.Text = "모델 이름";
             colModelPath.Text = "경로";
-            btnModelLoad.Text = "모델 폴더 선택";
-            btnModelLoad.BackColor = Color.FromArgb(62, 150, 255);
-            btnModelLoad.ForeColor = Color.White;
-            btnModelLoad.FlatStyle = FlatStyle.Flat;
-            btnModelLoad.FlatAppearance.BorderColor = Color.FromArgb(96, 184, 255);
-            btnModelLoad.UseVisualStyleBackColor = false;
             btnTubInput.Text = "TUB 입력";
             btnTubInput.BackColor = Color.FromArgb(44, 205, 220);
             btnTubInput.ForeColor = Color.FromArgb(10, 24, 32);
@@ -731,8 +702,6 @@ namespace Data_Manager
             Text = "\uD30C\uC77C\uB7FF";
             grpSelectedModel.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 10F, FontStyle.Bold);
             grpSelectedModel.Text = "\uC120\uD0DD\uD55C \uBAA8\uB378 \uC815\uBCF4";
-            lblModelListTitle.Text = "\uBAA8\uB378 \uB9AC\uC2A4\uD2B8";
-            lblModelListTitle.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 12F, FontStyle.Bold);
             lblSelectedModelNameTitle.Text = "\uBAA8\uB378\uBA85";
             lblSelectedModelPathTitle.Text = "\uD30C\uC77C \uACBD\uB85C";
             lblSelectedModelTypeTitle.Text = "\uD0C0\uC785";
@@ -749,7 +718,6 @@ namespace Data_Manager
             colModelNo.Text = "\uBC88\uD638";
             colModelName.Text = "\uBAA8\uB378 \uC774\uB984";
             colModelPath.Text = "\uACBD\uB85C";
-            btnModelLoad.Text = "\uBAA8\uB378 \uD3F4\uB354 \uC120\uD0DD";
             btnTubInput.Text = "TUB \uC785\uB825";
             btnPilotChart.Text = "\uADF8\uB798\uD504";
             btnGenerateJudement.Text = "AI \uD310\uB2E8 \uC0DD\uC131";
@@ -774,8 +742,6 @@ namespace Data_Manager
             pnlLeft.ResumeLayout(false);
             grpSelectedModel.ResumeLayout(false);
             tblSelectedModel.ResumeLayout(false);
-            pnlModelLoad.ResumeLayout(false);
-            pnlModelLoad.PerformLayout();
             pnlRight.ResumeLayout(false);
             pnlPilotCard.ResumeLayout(false);
             pnlTrackBar.ResumeLayout(false);
@@ -795,10 +761,8 @@ namespace Data_Manager
 
         private SplitContainer splitMain;
         private Panel pnlLeft;
-        private Panel pnlModelLoad;
-        private Button btnModelLoad;
-        private Label lblModelListTitle;
         private ListView lvModelList;
+        private Button btnImportModel;
         private ColumnHeader colModelNo;
         private ColumnHeader colModelName;
         private ColumnHeader colModelPath;

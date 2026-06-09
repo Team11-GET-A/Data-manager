@@ -65,6 +65,8 @@ namespace DonkeyDataManager
             new List<CatalogListRow>();
         private HashSet<int> deletedCatalogIndexes =
             new HashSet<int>();
+        private string currentPreviewImagePath = "";
+        private Size currentPreviewRenderSize = Size.Empty;
 
         private System.Windows.Forms.Timer playbackTimer =
             new System.Windows.Forms.Timer();
@@ -104,16 +106,14 @@ namespace DonkeyDataManager
 
         private System.Windows.Forms.Timer modelRefreshTimer =
             new System.Windows.Forms.Timer();
+        private System.Windows.Forms.Timer responsiveResizeTimer =
+            new System.Windows.Forms.Timer();
+        private bool isLoadingModels;
+        private string lastModelListSignature = "";
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             if (keyData == Keys.Delete && lstModels.ContainsFocus)
-            {
-                BtnModelDlt_Click(this, EventArgs.Empty);
-                return true;
-            }
-
-            if (keyData == Keys.Delete && lstModelTrash.ContainsFocus)
             {
                 BtnModelDlt_Click(this, EventArgs.Empty);
                 return true;
@@ -146,12 +146,6 @@ namespace DonkeyDataManager
             if (keyData == (Keys.Control | Keys.N) && lstModels.ContainsFocus)
             {
                 BtnNameCh_Click(this, EventArgs.Empty);
-                return true;
-            }
-
-            if (keyData == (Keys.Control | Keys.R) && lstModelTrash.ContainsFocus)
-            {
-                BtnModelRestore_Click(this, EventArgs.Empty);
                 return true;
             }
 
@@ -236,6 +230,7 @@ namespace DonkeyDataManager
         public frmNewtrainer()
         {
             InitializeComponent();
+            ClientSize = new Size(1600, 900);
 
             WireUiEvents();
             InitializeCatalogListDrawing();
@@ -287,6 +282,14 @@ namespace DonkeyDataManager
         {
             SharedModelRegistry.ModelsChanged -=
                 SharedModelRegistry_ModelsChanged;
+            modelRefreshTimer.Stop();
+            modelRefreshTimer.Dispose();
+            responsiveResizeTimer.Stop();
+            responsiveResizeTimer.Dispose();
+            playbackTimer.Stop();
+            playbackTimer.Dispose();
+            browserMonitorTimer.Stop();
+            browserMonitorTimer.Dispose();
         }
 
         // =====================================================
@@ -295,10 +298,15 @@ namespace DonkeyDataManager
 
         private void InitializeModelRefreshTimer()
         {
-            modelRefreshTimer.Interval = 5000;
+            modelRefreshTimer.Interval = 30000;
 
             modelRefreshTimer.Tick += (s, e) =>
             {
+                if (!Visible || WindowState == FormWindowState.Minimized)
+                {
+                    return;
+                }
+
                 LoadModelsToList();
             };
 
@@ -313,8 +321,10 @@ namespace DonkeyDataManager
         {
             try
             {
-                if (lstModels == null)
+                if (lstModels == null || isLoadingModels)
                     return;
+
+                isLoadingModels = true;
 
                 List<ModelRegistryEntry> entries =
                     LoadModelRegistry()
@@ -376,14 +386,35 @@ namespace DonkeyDataManager
                             right.Name,
                             StringComparison.OrdinalIgnoreCase));
 
-                lstModels.Items.Clear();
+                string newSignature =
+                    BuildModelListSignature(entries);
 
-                for (int i = 0; i < activeEntries.Count; i++)
+                if (string.Equals(
+                    lastModelListSignature,
+                    newSignature,
+                    StringComparison.Ordinal))
                 {
-                    lstModels.Items.Add(
-                        CreateModelListItem(
-                            activeEntries[i],
-                            i + 1));
+                    return;
+                }
+
+                lastModelListSignature = newSignature;
+
+                lstModels.BeginUpdate();
+                try
+                {
+                    lstModels.Items.Clear();
+
+                    for (int i = 0; i < activeEntries.Count; i++)
+                    {
+                        lstModels.Items.Add(
+                            CreateModelListItem(
+                                activeEntries[i],
+                                i + 1));
+                    }
+                }
+                finally
+                {
+                    lstModels.EndUpdate();
                 }
 
                 LoadModelTrashToList(entries);
@@ -393,6 +424,29 @@ namespace DonkeyDataManager
             {
 
             }
+            finally
+            {
+                isLoadingModels = false;
+            }
+        }
+
+        private string BuildModelListSignature(List<ModelRegistryEntry> entries)
+        {
+            if (entries == null || entries.Count == 0)
+            {
+                return "";
+            }
+
+            return string.Join(
+                "|",
+                entries
+                    .OrderBy(entry => entry.WindowsPath, StringComparer.OrdinalIgnoreCase)
+                    .Select(entry =>
+                        entry.Name +
+                        ":" +
+                        entry.WindowsPath +
+                        ":" +
+                        entry.IsDeleted));
         }
 
         private void LoadModelTrashToList(List<ModelRegistryEntry> allEntries)
@@ -408,14 +462,22 @@ namespace DonkeyDataManager
                     .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
-            lstModelTrash.Items.Clear();
-
-            for (int i = 0; i < deletedEntries.Count; i++)
+            lstModelTrash.BeginUpdate();
+            try
             {
-                lstModelTrash.Items.Add(
-                    CreateModelListItem(
-                        deletedEntries[i],
-                        i + 1));
+                lstModelTrash.Items.Clear();
+
+                for (int i = 0; i < deletedEntries.Count; i++)
+                {
+                    lstModelTrash.Items.Add(
+                        CreateModelListItem(
+                            deletedEntries[i],
+                            i + 1));
+                }
+            }
+            finally
+            {
+                lstModelTrash.EndUpdate();
             }
         }
 
@@ -509,6 +571,11 @@ namespace DonkeyDataManager
             lstModels.SelectedIndexChanged += LstModels_SelectedIndexChanged;
             lstModelTrash.SelectedIndexChanged += LstModelTrash_SelectedIndexChanged;
 
+            picDriveImage.Resize += (s, e) =>
+            {
+                currentPreviewRenderSize = Size.Empty;
+            };
+
             cmbSpeed.SelectedIndex = 1;
         }
 
@@ -524,6 +591,12 @@ namespace DonkeyDataManager
             CaptureResponsiveSnapshot();
 
             MinimumSize = new Size(1000, 650);
+            responsiveResizeTimer.Interval = 80;
+            responsiveResizeTimer.Tick += (s, e) =>
+            {
+                responsiveResizeTimer.Stop();
+                ApplyResponsiveLayout();
+            };
             Resize -= FrmNewtrainer_Resize;
             Resize += FrmNewtrainer_Resize;
         }
@@ -556,7 +629,13 @@ namespace DonkeyDataManager
 
         private void FrmNewtrainer_Resize(object sender, EventArgs e)
         {
-            ApplyResponsiveLayout();
+            if (WindowState == FormWindowState.Minimized)
+            {
+                return;
+            }
+
+            responsiveResizeTimer.Stop();
+            responsiveResizeTimer.Start();
         }
 
         private void ApplyResponsiveLayout()
@@ -1507,7 +1586,7 @@ namespace DonkeyDataManager
             StyleTrainerButton(btnImportModel, Color.FromArgb(56, 118, 198), Color.White);
             StyleTrainerButton(btnNameCh, Color.FromArgb(75, 143, 112), Color.White);
             StyleTrainerButton(btnModelDlt, Color.FromArgb(204, 91, 84), Color.White);
-            StyleTrainerButton(btnModelRestore, Color.FromArgb(75, 143, 112), Color.White);
+            StyleTrainerButton(btnModelRestore, Color.FromArgb(56, 118, 198), Color.White);
 
             StylePlaybackButton(btnLeft);
             StylePlaybackButton(btnPlay);
@@ -2043,14 +2122,19 @@ namespace DonkeyDataManager
         private void RefreshTubFolderList()
         {
             lstTubFolders.BeginUpdate();
-            lstTubFolders.Items.Clear();
-
-            foreach (string tubFolder in selectedTubFolders)
+            try
             {
-                lstTubFolders.Items.Add(tubFolder, true);
-            }
+                lstTubFolders.Items.Clear();
 
-            lstTubFolders.EndUpdate();
+                foreach (string tubFolder in selectedTubFolders)
+                {
+                    lstTubFolders.Items.Add(tubFolder, true);
+                }
+            }
+            finally
+            {
+                lstTubFolders.EndUpdate();
+            }
         }
 
         private List<string> GetCheckedTubFolders()
@@ -2111,23 +2195,39 @@ namespace DonkeyDataManager
             {
                 integratedCatalogList.Clear();
                 catalogDisplayRows.Clear();
-                lstCatalogRows.Items.Clear();
+                lstCatalogRows.BeginUpdate();
+                try
+                {
+                    lstCatalogRows.Items.Clear();
+                }
+                finally
+                {
+                    lstCatalogRows.EndUpdate();
+                }
                 ReleasePreviewImage();
                 return;
             }
 
-            integratedCatalogList.Clear();
-            catalogDisplayRows.Clear();
-            lstCatalogRows.Items.Clear();
-
             int tubNumber = 1;
             int loadedCount = 0;
 
-            foreach (string tubFolder in checkedTubFolders)
+            lstCatalogRows.BeginUpdate();
+            try
             {
-                AddTubHeaderRow(tubNumber, checkedTubFolders.Count, tubFolder);
-                loadedCount += LoadTubCatalogRecords(tubFolder);
-                tubNumber++;
+                integratedCatalogList.Clear();
+                catalogDisplayRows.Clear();
+                lstCatalogRows.Items.Clear();
+
+                foreach (string tubFolder in checkedTubFolders)
+                {
+                    AddTubHeaderRow(tubNumber, checkedTubFolders.Count, tubFolder);
+                    loadedCount += LoadTubCatalogRecords(tubFolder);
+                    tubNumber++;
+                }
+            }
+            finally
+            {
+                lstCatalogRows.EndUpdate();
             }
 
             if (integratedCatalogList.Count > 0)
@@ -2144,12 +2244,22 @@ namespace DonkeyDataManager
 
         private void LoadSingleTubCatalogRows(string folderPath, bool showMessage)
         {
-            integratedCatalogList.Clear();
-            catalogDisplayRows.Clear();
-            lstCatalogRows.Items.Clear();
+            int loadedCount = 0;
 
-            AddTubHeaderRow(1, 1, folderPath);
-            int loadedCount = LoadTubCatalogRecords(folderPath);
+            lstCatalogRows.BeginUpdate();
+            try
+            {
+                integratedCatalogList.Clear();
+                catalogDisplayRows.Clear();
+                lstCatalogRows.Items.Clear();
+
+                AddTubHeaderRow(1, 1, folderPath);
+                loadedCount = LoadTubCatalogRecords(folderPath);
+            }
+            finally
+            {
+                lstCatalogRows.EndUpdate();
+            }
 
             if (integratedCatalogList.Count > 0)
             {
@@ -2192,14 +2302,12 @@ namespace DonkeyDataManager
 
             foreach (string catalogPath in catalogFiles)
             {
-                string[] lines = File.ReadAllLines(catalogPath);
-
-                for (int i = 0; i < lines.Length; i++)
+                int i = 0;
+                foreach (string line in File.ReadLines(catalogPath))
                 {
-                    string line = lines[i];
-
                     if (string.IsNullOrWhiteSpace(line))
                     {
+                        i++;
                         continue;
                     }
 
@@ -2233,6 +2341,7 @@ namespace DonkeyDataManager
                     integratedCatalogList.Add(record);
                     UpdateListBoxItem(record);
                     loadedCount++;
+                    i++;
                 }
             }
 
@@ -2604,23 +2713,22 @@ namespace DonkeyDataManager
             string imgPath =
                 ResolveCatalogImagePath(record);
 
+            if (string.Equals(currentPreviewImagePath, imgPath, StringComparison.OrdinalIgnoreCase) &&
+                currentPreviewRenderSize != Size.Empty &&
+                picDriveImage.Image != null)
+            {
+                return;
+            }
+
             if (!File.Exists(imgPath))
             {
-                picDriveImage.Image = null;
+                ReleasePreviewImage();
 
                 return;
             }
 
             try
             {
-                if (
-                    picDriveImage.Image != null)
-                {
-                    picDriveImage.Image.Dispose();
-
-                    picDriveImage.Image = null;
-                }
-
                 using (
                     FileStream fs =
                     new FileStream(
@@ -2633,14 +2741,23 @@ namespace DonkeyDataManager
                         Image temp =
                         Image.FromStream(fs))
                     {
-                        picDriveImage.Image =
-                            new Bitmap(temp);
+                        Size targetSize =
+                            GetPreviewImageRenderSize(temp.Size);
+                        Bitmap bitmap =
+                            targetSize.Width > 0 && targetSize.Height > 0
+                                ? new Bitmap(temp, targetSize)
+                                : new Bitmap(temp);
+
+                        ReleasePreviewImage();
+                        picDriveImage.Image = bitmap;
+                        currentPreviewImagePath = imgPath;
+                        currentPreviewRenderSize = targetSize;
                     }
                 }
             }
             catch
             {
-                picDriveImage.Image = null;
+                ReleasePreviewImage();
             }
         }
 
@@ -2651,6 +2768,32 @@ namespace DonkeyDataManager
                 picDriveImage.Image.Dispose();
                 picDriveImage.Image = null;
             }
+
+            currentPreviewImagePath = "";
+            currentPreviewRenderSize = Size.Empty;
+        }
+
+        private Size GetPreviewImageRenderSize(Size sourceSize)
+        {
+            if (sourceSize.Width <= 0 || sourceSize.Height <= 0)
+            {
+                return Size.Empty;
+            }
+
+            int maxWidth = Math.Max(1, picDriveImage.ClientSize.Width);
+            int maxHeight = Math.Max(1, picDriveImage.ClientSize.Height);
+            double scale = Math.Min(
+                maxWidth / (double)sourceSize.Width,
+                maxHeight / (double)sourceSize.Height);
+
+            if (scale >= 1.0)
+            {
+                return sourceSize;
+            }
+
+            return new Size(
+                Math.Max(1, (int)Math.Round(sourceSize.Width * scale)),
+                Math.Max(1, (int)Math.Round(sourceSize.Height * scale)));
         }
 
         private string ResolveCatalogImagePath(CatalogRecord record)
@@ -3849,13 +3992,11 @@ namespace DonkeyDataManager
                 "PID=" + pidText + "; " +
                 "PGID=$(ps -o pgid= -p \"$PID\" 2>/dev/null | tr -d ' '); " +
                 "if [ -z \"$PGID\" ]; then PGID=\"$PID\"; fi; " +
-                "echo \"Stopping training pid=$PID pgid=$PGID\"; " +
+                "CHILDREN=$(pgrep -P \"$PID\" 2>/dev/null || true); " +
+                "echo \"Requesting graceful training stop pid=$PID pgid=$PGID\"; " +
                 "kill -INT -- -\"$PGID\" 2>/dev/null || kill -INT \"$PID\" 2>/dev/null || true; " +
-                "sleep 5; " +
-                "if kill -0 \"$PID\" 2>/dev/null; then " +
-                "echo \"Training did not stop after INT. Sending TERM.\"; " +
-                "kill -TERM -- -\"$PGID\" 2>/dev/null || kill -TERM \"$PID\" 2>/dev/null || true; " +
-                "fi";
+                "for CHILD in $CHILDREN; do kill -INT \"$CHILD\" 2>/dev/null || true; done; " +
+                "echo \"Stop signal sent. Waiting for train.py to save the model.\"";
         }
 
         private void TryTerminateTrainingProcess()
@@ -5439,27 +5580,33 @@ namespace DonkeyDataManager
                 List<ModelRegistryEntry> entries =
                     LoadModelRegistry();
 
-                foreach (ModelRegistryEntry entry in entries)
+                foreach (ModelRegistryEntry selectedEntry in selectedEntries)
                 {
-                    foreach (ModelRegistryEntry selectedEntry in selectedEntries)
-                    {
-                        bool sameEntry =
-                            !string.IsNullOrWhiteSpace(selectedEntry.WindowsPath)
-                                ? string.Equals(
-                                    entry.WindowsPath,
-                                    selectedEntry.WindowsPath,
-                                    StringComparison.OrdinalIgnoreCase)
-                                : string.Equals(
-                                    entry.Name,
-                                    selectedEntry.Name,
-                                    StringComparison.OrdinalIgnoreCase);
+                    ModelRegistryEntry existingEntry =
+                        entries.FirstOrDefault(entry =>
+                            IsSameModelRegistryEntry(entry, selectedEntry));
 
-                        if (sameEntry)
+                    if (existingEntry == null)
+                    {
+                        existingEntry =
+                            new ModelRegistryEntry
                         {
-                            entry.IsDeleted = true;
-                            break;
-                        }
+                            Name = selectedEntry.Name,
+                            WindowsPath = selectedEntry.WindowsPath,
+                            WslPath = string.IsNullOrWhiteSpace(selectedEntry.WslPath)
+                                ? GetModelWslPath(selectedEntry.Name)
+                                : selectedEntry.WslPath,
+                            SourceTubWindowsPath = selectedEntry.SourceTubWindowsPath,
+                            SourceTubWslPath = selectedEntry.SourceTubWslPath,
+                            CreatedAt = selectedEntry.CreatedAt == default
+                                ? DateTime.Now
+                                : selectedEntry.CreatedAt
+                        };
+
+                        entries.Add(existingEntry);
                     }
+
+                    existingEntry.IsDeleted = true;
                 }
 
                 SaveModelRegistry(entries);
@@ -5470,6 +5617,30 @@ namespace DonkeyDataManager
                 MessageBox.Show(
                     ex.Message);
             }
+        }
+
+        private bool IsSameModelRegistryEntry(
+            ModelRegistryEntry left,
+            ModelRegistryEntry right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(left.WindowsPath) &&
+                !string.IsNullOrWhiteSpace(right.WindowsPath))
+            {
+                return string.Equals(
+                    left.WindowsPath,
+                    right.WindowsPath,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            return string.Equals(
+                left.Name,
+                right.Name,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private void DeleteModelsPermanently(List<ModelRegistryEntry> selectedEntries)

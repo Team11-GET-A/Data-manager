@@ -27,6 +27,7 @@ namespace Data_Manager
         private static readonly Color PilotCyanColor = Color.FromArgb(44, 205, 220);
         private static readonly Color PilotGreenColor = Color.FromArgb(65, 190, 125);
         private static readonly Color PilotOrangeColor = Color.FromArgb(255, 168, 72);
+        private const double PilotLeftPanelRatio = 404.0 / 1584.0;
 
         private readonly List<ModelListItem> _models = new List<ModelListItem>();
 
@@ -45,6 +46,9 @@ namespace Data_Manager
         private bool _isReversePlaying;
         private bool _isChartOpen;
         private double _playbackSpeed = 1.0;
+        private string _currentImagePath = "";
+        private Size _currentImageRenderSize = Size.Empty;
+        private Size _lastOverlayHostSize = Size.Empty;
 
         public Pliot()
         {
@@ -61,10 +65,10 @@ namespace Data_Manager
             ApplyOverlayStyles();
             ConfigurePlaybackTimer();
             ApplyPilotDesign();
+            btnImportModel.BringToFront();
 
             // Keep event wiring in one place so Designer files stay focused on layout only.
-            btnModelLoad.Text = "모델 폴더 선택";
-            btnModelLoad.Click += BtnModelLoad_Click;
+            btnImportModel.Click += BtnImportModel_Click;
             lvModelList.SelectedIndexChanged += LvModelList_SelectedIndexChanged;
             lvModelList.SizeChanged += (s, e) => ResizeModelColumns();
 
@@ -81,8 +85,19 @@ namespace Data_Manager
             btnReversePlay.Click += BtnReversePlay_Click;
             cmbSpeed.SelectedIndexChanged += CmbSpeed_SelectedIndexChanged;
 
-            pnlImageHost.Resize += (s, e) => PositionImageOverlays();
+            pnlImageHost.Resize += (s, e) =>
+            {
+                _currentImageRenderSize = Size.Empty;
+                PositionImageOverlays();
+            };
             pliotAngleIndicator.Resize += (s, e) => ConfigureAngleOverlayLayout();
+            splitMain.SizeChanged += (s, e) => ApplyPilotSplitRatio();
+            pnlPlaybackControls.SizeChanged += (s, e) => LayoutPilotPlaybackControls();
+            Load += (s, e) =>
+            {
+                ApplyPilotSplitRatio();
+                LayoutPilotPlaybackControls();
+            };
             FormClosed += Pliot_FormClosed;
             SharedModelRegistry.ModelsChanged +=
                 SharedModelRegistry_ModelsChanged;
@@ -137,22 +152,21 @@ namespace Data_Manager
             pnlLeft.BackColor = PilotBackColor;
             pnlRight.BackColor = PilotBackColor;
             pnlPilotCard.BackColor = PilotPanelColor;
-            pnlPilotCard.BorderStyle = BorderStyle.None;
+            pnlLeft.BorderStyle = BorderStyle.FixedSingle;
+            pnlPilotCard.BorderStyle = BorderStyle.FixedSingle;
             pnlPilotHeader.BackColor = PilotPanelColor;
-            pnlModelLoad.BackColor = PilotBackColor;
             pnlPlaybackControls.BackColor = PilotPanelColor;
+            pnlPlaybackControls.BorderStyle = BorderStyle.FixedSingle;
             pnlTrackBar.BackColor = PilotPanelColor;
+            pnlTrackBar.BorderStyle = BorderStyle.FixedSingle;
             pnlImageHost.BackColor = PilotBackColor;
+            pnlImageHost.BorderStyle = BorderStyle.FixedSingle;
             picPilotImage.BackColor = PilotBackColor;
 
             grpSelectedModel.Text = "선택한 모델 정보";
             grpSelectedModel.ForeColor = PilotTextColor;
             grpSelectedModel.BackColor = PilotPanelColor;
             grpSelectedModel.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-
-            lblModelListTitle.Text = "모델 리스트";
-            lblModelListTitle.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
-            lblModelListTitle.ForeColor = PilotTextColor;
 
             lblSelectedModelNameTitle.Text = "모델명";
             lblSelectedModelPathTitle.Text = "파일 경로";
@@ -190,7 +204,7 @@ namespace Data_Manager
 
             StyleModelList();
             StyleComboBox();
-            StylePilotButton(btnModelLoad, PilotBlueColor, Color.White);
+            StylePilotButton(btnImportModel, PilotBlueColor, Color.White);
             StylePilotButton(btnTubInput, PilotCyanColor, Color.FromArgb(10, 24, 32));
             StylePilotButton(btnPilotChart, PilotGreenColor, Color.FromArgb(9, 30, 20));
             StylePilotButton(btnGenerateJudement, PilotOrangeColor, Color.FromArgb(34, 20, 6));
@@ -207,7 +221,7 @@ namespace Data_Manager
             lvModelList.BackColor = PilotSurfaceColor;
             lvModelList.ForeColor = PilotTextColor;
             lvModelList.Font = new Font("맑은 고딕", 9.5F, FontStyle.Regular);
-            lvModelList.BorderStyle = BorderStyle.None;
+            lvModelList.BorderStyle = BorderStyle.FixedSingle;
             lvModelList.GridLines = true;
             colModelNo.Text = "번호";
             colModelName.Text = "모델 이름";
@@ -352,12 +366,20 @@ namespace Data_Manager
                 .ToArray();
 
             int addedCount = 0;
-            foreach (string file in files)
+            lvModelList.BeginUpdate();
+            try
             {
-                if (AddModel(file))
+                foreach (string file in files)
                 {
-                    addedCount++;
+                    if (AddModel(file))
+                    {
+                        addedCount++;
+                    }
                 }
+            }
+            finally
+            {
+                lvModelList.EndUpdate();
             }
 
             ResizeModelColumns();
@@ -440,6 +462,24 @@ namespace Data_Manager
             _selectedModel = existing;
             UpsertSharedModel(modelName, modelPath);
             ResizeModelColumns();
+        }
+
+        private void BtnImportModel_Click(object? sender, EventArgs e)
+        {
+            using OpenFileDialog dialog = new OpenFileDialog();
+            dialog.Title = "가져올 AI 모델 선택";
+            dialog.Filter = "H5 모델 (*.h5)|*.h5";
+            dialog.Multiselect = false;
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                return;
+            }
+
+            string modelPath = Path.GetFullPath(dialog.FileName);
+            string modelName = Path.GetFileName(modelPath);
+
+            AddOrSelectModel(modelName, modelPath);
         }
 
         private bool AddModel(string modelPath)
@@ -532,52 +572,114 @@ namespace Data_Manager
                     .Select(model => model.WindowsPath)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            for (int i = _models.Count - 1; i >= 0; i--)
+            lvModelList.BeginUpdate();
+            try
             {
-                if (sharedPaths.Contains(_models[i].Path))
+                for (int i = _models.Count - 1; i >= 0; i--)
                 {
-                    continue;
+                    if (sharedPaths.Contains(_models[i].Path))
+                    {
+                        continue;
+                    }
+
+                    bool wasSelected =
+                        ReferenceEquals(_selectedModel, _models[i]);
+
+                    _models.RemoveAt(i);
+                    lvModelList.Items.RemoveAt(i);
+
+                    if (wasSelected)
+                    {
+                        _selectedModel = null;
+                        ClearModelLabels();
+                        _frameList.Clear();
+                        ConfigureLocationTrackBar();
+                        DrawTubRequiredMessage();
+                    }
                 }
 
-                bool wasSelected =
-                    ReferenceEquals(_selectedModel, _models[i]);
-
-                _models.RemoveAt(i);
-                lvModelList.Items.RemoveAt(i);
-
-                if (wasSelected)
+                foreach (SharedModelRegistryEntry sharedModel in sharedModels)
                 {
-                    _selectedModel = null;
-                    ClearModelLabels();
-                    _frameList.Clear();
-                    ConfigureLocationTrackBar();
-                    DrawTubRequiredMessage();
+                    bool exists =
+                        _models.Any(
+                            model =>
+                                string.Equals(
+                                    model.Path,
+                                    sharedModel.WindowsPath,
+                                    StringComparison.OrdinalIgnoreCase));
+
+                    if (exists)
+                    {
+                        continue;
+                    }
+
+                    AddModelToList(
+                        Path.GetFileNameWithoutExtension(
+                            sharedModel.WindowsPath),
+                        sharedModel.WindowsPath);
                 }
+
+                RenumberModelListItems();
+            }
+            finally
+            {
+                lvModelList.EndUpdate();
             }
 
-            foreach (SharedModelRegistryEntry sharedModel in sharedModels)
-            {
-                bool exists =
-                    _models.Any(
-                        model =>
-                            string.Equals(
-                                model.Path,
-                                sharedModel.WindowsPath,
-                                StringComparison.OrdinalIgnoreCase));
-
-                if (exists)
-                {
-                    continue;
-                }
-
-                AddModelToList(
-                    Path.GetFileNameWithoutExtension(
-                        sharedModel.WindowsPath),
-                    sharedModel.WindowsPath);
-            }
-
-            RenumberModelListItems();
             ResizeModelColumns();
+        }
+
+        private void ApplyPilotSplitRatio()
+        {
+            if (splitMain.Width <= 0)
+            {
+                return;
+            }
+
+            int minDistance = Math.Max(splitMain.Panel1MinSize, 260);
+            int maxDistance =
+                Math.Max(
+                    minDistance,
+                    splitMain.Width - splitMain.Panel2MinSize - splitMain.SplitterWidth);
+            int targetDistance =
+                Math.Max(
+                    minDistance,
+                    Math.Min(maxDistance, (int)Math.Round(splitMain.Width * PilotLeftPanelRatio)));
+
+            if (splitMain.SplitterDistance != targetDistance)
+            {
+                splitMain.SplitterDistance = targetDistance;
+            }
+        }
+
+        private void LayoutPilotPlaybackControls()
+        {
+            if (pnlPlaybackControls.Width <= 0)
+            {
+                return;
+            }
+
+            Control[] controls =
+            {
+                btnJumpPrev5,
+                btnPrevImage,
+                btnPlayPause,
+                cmbSpeed,
+                btnReversePlay,
+                btnNextImage,
+                btnJumpNext5
+            };
+
+            int gap = Math.Max(8, (int)Math.Round(pnlPlaybackControls.Width * 0.011));
+            int totalWidth = controls.Sum(control => control.Width) + gap * (controls.Length - 1);
+            int x = Math.Max(0, (pnlPlaybackControls.Width - totalWidth) / 2);
+
+            foreach (Control control in controls)
+            {
+                control.Left = x;
+                control.Top = Math.Max(6, (pnlPlaybackControls.Height - control.Height) / 2);
+                x += control.Width + gap;
+            }
         }
 
         private void RenumberModelListItems()
@@ -1340,7 +1442,7 @@ namespace Data_Manager
 
             _currentFrameIndex = trbLocation.Value;
             ShowCurrentFrame();
-            CacheCurrentModelFrames();
+            SaveCurrentModelViewState();
         }
 
         private void TrbLocation_MouseDown(object? sender, MouseEventArgs e)
@@ -1399,7 +1501,7 @@ namespace Data_Manager
             DonkeyAsyncWorker.PilotFrameData frame = _frameList[_currentFrameIndex];
 
             ShowImageInPictureBox(frame.ImagePath);
-            PositionImageOverlays();
+            PositionImageOverlaysIfNeeded();
             lblImageIndexOverlay.Text = $"{_currentFrameIndex + 1} / {_frameList.Count}";
             pliotAiThrottleGauge.SetThrottleValue(frame.PilotThrottle);
             pliotTubThrottleGauge.SetThrottleValue(frame.UserThrottle);
@@ -1413,10 +1515,16 @@ namespace Data_Manager
 
         private void ShowImageInPictureBox(string imagePath)
         {
-            DisposeCurrentImage();
+            if (string.Equals(_currentImagePath, imagePath, StringComparison.OrdinalIgnoreCase) &&
+                _currentImageRenderSize != Size.Empty &&
+                picPilotImage.Image != null)
+            {
+                return;
+            }
 
             if (string.IsNullOrWhiteSpace(imagePath))
             {
+                DisposeCurrentImage();
                 DrawImageMissingMessage();
                 return;
             }
@@ -1425,14 +1533,55 @@ namespace Data_Manager
             string windowsPath = DonkeyAsyncWorker.ToWindowsPathFromWslPath(imagePath, distroName);
             if (!File.Exists(windowsPath))
             {
+                DisposeCurrentImage();
                 DrawImageMissingMessage();
                 return;
             }
 
             using FileStream stream = new FileStream(windowsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using Image image = Image.FromStream(stream);
-            picPilotImage.Image = new Bitmap(image);
+
+            Size targetSize = GetImageRenderSize(image.Size);
+            if (string.Equals(_currentImagePath, imagePath, StringComparison.OrdinalIgnoreCase) &&
+                _currentImageRenderSize == targetSize &&
+                picPilotImage.Image != null)
+            {
+                return;
+            }
+
+            Bitmap bitmap =
+                targetSize.Width > 0 && targetSize.Height > 0
+                    ? new Bitmap(image, targetSize)
+                    : new Bitmap(image);
+
+            DisposeCurrentImage();
+            picPilotImage.Image = bitmap;
+            _currentImagePath = imagePath;
+            _currentImageRenderSize = targetSize;
             picPilotImage.SendToBack();
+        }
+
+        private Size GetImageRenderSize(Size sourceSize)
+        {
+            if (sourceSize.Width <= 0 || sourceSize.Height <= 0)
+            {
+                return Size.Empty;
+            }
+
+            int maxWidth = Math.Max(1, picPilotImage.ClientSize.Width);
+            int maxHeight = Math.Max(1, picPilotImage.ClientSize.Height);
+            double scale = Math.Min(
+                maxWidth / (double)sourceSize.Width,
+                maxHeight / (double)sourceSize.Height);
+
+            if (scale >= 1.0)
+            {
+                return sourceSize;
+            }
+
+            return new Size(
+                Math.Max(1, (int)Math.Round(sourceSize.Width * scale)),
+                Math.Max(1, (int)Math.Round(sourceSize.Height * scale)));
         }
 
         private void DrawTubRequiredMessage()
@@ -1448,6 +1597,8 @@ namespace Data_Manager
         private void DrawMessageImage(string text)
         {
             DisposeCurrentImage();
+            _currentImagePath = "";
+            _currentImageRenderSize = Size.Empty;
 
             int width = Math.Max(320, picPilotImage.Width);
             int height = Math.Max(180, picPilotImage.Height);
@@ -1476,6 +1627,9 @@ namespace Data_Manager
                 picPilotImage.Image = null;
                 oldImage.Dispose();
             }
+
+            _currentImagePath = "";
+            _currentImageRenderSize = Size.Empty;
         }
 
         #endregion
@@ -1609,6 +1763,18 @@ namespace Data_Manager
             pliotAiThrottleGauge.Invalidate();
             pliotTubThrottleGauge.Invalidate();
             pliotAngleIndicator.Invalidate();
+        }
+
+        private void PositionImageOverlaysIfNeeded()
+        {
+            Size hostSize = picPilotImage.ClientSize;
+            if (hostSize == _lastOverlayHostSize)
+            {
+                return;
+            }
+
+            _lastOverlayHostSize = hostSize;
+            PositionImageOverlays();
         }
 
         private void UpdatePilotOverlaySizes(int hostWidth, int visibleHostHeight)

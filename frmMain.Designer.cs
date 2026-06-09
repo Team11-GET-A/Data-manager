@@ -29,9 +29,9 @@
         private void InitializeComponent()
         {
             components = new System.ComponentModel.Container();
-            ListViewItem listViewItem4 = new ListViewItem(new string[] { "[업로드된 파일]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
-            ListViewItem listViewItem5 = new ListViewItem(new string[] { "[파일추가]" }, 3, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
-            ListViewItem listViewItem6 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem1 = new ListViewItem(new string[] { "[업로드된 파일]" }, 0, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
+            ListViewItem listViewItem2 = new ListViewItem(new string[] { "[파일추가]" }, 3, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F));
+            ListViewItem listViewItem3 = new ListViewItem(new string[] { "[휴지통]" }, 2, Color.Empty, Color.Empty, new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, 129));
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
             sdrSeekBar = new MaterialSkin.Controls.MaterialSlider();
             pnlVideo = new Panel();
@@ -671,10 +671,10 @@
             // lstviewMain
             // 
             lstviewMain.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            listViewItem4.Tag = "파일목록";
-            listViewItem5.Tag = "파일추가";
-            listViewItem6.Tag = "휴지통";
-            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem4, listViewItem5, listViewItem6 });
+            listViewItem1.Tag = "파일목록";
+            listViewItem2.Tag = "파일추가";
+            listViewItem3.Tag = "휴지통";
+            lstviewMain.Items.AddRange(new ListViewItem[] { listViewItem1, listViewItem2, listViewItem3 });
             lstviewMain.Location = new Point(-1, 50);
             lstviewMain.Name = "lstviewMain";
             lstviewMain.Size = new Size(551, 576);
@@ -969,7 +969,7 @@
             AutoScaleDimensions = new SizeF(8F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = SystemColors.Control;
-            ClientSize = new Size(1829, 1020);
+            ClientSize = new Size(1600, 900);
             Controls.Add(pnlContrastProperty);
             Controls.Add(pnlFolderList);
             Controls.Add(pnlVideo);
