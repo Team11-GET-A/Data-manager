@@ -16,6 +16,17 @@ namespace Data_Manager
     {
         private const int OverlayAlpha = 120;
         private static readonly Color OverlayBackColor = Color.FromArgb(OverlayAlpha, 22, 26, 32);
+        private static readonly Color PilotBackColor = Color.White;
+        private static readonly Color PilotPanelColor = Color.White;
+        private static readonly Color PilotSurfaceColor = Color.White;
+        private static readonly Color PilotSurfaceLightColor = Color.FromArgb(245, 247, 250);
+        private static readonly Color PilotBorderColor = Color.FromArgb(205, 214, 225);
+        private static readonly Color PilotTextColor = Color.FromArgb(30, 39, 50);
+        private static readonly Color PilotMutedTextColor = Color.FromArgb(92, 105, 122);
+        private static readonly Color PilotBlueColor = Color.FromArgb(62, 150, 255);
+        private static readonly Color PilotCyanColor = Color.FromArgb(44, 205, 220);
+        private static readonly Color PilotGreenColor = Color.FromArgb(65, 190, 125);
+        private static readonly Color PilotOrangeColor = Color.FromArgb(255, 168, 72);
 
         private readonly List<ModelListItem> _models = new List<ModelListItem>();
 
@@ -49,6 +60,7 @@ namespace Data_Manager
             cmbSpeed.SelectedIndex = 1;
             ApplyOverlayStyles();
             ConfigurePlaybackTimer();
+            ApplyPilotDesign();
 
             // Keep event wiring in one place so Designer files stay focused on layout only.
             btnModelLoad.Text = "모델 폴더 선택";
@@ -113,6 +125,140 @@ namespace Data_Manager
             _playbackTimer = new System.Windows.Forms.Timer();
             _playbackTimer.Interval = GetPlaybackInterval();
             _playbackTimer.Tick += PlaybackTimer_Tick;
+        }
+
+        private void ApplyPilotDesign()
+        {
+            Font = new Font("맑은 고딕", 10.5F, FontStyle.Regular);
+            Text = "파일럿";
+            BackColor = PilotBackColor;
+
+            splitMain.BackColor = PilotBackColor;
+            pnlLeft.BackColor = PilotBackColor;
+            pnlRight.BackColor = PilotBackColor;
+            pnlPilotCard.BackColor = PilotPanelColor;
+            pnlPilotCard.BorderStyle = BorderStyle.None;
+            pnlPilotHeader.BackColor = PilotPanelColor;
+            pnlModelLoad.BackColor = PilotBackColor;
+            pnlPlaybackControls.BackColor = PilotPanelColor;
+            pnlTrackBar.BackColor = PilotPanelColor;
+            pnlImageHost.BackColor = PilotBackColor;
+            picPilotImage.BackColor = PilotBackColor;
+
+            grpSelectedModel.Text = "선택한 모델 정보";
+            grpSelectedModel.ForeColor = PilotTextColor;
+            grpSelectedModel.BackColor = PilotPanelColor;
+            grpSelectedModel.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+
+            lblModelListTitle.Text = "모델 리스트";
+            lblModelListTitle.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
+            lblModelListTitle.ForeColor = PilotTextColor;
+
+            lblSelectedModelNameTitle.Text = "모델명";
+            lblSelectedModelPathTitle.Text = "파일 경로";
+            lblSelectedModelTypeTitle.Text = "타입";
+            lblSelectedTubPathTitle.Text = "Tubs 경로";
+
+            foreach (Label label in new[]
+            {
+                lblSelectedModelNameTitle,
+                lblSelectedModelPathTitle,
+                lblSelectedModelTypeTitle,
+                lblSelectedTubPathTitle
+            })
+            {
+                label.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
+                label.ForeColor = PilotMutedTextColor;
+            }
+
+            foreach (Label label in new[]
+            {
+                lblSelectedModelName,
+                lblSelectedModelPath,
+                lblSelectedModelType,
+                lblSelectedTubPath,
+                lblTubPathValue
+            })
+            {
+                label.Font = new Font("맑은 고딕", 9.5F, FontStyle.Regular);
+                label.ForeColor = PilotTextColor;
+            }
+
+            lblTubPathTitle.Text = "선택 모델";
+            lblTubPathTitle.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
+            lblTubPathTitle.ForeColor = PilotMutedTextColor;
+
+            StyleModelList();
+            StyleComboBox();
+            StylePilotButton(btnModelLoad, PilotBlueColor, Color.White);
+            StylePilotButton(btnTubInput, PilotCyanColor, Color.FromArgb(10, 24, 32));
+            StylePilotButton(btnPilotChart, PilotGreenColor, Color.FromArgb(9, 30, 20));
+            StylePilotButton(btnGenerateJudement, PilotOrangeColor, Color.FromArgb(34, 20, 6));
+            StylePlaybackButton(btnJumpPrev5, "<< 5");
+            StylePlaybackButton(btnPrevImage, "<");
+            StylePlaybackButton(btnPlayPause, "▶");
+            StylePlaybackButton(btnReversePlay, "◀");
+            StylePlaybackButton(btnNextImage, ">");
+            StylePlaybackButton(btnJumpNext5, "5 >>");
+        }
+
+        private void StyleModelList()
+        {
+            lvModelList.BackColor = PilotSurfaceColor;
+            lvModelList.ForeColor = PilotTextColor;
+            lvModelList.Font = new Font("맑은 고딕", 9.5F, FontStyle.Regular);
+            lvModelList.BorderStyle = BorderStyle.None;
+            lvModelList.GridLines = true;
+            colModelNo.Text = "번호";
+            colModelName.Text = "모델 이름";
+            colModelPath.Text = "경로";
+        }
+
+        private void StyleComboBox()
+        {
+            cmbSpeed.BackColor = PilotSurfaceLightColor;
+            cmbSpeed.ForeColor = PilotTextColor;
+            cmbSpeed.FlatStyle = FlatStyle.Flat;
+            cmbSpeed.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
+        }
+
+        private void StylePlaybackButton(Button button, string text)
+        {
+            button.Text = text;
+            button.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
+            StylePilotButton(button, PilotSurfaceLightColor, PilotTextColor);
+        }
+
+        private void StylePilotButton(Button button, Color backColor, Color foreColor)
+        {
+            button.UseVisualStyleBackColor = false;
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 1;
+            button.FlatAppearance.BorderColor = Color.FromArgb(
+                Math.Min(255, backColor.R + 34),
+                Math.Min(255, backColor.G + 34),
+                Math.Min(255, backColor.B + 34));
+            button.BackColor = backColor;
+            button.ForeColor = foreColor;
+            button.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            button.Cursor = Cursors.Hand;
+            button.MouseEnter += (s, e) =>
+            {
+                button.BackColor = LightenColor(backColor, 18);
+            };
+            button.MouseLeave += (s, e) =>
+            {
+                button.BackColor = backColor;
+            };
+        }
+
+        private static Color LightenColor(Color color, int amount)
+        {
+            return Color.FromArgb(
+                color.A,
+                Math.Min(255, color.R + amount),
+                Math.Min(255, color.G + amount),
+                Math.Min(255, color.B + amount));
         }
 
         #endregion

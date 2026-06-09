@@ -239,7 +239,6 @@ namespace DonkeyDataManager
 
             WireUiEvents();
             InitializeCatalogListDrawing();
-            InitializeResponsiveLayout();
 
             InitializePlaybackTimer();
 
@@ -248,6 +247,7 @@ namespace DonkeyDataManager
             InitializeWSLPaths();
 
             InitializeTrainerButtonStyles();
+            InitializeResponsiveLayout();
 
             // ⭐ 추가
             InitializeModelRefreshTimer();
@@ -521,14 +521,23 @@ namespace DonkeyDataManager
 
         private void InitializeResponsiveLayout()
         {
-            responsiveBaseClientSize = new Size(1600, 900);
+            CaptureResponsiveSnapshot();
+
+            MinimumSize = new Size(1000, 650);
+            Resize -= FrmNewtrainer_Resize;
+            Resize += FrmNewtrainer_Resize;
+        }
+
+        private void CaptureResponsiveSnapshot()
+        {
+            responsiveBaseClientSize =
+                ClientSize.Width > 0 && ClientSize.Height > 0
+                    ? ClientSize
+                    : new Size(1600, 900);
 
             originalControlBounds.Clear();
             originalControlFontSizes.Clear();
             CaptureResponsiveControl(this);
-
-            MinimumSize = new Size(1000, 650);
-            Resize += FrmNewtrainer_Resize;
         }
 
         private void CaptureResponsiveControl(Control parent)
@@ -553,6 +562,7 @@ namespace DonkeyDataManager
         private void ApplyResponsiveLayout()
         {
             if (isApplyingResponsiveLayout ||
+                WindowState == FormWindowState.Minimized ||
                 responsiveBaseClientSize.Width <= 0 ||
                 responsiveBaseClientSize.Height <= 0)
             {
@@ -562,6 +572,7 @@ namespace DonkeyDataManager
             try
             {
                 isApplyingResponsiveLayout = true;
+                SuspendResponsiveLayout(this);
 
                 float scaleX = ClientSize.Width / (float)responsiveBaseClientSize.Width;
                 float scaleY = ClientSize.Height / (float)responsiveBaseClientSize.Height;
@@ -573,8 +584,35 @@ namespace DonkeyDataManager
             }
             finally
             {
+                ResumeResponsiveLayout(this);
                 isApplyingResponsiveLayout = false;
             }
+        }
+
+        private void SuspendResponsiveLayout(Control parent)
+        {
+            parent.SuspendLayout();
+
+            foreach (Control control in parent.Controls)
+            {
+                if (control.HasChildren)
+                {
+                    SuspendResponsiveLayout(control);
+                }
+            }
+        }
+
+        private void ResumeResponsiveLayout(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                if (control.HasChildren)
+                {
+                    ResumeResponsiveLayout(control);
+                }
+            }
+
+            parent.ResumeLayout(false);
         }
 
         private void ApplyResponsiveControl(Control parent, float scaleX, float scaleY, float fontScale)
