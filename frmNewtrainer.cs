@@ -2866,7 +2866,9 @@ namespace DonkeyDataManager
                     {
                         FileName = "wsl.exe",
                         UseShellExecute = false,
-                        CreateNoWindow = false
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
                     };
 
                 AddWslArguments(
@@ -2875,6 +2877,9 @@ namespace DonkeyDataManager
 
                 wslProcess =
                     Process.Start(psi);
+
+                // WSL 프로세스 출력 모니터링
+                _ = MonitorWslProcessAsync(wslProcess);
 
                 // DriveWebUI 폼 오픈 (브라우저 대신)
                 DriveWebUI driveWebUI = new DriveWebUI();
@@ -2887,28 +2892,81 @@ namespace DonkeyDataManager
             }
         }
 
+        private async System.Threading.Tasks.Task MonitorWslProcessAsync(Process process)
+        {
+            if (process == null) return;
+
+            try
+            {
+                string error = await process.StandardError.ReadToEndAsync();
+                string output = await process.StandardOutput.ReadToEndAsync();
+
+                // WSL 프로세스 종료 대기
+                process.WaitForExit();
+                int exitCode = process.ExitCode;
+
+                if (exitCode != 0 || !string.IsNullOrWhiteSpace(error))
+                {
+                    string errorMessage = $"WSL Donkey Car 실행 오류 (종료 코드: {exitCode})\n\n";
+
+                    if (!string.IsNullOrWhiteSpace(error))
+                    {
+                        errorMessage += "에러 메시지:\n" + error + "\n\n";
+                    }
+
+                    errorMessage += "확인 사항:\n" +
+                                   "1. WSL에 Donkey Car가 설치되어 있는가?\n" +
+                                   "2. ~/mycar/manage.py 파일이 존재하는가?\n" +
+                                   "3. 선택한 모델이 ~/mycar/models/ 에 존재하는가?";
+
+                    MessageBox.Show(
+                        errorMessage,
+                        "WSL 드라이브 모드 실행 오류",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+
+                if (!string.IsNullOrWhiteSpace(output))
+                {
+                    System.Diagnostics.Debug.WriteLine($"WSL 출력:\n{output}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"WSL 프로세스 모니터링 오류: {ex.Message}");
+            }
+        }
+
         private string BuildDriveCommand(string selectedModel)
         {
+            // 더 간단한 버전 - conda 활성화 후 python manage.py drive 실행
+            string configuredUserHome =
+                string.IsNullOrWhiteSpace(wslUsername)
+                    ? ""
+                    : "/home/" + wslUsername;
+
+            List<string> condaShellPaths =
+                BuildCondaShellCandidates(configuredUserHome);
+
+            string condaActivation =
+                BuildCondaShellSourceCommand(condaShellPaths) +
+                "conda activate " + QuoteForBash(TrainingCondaEnvironment) + "; ";
+
             return
                 "set -e; " +
-                "cd " +
-                QuoteForBash(wslMycarPath) +
-                "; " +
-                "if [ ! -f manage.py ]; then " +
-                "echo 'manage.py was not found in the resolved mycar folder: " +
-                EscapeForDoubleQuotedBash(wslMycarPath) +
-                "' >&2; " +
-                "exit 25; " +
-                "fi; " +
-                BuildPythonResolverCommand() +
-                "echo 'Using Python after conda activate:'; " +
-                "python -c 'import sys; print(sys.executable)'; " +
+                "cd " + QuoteForBash(wslMycarPath) + "; " +
+                "echo '=== Donkey Car 드라이브 모드 시작 ==='; " +
+                condaActivation +
+                "echo 'Python 경로:'; " +
+                "which python; " +
+                "echo 'Donkey Car 실행 중...'; " +
                 "python manage.py drive --model " +
                 QuoteForBash(
                     "./" +
                     ModelDirectoryName +
                     "/" +
-                    selectedModel);
+                    selectedModel) +
+                " --port 8887";  // 포트 8887에서 웹서버 실행 (시뮬레이터 연결 활성화)
         }
 
         // =====================================================

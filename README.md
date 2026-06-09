@@ -70,7 +70,7 @@
 |---|---|
 | **Client UI** | C# WinForms (Windows 환경) |
 | **Backend/Bridge** | WSL (Windows Subsystem for Linux), PowerShell, Process |
-| **Linux OS** | Ubuntu |
+| **Linux OS** | Ubuntu 22.0.4 |
 | **AI Environment** | Python, Conda (`e2e_env`), Donkeycar Framework |
 | **Data Format** | Tub 구조, JSON, CSV |
 
