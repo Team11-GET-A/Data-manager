@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="MaterialSkin.2" Version="2.3.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2849.54" />
   </ItemGroup>
 
   <ItemGroup>

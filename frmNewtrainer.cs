@@ -2876,7 +2876,9 @@ namespace DonkeyDataManager
                 wslProcess =
                     Process.Start(psi);
 
-                OpenBrowserAfterDelay();
+                // DriveWebUI 폼 오픈 (브라우저 대신)
+                DriveWebUI driveWebUI = new DriveWebUI();
+                driveWebUI.Show();
             }
             catch (Exception ex)
             {
