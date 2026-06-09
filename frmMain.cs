@@ -129,6 +129,50 @@ namespace AD_AI_LearningData_Editor
 
 
 
+
+            IconProperty.SetAutoImageByMargins(
+                btnPalette1,
+                Data_Manager.Properties.Resources.black_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+            IconProperty.SetAutoImageByMargins(
+                btnPalette2,
+                Data_Manager.Properties.Resources.white_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+            IconProperty.SetAutoImageByMargins(
+                btnPalette3,
+                Data_Manager.Properties.Resources.blue_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+            IconProperty.SetAutoImageByMargins(
+                btnPalette4,
+                Data_Manager.Properties.Resources.yellow_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+            IconProperty.SetAutoImageByMargins(
+                btnPalette5,
+                Data_Manager.Properties.Resources.brown_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+
+
+
             this.AutoScaleMode = AutoScaleMode.None;
 
             var materialSkinManager = MaterialSkinManager.Instance;
@@ -179,6 +223,7 @@ namespace AD_AI_LearningData_Editor
             InitializeResponsiveLayout();
             InitializeListViewSelectionPersistence();
             RegisterEditCancelButton();
+            RegisterSelectAllButton();
         }
 
         private string GetBinFolder()
@@ -1343,7 +1388,6 @@ namespace AD_AI_LearningData_Editor
 
             btnNoise.Click += btnNoise_Click;
             btnMirror.Click += btnMirror_Click;
-            btnMirrorY.Click += btnMirrorY_Click;
 
             btnROILU.Click += (s, e) => ApplyROIBlackoutToAllImages(0, 0);
             btnROIU.Click += (s, e) => ApplyROIBlackoutToAllImages(0, 1);
@@ -2038,6 +2082,78 @@ namespace AD_AI_LearningData_Editor
         }
 
 
+        private void RegisterSelectAllButton()
+        {
+            Control button = this.Controls.Find("btnSelctAll", true).FirstOrDefault();
+
+            if (button != null)
+            {
+                button.Click -= btnSelctAll_Click;
+                button.Click += btnSelctAll_Click;
+            }
+        }
+
+        private void btnSelctAll_Click(object sender, EventArgs e)
+        {
+            SelectAllUploadedSlideImages();
+        }
+
+        private void SelectAllUploadedSlideImages()
+        {
+            if (slideImages == null || slideImages.Count == 0)
+            {
+                ResetSelectedInterval();
+                return;
+            }
+
+            intervalPointIndices.Clear();
+            intervalPointIndices.Add(0);
+            intervalPointIndices.Add(slideImages.Count - 1);
+
+            selectedIntervalStartIndex = 0;
+            selectedIntervalEndIndex = slideImages.Count - 1;
+
+            int firstDisplayIndex = GetDisplayIndexAt(slideImages, 0);
+            int lastDisplayIndex = GetDisplayIndexAt(slideImages, slideImages.Count - 1);
+
+            SetIntervalLabelText("(" + firstDisplayIndex.ToString() + "~" + lastDisplayIndex.ToString() + ")");
+
+            preservedFileListSelection.Clear();
+
+            if (lstviewFileListD != null)
+            {
+                HashSet<string> selectedPaths = new HashSet<string>(
+                    slideImages.Select(path => Path.GetFullPath(path)),
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+                try
+                {
+                    isUpdatingListSelection = true;
+                    lstviewFileListD.BeginUpdate();
+
+                    foreach (ListViewItem item in lstviewFileListD.Items)
+                    {
+                        string itemPath = item.Tag as string;
+                        bool selected = !string.IsNullOrWhiteSpace(itemPath) &&
+                            selectedPaths.Contains(Path.GetFullPath(itemPath));
+
+                        item.Selected = selected;
+
+                        if (selected)
+                        {
+                            preservedFileListSelection.Add(item.Text);
+                        }
+                    }
+                }
+                finally
+                {
+                    lstviewFileListD.EndUpdate();
+                    isUpdatingListSelection = false;
+                }
+            }
+        }
+
         private void RegisterEditCancelButton()
         {
             Control button = this.Controls.Find("btnEditCncl", true).FirstOrDefault();
@@ -2059,7 +2175,14 @@ namespace AD_AI_LearningData_Editor
             try
             {
                 string backupFolder = GetEditCancelBackupFolder();
-                string backupPath = Path.Combine(backupFolder, Path.GetFileName(targetPath));
+                string relativePath = GetRelativePathFromBase(GetUploadedDataFolder(), targetPath);
+                string backupPath = Path.Combine(backupFolder, relativePath);
+                string backupDirectory = Path.GetDirectoryName(backupPath);
+
+                if (!Directory.Exists(backupDirectory))
+                {
+                    Directory.CreateDirectory(backupDirectory);
+                }
 
                 if (!File.Exists(backupPath))
                 {
@@ -2071,6 +2194,7 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+
         private void RestoreEditCancelBackups()
         {
             string backupFolder = Path.Combine(GetBinFolder(), editCancelBackupFolderName);
@@ -2081,20 +2205,59 @@ namespace AD_AI_LearningData_Editor
                 return;
             }
 
+            List<string> targets = GetTargetImageFilesForEdit();
+
+            if (targets == null || targets.Count == 0)
+            {
+                MessageBox.Show("편집을 취소할 선택 이미지가 없습니다.");
+                return;
+            }
+
             string dataFolder = GetUploadedDataFolder();
+            int restoredCount = 0;
 
             try
             {
                 isEditCancelRestoring = true;
                 ReleaseCurrentImage();
 
-                foreach (string backupPath in Directory.GetFiles(backupFolder, "*.*", SearchOption.TopDirectoryOnly))
+                foreach (string targetPath in targets)
                 {
-                    string targetPath = Path.Combine(dataFolder, Path.GetFileName(backupPath));
+                    string relativePath = GetRelativePathFromBase(dataFolder, targetPath);
+                    string backupPath = Path.Combine(backupFolder, relativePath);
+
+                    if (!File.Exists(backupPath))
+                    {
+                        // 이전 버전 백업은 파일 이름만으로 저장되어 있을 수 있으므로 한 번 더 확인합니다.
+                        backupPath = Path.Combine(backupFolder, Path.GetFileName(targetPath));
+                    }
+
+                    if (!File.Exists(backupPath))
+                    {
+                        continue;
+                    }
+
                     File.Copy(backupPath, targetPath, true);
+                    restoredCount++;
+
+                    try
+                    {
+                        File.Delete(backupPath);
+                    }
+                    catch
+                    {
+                    }
                 }
 
-                Directory.Delete(backupFolder, true);
+                RestoreNonImageEditBackupsIfAny(backupFolder, dataFolder);
+
+                DeleteEmptyDirectories(backupFolder);
+
+                if (Directory.Exists(backupFolder) &&
+                    Directory.GetFiles(backupFolder, "*.*", SearchOption.AllDirectories).Length == 0)
+                {
+                    Directory.Delete(backupFolder, true);
+                }
 
                 gammaBackupPaths.Clear();
                 Array.Clear(roiState, 0, roiState.Length);
@@ -2104,7 +2267,14 @@ namespace AD_AI_LearningData_Editor
                 MoveToSlideIndexAfterEdit(restoreIndex);
                 LoadTrashCanFiles();
 
-                MessageBox.Show("이미지 편집 변경사항을 취소했습니다.\n삭제 제외 인덱스는 유지됩니다.");
+                if (restoredCount == 0)
+                {
+                    MessageBox.Show("선택된 이미지에 대해 취소할 편집 백업이 없습니다.");
+                }
+                else
+                {
+                    MessageBox.Show("선택된 이미지의 편집 변경사항을 취소했습니다.\n삭제 제외 인덱스는 유지됩니다.");
+                }
             }
             catch (Exception ex)
             {
@@ -2115,6 +2285,68 @@ namespace AD_AI_LearningData_Editor
                 isEditCancelRestoring = false;
             }
         }
+
+        private void RestoreNonImageEditBackupsIfAny(string backupFolder, string dataFolder)
+        {
+            try
+            {
+                foreach (string backupPath in Directory.GetFiles(backupFolder, "*.*", SearchOption.AllDirectories))
+                {
+                    if (IsImageFile(backupPath))
+                    {
+                        continue;
+                    }
+
+                    string relativePath = GetRelativePathFromBase(backupFolder, backupPath);
+                    string targetPath = Path.Combine(dataFolder, relativePath);
+                    string targetDirectory = Path.GetDirectoryName(targetPath);
+
+                    if (!Directory.Exists(targetDirectory))
+                    {
+                        Directory.CreateDirectory(targetDirectory);
+                    }
+
+                    File.Copy(backupPath, targetPath, true);
+
+                    try
+                    {
+                        File.Delete(backupPath);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void DeleteEmptyDirectories(string rootFolder)
+        {
+            if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder))
+            {
+                return;
+            }
+
+            foreach (string directory in Directory.GetDirectories(rootFolder, "*", SearchOption.AllDirectories)
+                .OrderByDescending(path => path.Length))
+            {
+                try
+                {
+                    if (Directory.Exists(directory) &&
+                        Directory.GetFiles(directory).Length == 0 &&
+                        Directory.GetDirectories(directory).Length == 0)
+                    {
+                        Directory.Delete(directory);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
 
         private void btnEditCncl_Click(object sender, EventArgs e)
         {
@@ -2132,6 +2364,7 @@ namespace AD_AI_LearningData_Editor
 
             SetToolTipByName("btnDel", "단축키 : Del 또는 백 스페이스");
             SetToolTipByName("btnSetInterval", "현재 프레임을 구간으로 지정, 단축키 : Ctrl");
+            SetToolTipByName("btnSelctAll", "전체 프레임 선택");
             SetToolTipByName("btnSave", "변경내용 저장");
             SetToolTipByName("btnEditCncl", "이미지 편집 변경사항 취소");
 
@@ -2421,17 +2654,42 @@ namespace AD_AI_LearningData_Editor
 
         private string GetUploadedRelativePath(string path)
         {
+            return GetRelativePathFromBase(GetUploadedFolder(), path);
+        }
+
+        private string GetRelativePathFromBase(string baseFolder, string targetPath)
+        {
             try
             {
-                string uploadFolder = GetUploadedFolder();
-                string relativePath = Path.GetRelativePath(uploadFolder, path);
-                return relativePath.Replace(Path.DirectorySeparatorChar, '\\');
+                if (string.IsNullOrWhiteSpace(baseFolder) || string.IsNullOrWhiteSpace(targetPath))
+                {
+                    return Path.GetFileName(targetPath);
+                }
+
+                string fullBase = Path.GetFullPath(baseFolder)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+                string fullTarget = Path.GetFullPath(targetPath);
+
+                Uri baseUri = new Uri(fullBase);
+                Uri targetUri = new Uri(fullTarget);
+
+                string relative = Uri.UnescapeDataString(baseUri.MakeRelativeUri(targetUri).ToString());
+                relative = relative.Replace('/', Path.DirectorySeparatorChar);
+
+                if (string.IsNullOrWhiteSpace(relative) || relative.StartsWith(".."))
+                {
+                    return Path.GetFileName(targetPath);
+                }
+
+                return relative;
             }
             catch
             {
-                return Path.GetFileName(path);
+                return Path.GetFileName(targetPath);
             }
         }
+
 
         private void LoadTrashCanFiles()
         {
