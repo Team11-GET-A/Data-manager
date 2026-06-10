@@ -133,6 +133,26 @@ namespace Data_Manager.Properties {
         /// <summary>
         ///   System.Drawing.Bitmap 형식의 지역화된 리소스를 찾습니다.
         /// </summary>
+        internal static System.Drawing.Bitmap black_bucket {
+            get {
+                object obj = ResourceManager.GetObject("black_bucket", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap 형식의 지역화된 리소스를 찾습니다.
+        /// </summary>
+        internal static System.Drawing.Bitmap blue_bucket {
+            get {
+                object obj = ResourceManager.GetObject("blue_bucket", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap 형식의 지역화된 리소스를 찾습니다.
+        /// </summary>
         internal static System.Drawing.Bitmap BlueFolder {
             get {
                 object obj = ResourceManager.GetObject("BlueFolder", resourceCulture);
@@ -143,9 +163,29 @@ namespace Data_Manager.Properties {
         /// <summary>
         ///   System.Drawing.Bitmap 형식의 지역화된 리소스를 찾습니다.
         /// </summary>
+        internal static System.Drawing.Bitmap brown_bucket {
+            get {
+                object obj = ResourceManager.GetObject("brown_bucket", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap 형식의 지역화된 리소스를 찾습니다.
+        /// </summary>
         internal static System.Drawing.Bitmap check_box {
             get {
                 object obj = ResourceManager.GetObject("check_box", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap 형식의 지역화된 리소스를 찾습니다.
+        /// </summary>
+        internal static System.Drawing.Bitmap circle {
+            get {
+                object obj = ResourceManager.GetObject("circle", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
@@ -326,6 +366,26 @@ namespace Data_Manager.Properties {
         internal static System.Drawing.Bitmap UTurnArrow12262463 {
             get {
                 object obj = ResourceManager.GetObject("UTurnArrow12262463", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap 형식의 지역화된 리소스를 찾습니다.
+        /// </summary>
+        internal static System.Drawing.Bitmap white_bucket {
+            get {
+                object obj = ResourceManager.GetObject("white_bucket", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap 형식의 지역화된 리소스를 찾습니다.
+        /// </summary>
+        internal static System.Drawing.Bitmap yellow_bucket {
+            get {
+                object obj = ResourceManager.GetObject("yellow_bucket", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
