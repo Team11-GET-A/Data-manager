@@ -66,7 +66,6 @@
             pnlImageIndexOverlay = new Panel();
             lblImageIndexOverlay = new Label();
             pnlPilotHeader = new Panel();
-            btnGenerateJudement = new Button();
             btnPilotChart = new Button();
             btnTubInput = new Button();
             lblTubPathValue = new Label();
@@ -579,7 +578,6 @@
             // pnlPilotHeader
             // 
             pnlPilotHeader.BackColor = Color.White;
-            pnlPilotHeader.Controls.Add(btnGenerateJudement);
             pnlPilotHeader.Controls.Add(btnPilotChart);
             pnlPilotHeader.Controls.Add(btnTubInput);
             pnlPilotHeader.Controls.Add(lblTubPathValue);
@@ -588,21 +586,7 @@
             pnlPilotHeader.Name = "pnlPilotHeader";
             pnlPilotHeader.Size = new Size(1142, 52);
             pnlPilotHeader.TabIndex = 0;
-            // 
-            // btnGenerateJudement
-            // 
-            btnGenerateJudement.Anchor = AnchorStyles.None;
-            btnGenerateJudement.BackColor = Color.FromArgb(255, 168, 72);
-            btnGenerateJudement.FlatAppearance.BorderColor = Color.FromArgb(255, 202, 106);
-            btnGenerateJudement.FlatStyle = FlatStyle.Flat;
-            btnGenerateJudement.ForeColor = Color.FromArgb(34, 20, 6);
-            btnGenerateJudement.Location = new Point(880, 8);
-            btnGenerateJudement.Name = "btnGenerateJudement";
-            btnGenerateJudement.Size = new Size(126, 36);
-            btnGenerateJudement.TabIndex = 3;
-            btnGenerateJudement.Text = "AI 판단 생성";
-            btnGenerateJudement.UseVisualStyleBackColor = false;
-            // 
+            //
             // btnPilotChart
             // 
             btnPilotChart.Anchor = AnchorStyles.None;
@@ -628,7 +612,7 @@
             btnTubInput.Name = "btnTubInput";
             btnTubInput.Size = new Size(126, 36);
             btnTubInput.TabIndex = 2;
-            btnTubInput.Text = "주행데이터 입력";
+            btnTubInput.Text = "데이터 로드";
             btnTubInput.UseVisualStyleBackColor = false;
             // 
             // lblTubPathValue
@@ -712,7 +696,6 @@
         private Panel pnlRight;
         private Panel pnlPilotCard;
         private Panel pnlPilotHeader;
-        private Button btnGenerateJudement;
         private Button btnPilotChart;
         private Button btnTubInput;
         private Label lblTubPathValue;

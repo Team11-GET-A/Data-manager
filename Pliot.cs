@@ -135,12 +135,6 @@ namespace Data_Manager
                 return true;
             }
 
-            if (keyData == (Keys.Control | Keys.J))
-            {
-                btnGenerateJudement.PerformClick();
-                return true;
-            }
-
             return base.ProcessCmdKey(ref msg, keyData);
         }
 
@@ -199,7 +193,6 @@ namespace Data_Manager
             EnableDoubleBuffering(lvModelList);
 
             btnTubInput.Click += BtnTubInput_Click;
-            btnGenerateJudement.Click += BtnGenerateJudement_Click;
             btnPilotChart.Click += BtnPilotChart_Click;
             trbLocation.ValueChanged += trbLocation_ValueChanged;
             trbLocation.MouseDown += TrbLocation_MouseDown;
@@ -396,7 +389,6 @@ namespace Data_Manager
             StylePilotButton(btnImportModel, PilotBlueColor, Color.White);
             StylePilotButton(btnTubInput, PilotCyanColor, Color.FromArgb(10, 24, 32));
             StylePilotButton(btnPilotChart, PilotGreenColor, Color.FromArgb(9, 30, 20));
-            StylePilotButton(btnGenerateJudement, PilotOrangeColor, Color.FromArgb(34, 20, 6));
             StylePlaybackButton(btnJumpPrev5);
             StylePlaybackButton(btnPrevImage);
             StylePlaybackButton(btnPlayPause);
@@ -496,7 +488,6 @@ namespace Data_Manager
             btnReversePlay.Anchor = AnchorStyles.None;
             btnNextImage.Anchor = AnchorStyles.None;
             btnJumpNext5.Anchor = AnchorStyles.None;
-            btnGenerateJudement.Anchor = AnchorStyles.None;
             btnPilotChart.Anchor = AnchorStyles.None;
             btnTubInput.Anchor = AnchorStyles.None;
             lblTubPathValue.Anchor = AnchorStyles.None;
@@ -1490,9 +1481,8 @@ namespace Data_Manager
             int gap = Math.Max(4, (int)Math.Round(8 * scaleX));
             int buttonHeight = Math.Max(28, (int)Math.Round(36 * scaleY));
             int chartWidth = Math.Max(72, (int)Math.Round(110 * scaleX));
-            int aiWidth = Math.Max(96, (int)Math.Round(126 * scaleX));
             int tubWidth = Math.Max(118, (int)Math.Round(154 * scaleX));
-            int totalButtonsWidth = chartWidth + aiWidth + tubWidth + gap * 2;
+            int totalButtonsWidth = chartWidth + tubWidth + gap;
 
             int availableWidth = Math.Max(1, pnlPilotHeader.ClientSize.Width - margin * 2);
             if (totalButtonsWidth > availableWidth)
@@ -1501,7 +1491,6 @@ namespace Data_Manager
                     availableWidth /
                     (double)Math.Max(1, totalButtonsWidth);
                 chartWidth = Math.Max(40, (int)Math.Floor(chartWidth * shrink));
-                aiWidth = Math.Max(48, (int)Math.Floor(aiWidth * shrink));
                 tubWidth = Math.Max(58, (int)Math.Floor(tubWidth * shrink));
                 gap = Math.Max(2, (int)Math.Floor(gap * shrink));
             }
@@ -1510,8 +1499,6 @@ namespace Data_Manager
             int x = pnlPilotHeader.ClientSize.Width - margin - tubWidth;
 
             btnTubInput.SetBounds(x, buttonTop, tubWidth, buttonHeight);
-            x -= aiWidth + gap;
-            btnGenerateJudement.SetBounds(x, buttonTop, aiWidth, buttonHeight);
             x -= chartWidth + gap;
             btnPilotChart.SetBounds(x, buttonTop, chartWidth, buttonHeight);
 
@@ -1899,6 +1886,30 @@ namespace Data_Manager
                 await LoadAndMergeJudementAsync(progress, token);
                 ConfigureLocationTrackBar();
                 MoveToFrame(0);
+
+                bool hasJudement = _frameList.Any(f => f.PilotAngle.HasValue || f.PilotThrottle.HasValue);
+                if (!hasJudement)
+                {
+                    progress.Report(new DonkeyAsyncWorker.ProgressReport { Step = "AI 판단 데이터 생성 중..." });
+                    try
+                    {
+                        DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> judResult =
+                            await DonkeyAsyncWorker.GenerateJudementAsync(
+                                _cardState,
+                                progress,
+                                token,
+                                forceRegenerate: false);
+                        if (judResult.Success && judResult.Data != null)
+                        {
+                            _cardState.JudementRecords = judResult.Data;
+                            MergeJudementRecords(judResult.Data);
+                            ShowCurrentFrame();
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch { }
+                }
+
                 CacheCurrentModelFrames();
                 progressForm.MarkCompleted("주행데이터 연결 완료");
             }
@@ -1916,67 +1927,6 @@ namespace Data_Manager
             {
                 ReportPilotException(ex);
                 MessageBox.Show(ex.Message, "Pilot", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private async void BtnGenerateJudement_Click(object? sender, EventArgs e)
-        {
-            // 선택 모델과 tub를 Python 추론 스크립트에 넘겨 judement 결과 JSON을 생성하거나 로드합니다.
-            // 이후 사용자 주행값과 AI 예측값을 같은 프레임 인덱스로 병합합니다.
-            if (_cardState == null || _selectedModel == null)
-            {
-                MessageBox.Show("먼저 모델을 선택해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            if (_cardState.TrainingTubPaths == null || _cardState.TrainingTubPaths.Count == 0)
-            {
-                MessageBox.Show("먼저 주행데이터를 연결해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            _loadCts?.Cancel();
-            _loadCts = new CancellationTokenSource();
-            CancellationToken token = _loadCts.Token;
-
-            using ProgressStatusForm progressForm = new ProgressStatusForm();
-            progressForm.SetTitle("AI 판단 데이터 생성 중...");
-            progressForm.SetIndeterminate(true);
-            progressForm.CancelRequested += () => _loadCts?.Cancel();
-            progressForm.Show(this);
-
-            IProgress<DonkeyAsyncWorker.ProgressReport> progress = CreateProgress(progressForm);
-
-            try
-            {
-                DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> result =
-                    await DonkeyAsyncWorker.GenerateJudementAsync(
-                        _cardState,
-                        progress,
-                        token,
-                        forceRegenerate: true);
-
-                if (!result.Success || result.Data == null)
-                {
-                    progressForm.MarkFailed(result.ErrorMessage);
-                    MessageBox.Show(result.ErrorMessage, "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                _cardState.JudementRecords = result.Data;
-                MergeJudementRecords(result.Data);
-                ShowCurrentFrame();
-                CacheCurrentModelFrames();
-                progressForm.MarkCompleted("AI 판단 데이터 생성 완료");
-            }
-            catch (OperationCanceledException)
-            {
-                progressForm.MarkCanceled("AI 판단 데이터 생성이 취소되었습니다.");
-            }
-            catch (Exception ex)
-            {
-                progressForm.MarkFailed($"오류: {ex.Message}");
-                MessageBox.Show(ex.Message, "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
