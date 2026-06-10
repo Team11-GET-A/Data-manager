@@ -406,7 +406,7 @@
             lblTrainerShortcutGuide.Name = "lblTrainerShortcutGuide";
             lblTrainerShortcutGuide.Size = new Size(500, 130);
             lblTrainerShortcutGuide.TabIndex = 18;
-            lblTrainerShortcutGuide.Text = "단축키: tub 선택 후 Enter 학습 시작\r\n모델 선택 후 Delete 삭제 / Ctrl+N 이름 변경";
+            lblTrainerShortcutGuide.Text = "단축키: tub 선택 후 Enter 학습 시작\r\n모델 선택 후 Delete 제외 / Ctrl+N 이름 변경";
             lblTrainerShortcutGuide.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // frmNewtrainer

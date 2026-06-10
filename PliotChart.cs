@@ -39,6 +39,17 @@ namespace Data_Manager
             FormClosed += (sender, e) => ClearChartCache();
         }
 
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Escape)
+            {
+                Close();
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
         private string BuildSummaryText()
         {
             int total = _frames.Count;

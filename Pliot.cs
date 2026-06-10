@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -27,7 +28,14 @@ namespace Data_Manager
         private static readonly Color PilotCyanColor = Color.FromArgb(44, 205, 220);
         private static readonly Color PilotGreenColor = Color.FromArgb(65, 190, 125);
         private static readonly Color PilotOrangeColor = Color.FromArgb(255, 168, 72);
-        private const double PilotLeftPanelRatio = 404.0 / 1584.0;
+        private const int PilotBaseClientWidth = 1600;
+        private const int PilotBaseClientHeight = 900;
+        private const int PilotBaseSplitWidth = 1584;
+        private const int PilotBaseSplitDistance = 404;
+        private const int PilotBaseSplitHeight = 884;
+        private const int PilotBaseLeftPanelWidth = 404;
+        private const int PilotBaseCardWidth = 1168;
+        private const int PilotBaseCardHeight = 884;
 
         private readonly List<ModelListItem> _models = new List<ModelListItem>();
 
@@ -45,15 +53,130 @@ namespace Data_Manager
         private bool _isPlaying;
         private bool _isReversePlaying;
         private bool _isChartOpen;
+        private bool _isSyncingModels;
+        private bool _pendingModelSync;
         private double _playbackSpeed = 1.0;
         private string _currentImagePath = "";
+        private string _myCarModelsDirectory = "";
+        private string _lastPilotModelSignature = "";
         private Size _currentImageRenderSize = Size.Empty;
         private Size _lastOverlayHostSize = Size.Empty;
+        private bool _isApplyingPilotLayout;
 
         public Pliot()
         {
             InitializeComponent();
             InitializePilotUi();
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            Keys keyCode = keyData & Keys.KeyCode;
+            bool shiftPressed = (keyData & Keys.Shift) == Keys.Shift;
+
+            if (IsTextInputFocused())
+            {
+                return base.ProcessCmdKey(ref msg, keyData);
+            }
+
+            if (keyCode == Keys.Space)
+            {
+                btnPlayPause.PerformClick();
+                return true;
+            }
+
+            if (keyCode == Keys.Escape)
+            {
+                StopPlayback();
+                return true;
+            }
+
+            if (keyCode == Keys.Right)
+            {
+                MoveToFrame(_currentFrameIndex + (shiftPressed ? 5 : 1));
+                return true;
+            }
+
+            if (keyCode == Keys.Left)
+            {
+                if ((keyData & Keys.Control) == Keys.Control)
+                {
+                    btnReversePlay.PerformClick();
+                }
+                else
+                {
+                    MoveToFrame(_currentFrameIndex - (shiftPressed ? 5 : 1));
+                }
+
+                return true;
+            }
+
+            if (keyData == Keys.Enter && lvModelList.ContainsFocus)
+            {
+                SelectFocusedModelFromShortcut();
+                return true;
+            }
+
+            if (keyData == (Keys.Control | Keys.I))
+            {
+                btnImportModel.PerformClick();
+                return true;
+            }
+
+            if (keyData == (Keys.Control | Keys.T))
+            {
+                btnTubInput.PerformClick();
+                return true;
+            }
+
+            if (keyData == (Keys.Control | Keys.G))
+            {
+                btnPilotChart.PerformClick();
+                return true;
+            }
+
+            if (keyData == (Keys.Control | Keys.J))
+            {
+                btnGenerateJudement.PerformClick();
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private async void SelectFocusedModelFromShortcut()
+        {
+            if (!TryGetSelectedModel(out ModelListItem? model))
+            {
+                return;
+            }
+
+            await SelectModelAsync(model!);
+        }
+
+        private bool IsTextInputFocused()
+        {
+            return IsTextInputFocusedRecursive(this);
+        }
+
+        private bool IsTextInputFocusedRecursive(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                if (control.Focused &&
+                    (control is TextBoxBase || control is ComboBox))
+                {
+                    return true;
+                }
+
+                if (control.HasChildren &&
+                    IsTextInputFocusedRecursive(control))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         #region Initialization
@@ -65,12 +188,14 @@ namespace Data_Manager
             ApplyOverlayStyles();
             ConfigurePlaybackTimer();
             ApplyPilotDesign();
+            ConfigurePilotCardRegions();
             btnImportModel.BringToFront();
 
             // Keep event wiring in one place so Designer files stay focused on layout only.
             btnImportModel.Click += BtnImportModel_Click;
             lvModelList.SelectedIndexChanged += LvModelList_SelectedIndexChanged;
             lvModelList.SizeChanged += (s, e) => ResizeModelColumns();
+            EnableDoubleBuffering(lvModelList);
 
             btnTubInput.Click += BtnTubInput_Click;
             btnGenerateJudement.Click += BtnGenerateJudement_Click;
@@ -88,34 +213,66 @@ namespace Data_Manager
             pnlImageHost.Resize += (s, e) =>
             {
                 _currentImageRenderSize = Size.Empty;
+                _lastOverlayHostSize = Size.Empty;
+                PositionImageOverlays();
+            };
+            picPilotImage.Resize += (s, e) =>
+            {
+                _currentImageRenderSize = Size.Empty;
+                _lastOverlayHostSize = Size.Empty;
                 PositionImageOverlays();
             };
             pliotAngleIndicator.Resize += (s, e) => ConfigureAngleOverlayLayout();
-            splitMain.SizeChanged += (s, e) => ApplyPilotSplitRatio();
-            pnlPlaybackControls.SizeChanged += (s, e) => LayoutPilotPlaybackControls();
-            Load += (s, e) =>
-            {
-                ApplyPilotSplitRatio();
-                LayoutPilotPlaybackControls();
-            };
+            Resize += (s, e) => ApplyPilotResponsiveLayout();
+            Shown += (s, e) => ApplyPilotResponsiveLayout();
+            Load += async (s, e) => await InitializePilotDataSafelyAsync();
             FormClosed += Pliot_FormClosed;
             SharedModelRegistry.ModelsChanged +=
                 SharedModelRegistry_ModelsChanged;
 
             ResizeModelColumns();
-            SyncModelsFromSharedRegistry();
+            _ = SyncModelsFromSharedRegistryAsync();
             ConfigureLocationTrackBar();
             ClearModelLabels();
             ConfigurePilotValueControls();
             DrawTubRequiredMessage();
             ConfigureAngleOverlayLayout();
             EnsureImageOverlayParent();
-            PositionImageOverlays();
+            ApplyPilotResponsiveLayout();
             picPilotImage.SendToBack();
             pnlImageIndexOverlay.BringToFront();
             pliotAiThrottleGauge.BringToFront();
             pliotTubThrottleGauge.BringToFront();
             pliotAngleIndicator.BringToFront();
+        }
+
+        private async Task InitializePilotDataSafelyAsync()
+        {
+            try
+            {
+                await RefreshMyCarModelsDirectoryAsync(createIfMissing: false);
+                await SyncModelsFromSharedRegistryAsync();
+            }
+            catch (Exception ex)
+            {
+                ReportPilotException(ex);
+            }
+
+            if (!IsDisposed)
+            {
+                ApplyPilotResponsiveLayout();
+            }
+        }
+
+        private static void ReportPilotException(Exception ex)
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+            }
+            catch
+            {
+            }
         }
 
         private void ApplyOverlayStyles()
@@ -142,25 +299,47 @@ namespace Data_Manager
             _playbackTimer.Tick += PlaybackTimer_Tick;
         }
 
+        private void EnableDoubleBuffering(Control control)
+        {
+            try
+            {
+                typeof(Control)
+                    .GetProperty(
+                        "DoubleBuffered",
+                        BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.SetValue(control, true, null);
+            }
+            catch
+            {
+            }
+        }
+
         private void ApplyPilotDesign()
         {
             Font = new Font("맑은 고딕", 10.5F, FontStyle.Regular);
             Text = "파일럿";
             BackColor = PilotBackColor;
+            MinimumSize = new Size(900, 520);
 
             splitMain.BackColor = PilotBackColor;
             pnlLeft.BackColor = PilotBackColor;
+            pnlLeft.Padding = new Padding(8);
             pnlRight.BackColor = PilotBackColor;
+            pnlRight.Padding = new Padding(8, 0, 0, 0);
             pnlPilotCard.BackColor = PilotPanelColor;
+            pnlPilotCard.Padding = new Padding(14);
             pnlLeft.BorderStyle = BorderStyle.FixedSingle;
             pnlPilotCard.BorderStyle = BorderStyle.FixedSingle;
             pnlPilotHeader.BackColor = PilotPanelColor;
             pnlPlaybackControls.BackColor = PilotPanelColor;
             pnlPlaybackControls.BorderStyle = BorderStyle.FixedSingle;
+            pnlPlaybackControls.Padding = new Padding(8, 4, 8, 4);
             pnlTrackBar.BackColor = PilotPanelColor;
             pnlTrackBar.BorderStyle = BorderStyle.FixedSingle;
+            pnlTrackBar.Padding = new Padding(8, 4, 8, 4);
             pnlImageHost.BackColor = PilotBackColor;
             pnlImageHost.BorderStyle = BorderStyle.FixedSingle;
+            pnlImageHost.Padding = new Padding(4);
             picPilotImage.BackColor = PilotBackColor;
 
             grpSelectedModel.Text = "선택한 모델 정보";
@@ -171,7 +350,7 @@ namespace Data_Manager
             lblSelectedModelNameTitle.Text = "모델명";
             lblSelectedModelPathTitle.Text = "파일 경로";
             lblSelectedModelTypeTitle.Text = "타입";
-            lblSelectedTubPathTitle.Text = "Tubs 경로";
+            lblSelectedTubPathTitle.Text = "주행데이터 경로";
 
             foreach (Label label in new[]
             {
@@ -202,6 +381,15 @@ namespace Data_Manager
             lblTubPathTitle.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
             lblTubPathTitle.ForeColor = PilotMutedTextColor;
 
+            lblPilotShortcutGuide.Text =
+                "Space 재생/일시정지 | Esc 정지\r\n" +
+                "←/→ 1프레임 | Shift+←/→ 5프레임\r\n" +
+                "Enter 모델 로드 | Ctrl+I 모델 가져오기\r\n" +
+                "Ctrl+T 주행데이터 입력 | Ctrl+G 그래프 | Ctrl+J AI 판단";
+            lblPilotShortcutGuide.Font = new Font("맑은 고딕", 8.5F, FontStyle.Regular);
+            lblPilotShortcutGuide.ForeColor = PilotMutedTextColor;
+            lblPilotShortcutGuide.BackColor = PilotPanelColor;
+
             StyleModelList();
             StyleComboBox();
             StylePilotButton(btnImportModel, PilotBlueColor, Color.White);
@@ -214,6 +402,7 @@ namespace Data_Manager
             StylePlaybackButton(btnReversePlay, "◀");
             StylePlaybackButton(btnNextImage, ">");
             StylePlaybackButton(btnJumpNext5, "5 >>");
+            UpdatePlaybackButtonImages();
         }
 
         private void StyleModelList()
@@ -266,6 +455,71 @@ namespace Data_Manager
             };
         }
 
+        private void ConfigurePilotCardRegions()
+        {
+            splitMain.Panel1MinSize = 1;
+            splitMain.Panel2MinSize = 1;
+
+            splitMain.Dock = DockStyle.None;
+            splitMain.Anchor = AnchorStyles.None;
+            pnlLeft.Dock = DockStyle.None;
+            pnlLeft.Anchor = AnchorStyles.None;
+            pnlRight.Dock = DockStyle.None;
+            pnlRight.Anchor = AnchorStyles.None;
+            pnlPilotCard.Dock = DockStyle.None;
+            pnlPilotCard.Anchor = AnchorStyles.None;
+            btnImportModel.Dock = DockStyle.None;
+            btnImportModel.Anchor = AnchorStyles.None;
+            lvModelList.Dock = DockStyle.None;
+            lvModelList.Anchor = AnchorStyles.None;
+            lblPilotShortcutGuide.Dock = DockStyle.None;
+            lblPilotShortcutGuide.Anchor = AnchorStyles.None;
+            grpSelectedModel.Dock = DockStyle.None;
+            grpSelectedModel.Anchor = AnchorStyles.None;
+            tblSelectedModel.Dock = DockStyle.None;
+            tblSelectedModel.Anchor = AnchorStyles.None;
+            pnlPilotHeader.Dock = DockStyle.None;
+            pnlPilotHeader.Anchor = AnchorStyles.None;
+            pnlImageHost.Dock = DockStyle.None;
+            pnlImageHost.Anchor = AnchorStyles.None;
+            pnlTrackBar.Dock = DockStyle.None;
+            pnlTrackBar.Anchor = AnchorStyles.None;
+            pnlPlaybackControls.Dock = DockStyle.None;
+            pnlPlaybackControls.Anchor = AnchorStyles.None;
+            picPilotImage.Dock = DockStyle.Fill;
+
+            trbLocation.Anchor = AnchorStyles.None;
+            btnJumpPrev5.Anchor = AnchorStyles.None;
+            btnPrevImage.Anchor = AnchorStyles.None;
+            btnPlayPause.Anchor = AnchorStyles.None;
+            cmbSpeed.Anchor = AnchorStyles.None;
+            btnReversePlay.Anchor = AnchorStyles.None;
+            btnNextImage.Anchor = AnchorStyles.None;
+            btnJumpNext5.Anchor = AnchorStyles.None;
+            btnGenerateJudement.Anchor = AnchorStyles.None;
+            btnPilotChart.Anchor = AnchorStyles.None;
+            btnTubInput.Anchor = AnchorStyles.None;
+            lblTubPathValue.Anchor = AnchorStyles.None;
+        }
+
+        private int ScaleFromBaseX(int value)
+        {
+            double scale = ClientSize.Width <= 0
+                ? 1.0
+                : ClientSize.Width / (double)PilotBaseClientWidth;
+
+            return Math.Max(1, (int)Math.Round(value * scale));
+        }
+
+        private int ScaleFromBaseY(int value)
+        {
+            double scale = ClientSize.Height <= 0
+                ? 1.0
+                : ClientSize.Height / (double)PilotBaseClientHeight;
+
+            return Math.Max(1, (int)Math.Round(value * scale));
+        }
+
         private static Color LightenColor(Color color, int amount)
         {
             return Color.FromArgb(
@@ -281,6 +535,8 @@ namespace Data_Manager
 
         private async void BtnModelLoad_Click(object? sender, EventArgs e)
         {
+            try
+            {
             using FolderBrowserDialog dialog = new FolderBrowserDialog();
             dialog.Description = "모델 파일이 들어 있는 폴더 선택";
             dialog.ShowNewFolderButton = false;
@@ -312,10 +568,18 @@ namespace Data_Manager
                 lvModelList.Items[^1].Selected = true;
                 lvModelList.Items[^1].Focused = true;
             }
+            }
+            catch (Exception ex)
+            {
+                ReportPilotException(ex);
+                MessageBox.Show(ex.Message, "Pilot", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private static async Task<string> GetModelFolderInitialDirectoryAsync()
         {
+            try
+            {
             // Ubuntu-22.04의 mycar 폴더를 찾으면 모델 선택 시작 위치로 사용합니다.
             // WSL/mycar를 찾지 못하면 현재 실행 폴더로 되돌립니다.
             string currentDirectory = Environment.CurrentDirectory;
@@ -340,6 +604,12 @@ namespace Data_Manager
             return Directory.Exists(currentDirectory)
                 ? currentDirectory
                 : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            }
+            catch (Exception ex)
+            {
+                ReportPilotException(ex);
+                return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            }
         }
 
         public Task ReceiveSelectedModelFromPilotModelListAsync(string modelName, string modelPath)
@@ -399,11 +669,16 @@ namespace Data_Manager
         private void ConfigureAngleOverlayLayout()
         {
             // Paint로 그리는 앵글 선이 라벨 배치에 잘리지 않도록 고정 크기 오버레이로 유지합니다.
-            pliotAngleIndicator.Anchor = AnchorStyles.Bottom;
+            pliotAngleIndicator.Anchor = AnchorStyles.None;
         }
 
         private void EnsureImageOverlayParent()
         {
+            if (IsDisposed || picPilotImage.IsDisposed)
+            {
+                return;
+            }
+
             // PictureBox child controls can show the current image through transparent overlay backgrounds.
             MoveOverlayToPictureBox(pnlImageIndexOverlay);
             MoveOverlayToPictureBox(pliotAiThrottleGauge);
@@ -413,6 +688,11 @@ namespace Data_Manager
 
         private void MoveOverlayToPictureBox(Control overlay)
         {
+            if (overlay.IsDisposed || picPilotImage.IsDisposed)
+            {
+                return;
+            }
+
             if (overlay.Parent == picPilotImage)
             {
                 overlay.Visible = true;
@@ -464,7 +744,7 @@ namespace Data_Manager
             ResizeModelColumns();
         }
 
-        private void BtnImportModel_Click(object? sender, EventArgs e)
+        private async void BtnImportModel_Click(object? sender, EventArgs e)
         {
             using OpenFileDialog dialog = new OpenFileDialog();
             dialog.Title = "가져올 AI 모델 선택";
@@ -476,10 +756,38 @@ namespace Data_Manager
                 return;
             }
 
-            string modelPath = Path.GetFullPath(dialog.FileName);
-            string modelName = Path.GetFileName(modelPath);
+            string sourceModelPath = Path.GetFullPath(dialog.FileName);
 
-            AddOrSelectModel(modelName, modelPath);
+            try
+            {
+                string modelsDirectory =
+                    await RefreshMyCarModelsDirectoryAsync(createIfMissing: true);
+
+                if (string.IsNullOrWhiteSpace(modelsDirectory))
+                {
+                    MessageBox.Show("mycar/models 폴더를 확인하지 못했습니다.");
+                    return;
+                }
+
+                ModelImportResult importResult =
+                    ModelImportService.ImportModelToFolder(
+                        sourceModelPath,
+                        modelsDirectory);
+
+                AddOrSelectModel(
+                    Path.GetFileNameWithoutExtension(importResult.DestinationModelPath),
+                    importResult.DestinationModelPath);
+
+                await SyncModelsFromSharedRegistryAsync();
+
+                MessageBox.Show("모델을 가져왔습니다.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "모델 가져오기 중 오류가 발생했습니다.\n" +
+                    ex.Message);
+            }
         }
 
         private bool AddModel(string modelPath)
@@ -551,21 +859,74 @@ namespace Data_Manager
                 return;
             }
 
-            BeginInvoke(
-                new Action(
-                    () =>
-                    {
-                        if (!IsDisposed)
+            try
+            {
+                if (!IsHandleCreated)
+                {
+                    return;
+                }
+
+                BeginInvoke(
+                    new Action(
+                        () =>
                         {
-                            SyncModelsFromSharedRegistry();
-                        }
-                    }));
+                            if (!IsDisposed)
+                            {
+                                _ = SyncModelsFromSharedRegistryAsync();
+                            }
+                        }));
+            }
+            catch (ObjectDisposedException ex)
+            {
+                ReportPilotException(ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                ReportPilotException(ex);
+            }
         }
 
         private void SyncModelsFromSharedRegistry()
         {
+            _ = SyncModelsFromSharedRegistryAsync();
+        }
+
+        private async Task SyncModelsFromSharedRegistryAsync()
+        {
+            if (_isSyncingModels)
+            {
+                _pendingModelSync = true;
+                return;
+            }
+
+            _isSyncingModels = true;
+
+            try
+            {
+            string modelsDirectory =
+                await RefreshMyCarModelsDirectoryAsync(createIfMissing: false);
+
+            if (string.IsNullOrWhiteSpace(modelsDirectory) ||
+                !Directory.Exists(modelsDirectory))
+            {
+                return;
+            }
+
             List<SharedModelRegistryEntry> sharedModels =
-                SharedModelRegistry.Load();
+                BuildPilotModelEntries(modelsDirectory);
+
+            string newSignature =
+                BuildPilotModelSignature(sharedModels);
+
+            if (string.Equals(
+                _lastPilotModelSignature,
+                newSignature,
+                StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _lastPilotModelSignature = newSignature;
 
             HashSet<string> sharedPaths =
                 sharedModels
@@ -627,29 +988,393 @@ namespace Data_Manager
             }
 
             ResizeModelColumns();
+            }
+            catch (Exception ex)
+            {
+                ReportPilotException(ex);
+            }
+            finally
+            {
+                _isSyncingModels = false;
+
+                if (_pendingModelSync)
+                {
+                    _pendingModelSync = false;
+                    _ = SyncModelsFromSharedRegistryAsync();
+                }
+            }
         }
 
-        private void ApplyPilotSplitRatio()
+        private string BuildPilotModelSignature(List<SharedModelRegistryEntry> entries)
         {
-            if (splitMain.Width <= 0)
+            return string.Join(
+                "|",
+                entries
+                    .OrderBy(entry => entry.WindowsPath, StringComparer.OrdinalIgnoreCase)
+                    .Select(entry =>
+                        entry.Name +
+                        ":" +
+                        entry.WindowsPath +
+                        ":" +
+                        entry.IsDeleted));
+        }
+
+        private List<SharedModelRegistryEntry> BuildPilotModelEntries(string modelsDirectory)
+        {
+            List<SharedModelRegistryEntry> entries =
+                SharedModelRegistry.Load()
+                    .Where(entry =>
+                        ModelImportService.IsPathInsideDirectory(
+                            entry.WindowsPath,
+                            modelsDirectory))
+                    .ToList();
+
+            foreach (string modelFile in Directory.GetFiles(modelsDirectory, "*.h5", SearchOption.TopDirectoryOnly))
+            {
+                string fullPath = Path.GetFullPath(modelFile);
+
+                if (entries.Any(entry =>
+                    string.Equals(entry.WindowsPath, fullPath, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                entries.Add(
+                    new SharedModelRegistryEntry
+                    {
+                        Name = Path.GetFileName(fullPath),
+                        WindowsPath = fullPath,
+                        CreatedAt = File.GetCreationTime(fullPath)
+                    });
+            }
+
+            return entries
+                .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private async Task<string> RefreshMyCarModelsDirectoryAsync(bool createIfMissing)
+        {
+            try
+            {
+            if (!string.IsNullOrWhiteSpace(_myCarModelsDirectory) &&
+                Directory.Exists(_myCarModelsDirectory))
+            {
+                return _myCarModelsDirectory;
+            }
+
+            string distroName =
+                await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(CancellationToken.None);
+
+            DonkeyAsyncWorker.OperationResult<string> myCarResult =
+                await DonkeyAsyncWorker.FindMyCarPathInWslAsync(
+                    distroName,
+                    null,
+                    CancellationToken.None);
+
+            if (!myCarResult.Success || string.IsNullOrWhiteSpace(myCarResult.Data))
+            {
+                return "";
+            }
+
+            string windowsMyCarPath =
+                DonkeyAsyncWorker.ToWindowsPathFromWslPath(
+                    myCarResult.Data,
+                    distroName);
+
+            string modelsDirectory =
+                Path.Combine(
+                    windowsMyCarPath,
+                    "models");
+
+            if (createIfMissing)
+            {
+                Directory.CreateDirectory(modelsDirectory);
+            }
+
+            if (Directory.Exists(modelsDirectory))
+            {
+                _myCarModelsDirectory = modelsDirectory;
+            }
+
+            return _myCarModelsDirectory;
+            }
+            catch (Exception ex)
+            {
+                ReportPilotException(ex);
+                return "";
+            }
+        }
+
+        private void ApplyPilotResponsiveLayout()
+        {
+            if (_isApplyingPilotLayout ||
+                IsDisposed ||
+                ClientSize.Width <= 0 ||
+                ClientSize.Height <= 0)
             {
                 return;
             }
 
-            int minDistance = Math.Max(splitMain.Panel1MinSize, 260);
-            int maxDistance =
-                Math.Max(
-                    minDistance,
-                    splitMain.Width - splitMain.Panel2MinSize - splitMain.SplitterWidth);
+            _isApplyingPilotLayout = true;
+            try
+            {
+                SuspendLayout();
+                splitMain.SuspendLayout();
+                splitMain.Panel1.SuspendLayout();
+                splitMain.Panel2.SuspendLayout();
+                pnlLeft.SuspendLayout();
+                pnlRight.SuspendLayout();
+                pnlPilotCard.SuspendLayout();
+
+                LayoutPilotShell();
+                ApplyPilotSplitRatio();
+                LayoutPilotSplitPanels();
+                LayoutPilotLeftPanel();
+                LayoutPilotCard();
+                ResizeModelColumns();
+
+                _lastOverlayHostSize = Size.Empty;
+                PositionImageOverlays();
+            }
+            finally
+            {
+                pnlPilotCard.ResumeLayout(false);
+                pnlRight.ResumeLayout(false);
+                pnlLeft.ResumeLayout(false);
+                splitMain.Panel2.ResumeLayout(false);
+                splitMain.Panel1.ResumeLayout(false);
+                splitMain.ResumeLayout(false);
+                ResumeLayout(false);
+                _isApplyingPilotLayout = false;
+            }
+        }
+
+        private double PilotScaleX =>
+            Math.Max(0.1, ClientSize.Width / (double)PilotBaseClientWidth);
+
+        private double PilotScaleY =>
+            Math.Max(0.1, ClientSize.Height / (double)PilotBaseClientHeight);
+
+        private double PilotUniformScale =>
+            Math.Max(0.1, Math.Min(PilotScaleX, PilotScaleY));
+
+        private int ScalePilotX(int value) =>
+            Math.Max(1, (int)Math.Round(value * PilotScaleX));
+
+        private int ScalePilotY(int value) =>
+            Math.Max(1, (int)Math.Round(value * PilotScaleY));
+
+        private int ScalePilotUniform(int value) =>
+            Math.Max(1, (int)Math.Round(value * PilotUniformScale));
+
+        private void LayoutPilotShell()
+        {
+            splitMain.Panel1MinSize = 1;
+            splitMain.Panel2MinSize = 1;
+
+            int margin = Math.Max(4, ScalePilotUniform(8));
+            int width = Math.Max(1, ClientSize.Width - margin * 2);
+            int height = Math.Max(1, ClientSize.Height - margin * 2);
+
+            splitMain.SetBounds(margin, margin, width, height);
+        }
+
+        private void ApplyPilotSplitRatio()
+        {
+            int availableWidth =
+                Math.Max(1, splitMain.Width - splitMain.SplitterWidth);
+
+            int panel1Min =
+                Math.Min(
+                    ScalePilotX(180),
+                    Math.Max(1, availableWidth / 2));
+            int panel2Min =
+                Math.Min(
+                    ScalePilotX(260),
+                    Math.Max(1, availableWidth - panel1Min));
+
+            if (panel1Min + panel2Min > availableWidth)
+            {
+                panel2Min = Math.Max(1, availableWidth - panel1Min);
+            }
+
+            splitMain.Panel1MinSize = panel1Min;
+            splitMain.Panel2MinSize = panel2Min;
+
             int targetDistance =
-                Math.Max(
-                    minDistance,
-                    Math.Min(maxDistance, (int)Math.Round(splitMain.Width * PilotLeftPanelRatio)));
+                (int)Math.Round(
+                    splitMain.Width *
+                    (PilotBaseSplitDistance / (double)PilotBaseSplitWidth));
+            int minDistance = splitMain.Panel1MinSize;
+            int maxDistance =
+                splitMain.Width -
+                splitMain.Panel2MinSize -
+                splitMain.SplitterWidth;
+
+            if (maxDistance < minDistance)
+            {
+                return;
+            }
+
+            targetDistance = ClampInt(targetDistance, minDistance, maxDistance);
 
             if (splitMain.SplitterDistance != targetDistance)
             {
                 splitMain.SplitterDistance = targetDistance;
             }
+        }
+
+        private void LayoutPilotSplitPanels()
+        {
+            pnlLeft.SetBounds(
+                0,
+                0,
+                Math.Max(1, splitMain.Panel1.ClientSize.Width),
+                Math.Max(1, splitMain.Panel1.ClientSize.Height));
+
+            pnlRight.SetBounds(
+                0,
+                0,
+                Math.Max(1, splitMain.Panel2.ClientSize.Width),
+                Math.Max(1, splitMain.Panel2.ClientSize.Height));
+
+            int rightGap = Math.Max(0, ScalePilotX(8));
+            pnlPilotCard.SetBounds(
+                rightGap,
+                0,
+                Math.Max(1, pnlRight.ClientSize.Width - rightGap),
+                Math.Max(1, pnlRight.ClientSize.Height));
+        }
+
+        private void LayoutPilotLeftPanel()
+        {
+            if (pnlLeft.ClientSize.Width <= 0 ||
+                pnlLeft.ClientSize.Height <= 0)
+            {
+                return;
+            }
+
+            double scaleX = pnlLeft.ClientSize.Width / (double)PilotBaseLeftPanelWidth;
+            double scaleY = pnlLeft.ClientSize.Height / (double)PilotBaseSplitHeight;
+            double uniformScale = Math.Max(0.1, Math.Min(scaleX, scaleY));
+
+            int margin = Math.Max(6, (int)Math.Round(8 * uniformScale));
+            int gap = Math.Max(5, (int)Math.Round(8 * uniformScale));
+            int contentWidth = Math.Max(1, pnlLeft.ClientSize.Width - margin * 2);
+            int contentHeight = Math.Max(1, pnlLeft.ClientSize.Height - margin * 2);
+
+            int importHeight = ClampInt((int)Math.Round(48 * scaleY), 28, 60);
+            int guideHeight = ClampInt((int)Math.Round(88 * scaleY), 42, 120);
+            int infoHeight = ClampInt((int)Math.Round(200 * scaleY), 90, 260);
+
+            int reservedHeight =
+                importHeight +
+                guideHeight +
+                infoHeight +
+                gap * 3;
+
+            if (reservedHeight > contentHeight)
+            {
+                int excess = reservedHeight - contentHeight;
+                int shrinkGuide = Math.Min(excess, Math.Max(0, guideHeight - 36));
+                guideHeight -= shrinkGuide;
+                excess -= shrinkGuide;
+
+                int shrinkInfo = Math.Min(excess, Math.Max(0, infoHeight - 74));
+                infoHeight -= shrinkInfo;
+                excess -= shrinkInfo;
+
+                int shrinkImport = Math.Min(excess, Math.Max(0, importHeight - 26));
+                importHeight -= shrinkImport;
+            }
+
+            int x = margin;
+            int y = margin;
+            btnImportModel.SetBounds(x, y, contentWidth, importHeight);
+
+            y += importHeight + gap;
+            int listBottom = pnlLeft.ClientSize.Height - margin - guideHeight - gap - infoHeight - gap;
+            int listHeight = Math.Max(1, listBottom - y);
+            lvModelList.SetBounds(x, y, contentWidth, listHeight);
+
+            y += listHeight + gap;
+            guideHeight = Math.Max(1, Math.Min(guideHeight, pnlLeft.ClientSize.Height - margin - y));
+            lblPilotShortcutGuide.SetBounds(x, y, contentWidth, guideHeight);
+
+            y += guideHeight + gap;
+            int remainingInfoHeight = Math.Max(1, pnlLeft.ClientSize.Height - margin - y);
+            grpSelectedModel.SetBounds(x, y, contentWidth, remainingInfoHeight);
+            int tableMarginX = Math.Min(10, Math.Max(2, grpSelectedModel.ClientSize.Width / 12));
+            int tableTop = Math.Min(22, Math.Max(2, grpSelectedModel.ClientSize.Height / 5));
+            tblSelectedModel.SetBounds(
+                tableMarginX,
+                tableTop,
+                Math.Max(1, grpSelectedModel.ClientSize.Width - tableMarginX * 2),
+                Math.Max(1, grpSelectedModel.ClientSize.Height - tableTop - Math.Max(2, tableMarginX)));
+        }
+
+        private void LayoutPilotCard()
+        {
+            if (pnlPilotCard.ClientSize.Width <= 0 ||
+                pnlPilotCard.ClientSize.Height <= 0)
+            {
+                return;
+            }
+
+            double scaleX = pnlPilotCard.ClientSize.Width / (double)PilotBaseCardWidth;
+            double scaleY = pnlPilotCard.ClientSize.Height / (double)PilotBaseCardHeight;
+
+            int marginX = Math.Max(6, (int)Math.Round(14 * scaleX));
+            int marginY = Math.Max(6, (int)Math.Round(14 * scaleY));
+            int gap = Math.Max(4, (int)Math.Round(8 * Math.Min(scaleX, scaleY)));
+            int width = Math.Max(1, pnlPilotCard.ClientSize.Width - marginX * 2);
+            int height = Math.Max(1, pnlPilotCard.ClientSize.Height - marginY * 2);
+
+            int headerHeight = ClampInt((int)Math.Round(52 * scaleY), 32, 64);
+            int trackHeight = ClampInt((int)Math.Round(57 * scaleY), 32, 68);
+            int playbackHeight = ClampInt((int)Math.Round(73 * scaleY), 38, 84);
+
+            int reservedHeight =
+                headerHeight +
+                trackHeight +
+                playbackHeight +
+                gap * 3;
+
+            if (reservedHeight > height)
+            {
+                double shrink =
+                    Math.Max(1, height - gap * 3) /
+                    (double)Math.Max(1, headerHeight + trackHeight + playbackHeight);
+                headerHeight = Math.Max(26, (int)Math.Floor(headerHeight * shrink));
+                trackHeight = Math.Max(24, (int)Math.Floor(trackHeight * shrink));
+                playbackHeight = Math.Max(30, (int)Math.Floor(playbackHeight * shrink));
+            }
+
+            int imageHeight =
+                Math.Max(
+                    40,
+                    height -
+                    headerHeight -
+                    trackHeight -
+                    playbackHeight -
+                    gap * 3);
+
+            int y = marginY;
+            pnlPilotHeader.SetBounds(marginX, y, width, headerHeight);
+            y += headerHeight + gap;
+
+            pnlImageHost.SetBounds(marginX, y, width, imageHeight);
+            y += imageHeight + gap;
+
+            pnlTrackBar.SetBounds(marginX, y, width, trackHeight);
+            y += trackHeight + gap;
+
+            pnlPlaybackControls.SetBounds(marginX, y, width, playbackHeight);
+
+            LayoutPilotHeaderControls();
+            LayoutPilotTrackBar();
+            LayoutPilotPlaybackControls();
         }
 
         private void LayoutPilotPlaybackControls()
@@ -670,16 +1395,132 @@ namespace Data_Manager
                 btnJumpNext5
             };
 
-            int gap = Math.Max(8, (int)Math.Round(pnlPlaybackControls.Width * 0.011));
+            int availableWidth =
+                Math.Max(
+                    1,
+                    pnlPlaybackControls.ClientSize.Width -
+                    pnlPlaybackControls.Padding.Horizontal);
+
+            double scaleX = pnlPlaybackControls.ClientSize.Width / 1138.0;
+            double scaleY = pnlPlaybackControls.ClientSize.Height / 73.0;
+            int gap = Math.Max(4, (int)Math.Round(12 * scaleX));
+            int comboWidth = Math.Max(78, (int)Math.Round(126 * scaleX));
+            int buttonWidth = Math.Max(50, (int)Math.Round(116 * scaleX));
+            int buttonHeight = Math.Max(28, (int)Math.Round(36 * scaleY));
+            int totalPreferredWidth =
+                buttonWidth * (controls.Length - 1) +
+                comboWidth +
+                gap * (controls.Length - 1);
+
+            if (totalPreferredWidth > availableWidth)
+            {
+                double shrink = availableWidth / (double)Math.Max(1, totalPreferredWidth);
+                buttonWidth = Math.Max(44, (int)Math.Floor(buttonWidth * shrink));
+                comboWidth = Math.Max(70, (int)Math.Floor(comboWidth * shrink));
+                gap = Math.Max(3, (int)Math.Floor(gap * shrink));
+            }
+
+            foreach (Control control in controls)
+            {
+                control.Size = control == cmbSpeed
+                    ? new Size(comboWidth, Math.Max(26, Math.Min(buttonHeight, cmbSpeed.PreferredHeight)))
+                    : new Size(buttonWidth, buttonHeight);
+            }
+
             int totalWidth = controls.Sum(control => control.Width) + gap * (controls.Length - 1);
-            int x = Math.Max(0, (pnlPlaybackControls.Width - totalWidth) / 2);
+            int x =
+                pnlPlaybackControls.Padding.Left +
+                Math.Max(0, (availableWidth - totalWidth) / 2);
 
             foreach (Control control in controls)
             {
                 control.Left = x;
-                control.Top = Math.Max(6, (pnlPlaybackControls.Height - control.Height) / 2);
+                control.Top =
+                    pnlPlaybackControls.Padding.Top +
+                    Math.Max(
+                        0,
+                        (pnlPlaybackControls.ClientSize.Height -
+                         pnlPlaybackControls.Padding.Vertical -
+                         control.Height) / 2);
                 x += control.Width + gap;
             }
+        }
+
+        private void LayoutPilotTrackBar()
+        {
+            if (pnlTrackBar.Width <= 0 || trbLocation == null)
+            {
+                return;
+            }
+
+            int left = pnlTrackBar.Padding.Left;
+            int top =
+                pnlTrackBar.Padding.Top +
+                Math.Max(
+                    0,
+                    (pnlTrackBar.ClientSize.Height -
+                     pnlTrackBar.Padding.Vertical -
+                     trbLocation.Height) / 2);
+            int width =
+                Math.Max(
+                    1,
+                    pnlTrackBar.ClientSize.Width -
+                    pnlTrackBar.Padding.Horizontal);
+
+            trbLocation.SetBounds(
+                left,
+                top,
+                width,
+                trbLocation.Height);
+        }
+
+        private void LayoutPilotHeaderControls()
+        {
+            if (pnlPilotHeader.Width <= 0)
+            {
+                return;
+            }
+
+            double scaleX = pnlPilotHeader.ClientSize.Width / 1142.0;
+            double scaleY = pnlPilotHeader.ClientSize.Height / 52.0;
+            int margin = Math.Max(2, (int)Math.Round(4 * scaleX));
+            int gap = Math.Max(4, (int)Math.Round(8 * scaleX));
+            int buttonHeight = Math.Max(28, (int)Math.Round(36 * scaleY));
+            int chartWidth = Math.Max(72, (int)Math.Round(110 * scaleX));
+            int aiWidth = Math.Max(96, (int)Math.Round(126 * scaleX));
+            int tubWidth = Math.Max(118, (int)Math.Round(154 * scaleX));
+            int totalButtonsWidth = chartWidth + aiWidth + tubWidth + gap * 2;
+
+            int availableWidth = Math.Max(1, pnlPilotHeader.ClientSize.Width - margin * 2);
+            if (totalButtonsWidth > availableWidth)
+            {
+                double shrink =
+                    availableWidth /
+                    (double)Math.Max(1, totalButtonsWidth);
+                chartWidth = Math.Max(40, (int)Math.Floor(chartWidth * shrink));
+                aiWidth = Math.Max(48, (int)Math.Floor(aiWidth * shrink));
+                tubWidth = Math.Max(58, (int)Math.Floor(tubWidth * shrink));
+                gap = Math.Max(2, (int)Math.Floor(gap * shrink));
+            }
+
+            int buttonTop = Math.Max(4, (pnlPilotHeader.ClientSize.Height - buttonHeight) / 2);
+            int x = pnlPilotHeader.ClientSize.Width - margin - tubWidth;
+
+            btnTubInput.SetBounds(x, buttonTop, tubWidth, buttonHeight);
+            x -= aiWidth + gap;
+            btnGenerateJudement.SetBounds(x, buttonTop, aiWidth, buttonHeight);
+            x -= chartWidth + gap;
+            btnPilotChart.SetBounds(x, buttonTop, chartWidth, buttonHeight);
+
+            lblTubPathTitle.Location = new Point(margin, Math.Max(0, (pnlPilotHeader.ClientSize.Height - lblTubPathTitle.Height) / 2));
+            int valueLeft = lblTubPathTitle.Right + 12;
+            int valueRight = Math.Max(valueLeft, btnPilotChart.Left - gap);
+            lblTubPathValue.SetBounds(
+                valueLeft,
+                Math.Max(0, (pnlPilotHeader.ClientSize.Height - lblTubPathValue.Height) / 2),
+                Math.Max(0, valueRight - valueLeft),
+                lblTubPathValue.Height);
+            lblTubPathValue.Visible = lblTubPathValue.Width > 24;
         }
 
         private void RenumberModelListItems()
@@ -693,12 +1534,20 @@ namespace Data_Manager
 
         private async void LvModelList_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            if (!TryGetSelectedModel(out ModelListItem? model))
+            try
             {
-                return;
-            }
+                if (!TryGetSelectedModel(out ModelListItem? model))
+                {
+                    return;
+                }
 
-            await SelectModelAsync(model!);
+                await SelectModelAsync(model!);
+            }
+            catch (Exception ex)
+            {
+                ReportPilotException(ex);
+                MessageBox.Show(ex.Message, "Pilot", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private bool TryGetSelectedModel(out ModelListItem? model)
@@ -835,7 +1684,6 @@ namespace Data_Manager
                 ModelName = model.Name,
                 ModelPath = model.Path
             };
-            _cardState.WslDistroName = await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(token);
 
             lblSelectedModelName.Text = model.Name;
             lblSelectedModelPath.Text = model.Path;
@@ -853,6 +1701,9 @@ namespace Data_Manager
 
             try
             {
+                _cardState.WslDistroName =
+                    await DonkeyAsyncWorker.GetPreferredWslDistroNameAsync(token);
+
                 DonkeyAsyncWorker.OperationResult<string> myCarResult =
                     await DonkeyAsyncWorker.FindMyCarPathInWslAsync(
                         _cardState.WslDistroName,
@@ -888,7 +1739,7 @@ namespace Data_Manager
                     ConfigureLocationTrackBar();
                     DrawTubRequiredMessage();
                     CacheCurrentModelFrames();
-                    progressForm.MarkCompleted("모델 정보 연결 완료, tub 데이터는 별도 입력이 필요합니다.");
+                    progressForm.MarkCompleted("모델 정보 연결 완료, 주행데이터는 별도 입력이 필요합니다.");
                     return;
                 }
 
@@ -917,13 +1768,15 @@ namespace Data_Manager
 
         private async void BtnTubInput_Click(object? sender, EventArgs e)
         {
+            try
+            {
             // 사용자가 선택한 tub 폴더를 WSL 경로로 저장하고,
             // catalog/record/image 정보를 파싱해 프레임 리스트에 올립니다.
             if (_cardState == null)
             {
                 if (_selectedModel == null)
                 {
-                    MessageBox.Show("먼저 모델을 선택해 주세요.", "TUB 입력", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("먼저 모델을 선택해 주세요.", "주행데이터 입력", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
@@ -936,7 +1789,7 @@ namespace Data_Manager
             }
 
             using FolderBrowserDialog dialog = new FolderBrowserDialog();
-            dialog.Description = "tub 폴더 선택";
+            dialog.Description = "주행데이터 폴더 선택";
             dialog.ShowNewFolderButton = false;
 
             if (string.IsNullOrWhiteSpace(_cardState.WslDistroName))
@@ -963,7 +1816,7 @@ namespace Data_Manager
             List<string> selectedTubFolders = FindTubFolders(dialog.SelectedPath);
             if (selectedTubFolders.Count == 0)
             {
-                MessageBox.Show("선택한 폴더에서 tub 데이터를 찾지 못했습니다.", "TUB 입력", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("선택한 폴더에서 주행데이터를 찾지 못했습니다.", "주행데이터 입력", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -978,25 +1831,39 @@ namespace Data_Manager
             SetTubPathLabels(selectedPathWsls);
 
             using ProgressStatusForm progressForm = new ProgressStatusForm();
-            progressForm.SetTitle("tub 데이터 연결 중...");
+            progressForm.SetTitle("주행데이터 연결 중...");
             progressForm.SetIndeterminate(true);
+            _loadCts?.Cancel();
+            _loadCts = new CancellationTokenSource();
+            CancellationToken token = _loadCts.Token;
+            progressForm.CancelRequested += () => _loadCts?.Cancel();
             progressForm.Show(this);
 
             IProgress<DonkeyAsyncWorker.ProgressReport> progress = CreateProgress(progressForm);
 
             try
             {
-                await LoadTubFramesAsync(selectedPathWsls, progress, CancellationToken.None);
-                await LoadAndMergeJudementAsync(progress, CancellationToken.None);
+                await LoadTubFramesAsync(selectedPathWsls, progress, token);
+                await LoadAndMergeJudementAsync(progress, token);
                 ConfigureLocationTrackBar();
                 MoveToFrame(0);
                 CacheCurrentModelFrames();
-                progressForm.MarkCompleted("tub 데이터 연결 완료");
+                progressForm.MarkCompleted("주행데이터 연결 완료");
+            }
+            catch (OperationCanceledException)
+            {
+                progressForm.MarkCanceled("주행데이터 연결이 취소되었습니다.");
             }
             catch (Exception ex)
             {
                 progressForm.MarkFailed($"오류: {ex.Message}");
                 MessageBox.Show(ex.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+            catch (Exception ex)
+            {
+                ReportPilotException(ex);
+                MessageBox.Show(ex.Message, "Pilot", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -1012,13 +1879,18 @@ namespace Data_Manager
 
             if (_cardState.TrainingTubPaths == null || _cardState.TrainingTubPaths.Count == 0)
             {
-                MessageBox.Show("먼저 TUB 데이터를 연결해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("먼저 주행데이터를 연결해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+
+            _loadCts?.Cancel();
+            _loadCts = new CancellationTokenSource();
+            CancellationToken token = _loadCts.Token;
 
             using ProgressStatusForm progressForm = new ProgressStatusForm();
             progressForm.SetTitle("AI 판단 데이터 생성 중...");
             progressForm.SetIndeterminate(true);
+            progressForm.CancelRequested += () => _loadCts?.Cancel();
             progressForm.Show(this);
 
             IProgress<DonkeyAsyncWorker.ProgressReport> progress = CreateProgress(progressForm);
@@ -1029,7 +1901,7 @@ namespace Data_Manager
                     await DonkeyAsyncWorker.GenerateJudementAsync(
                         _cardState,
                         progress,
-                        CancellationToken.None);
+                        token);
 
                 if (!result.Success || result.Data == null)
                 {
@@ -1043,6 +1915,10 @@ namespace Data_Manager
                 ShowCurrentFrame();
                 CacheCurrentModelFrames();
                 progressForm.MarkCompleted("AI 판단 데이터 생성 완료");
+            }
+            catch (OperationCanceledException)
+            {
+                progressForm.MarkCanceled("AI 판단 데이터 생성이 취소되었습니다.");
             }
             catch (Exception ex)
             {
@@ -1067,7 +1943,7 @@ namespace Data_Manager
 
             if (_frameList.Count == 0)
             {
-                MessageBox.Show("먼저 TUB 데이터를 연결해 주세요.", "그래프", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("먼저 주행데이터를 연결해 주세요.", "그래프", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -1558,7 +2434,9 @@ namespace Data_Manager
             picPilotImage.Image = bitmap;
             _currentImagePath = imagePath;
             _currentImageRenderSize = targetSize;
+            _lastOverlayHostSize = Size.Empty;
             picPilotImage.SendToBack();
+            PositionImageOverlays();
         }
 
         private Size GetImageRenderSize(Size sourceSize)
@@ -1586,7 +2464,7 @@ namespace Data_Manager
 
         private void DrawTubRequiredMessage()
         {
-            DrawMessageImage("tub 데이터 필요");
+            DrawMessageImage("주행데이터 필요");
         }
 
         private void DrawImageMissingMessage()
@@ -1616,7 +2494,9 @@ namespace Data_Manager
             }
 
             picPilotImage.Image = bmp;
+            _lastOverlayHostSize = Size.Empty;
             picPilotImage.SendToBack();
+            PositionImageOverlays();
         }
 
         private void DisposeCurrentImage()
@@ -1646,7 +2526,7 @@ namespace Data_Manager
 
             _isPlaying = true;
             _isReversePlaying = false;
-            btnPlayPause.Text = "Ⅱ";
+            UpdatePlaybackButtonImages();
             btnReversePlay.Text = "◀";
             StartPlaybackTimer();
         }
@@ -1662,7 +2542,7 @@ namespace Data_Manager
             _isReversePlaying = true;
             _isPlaying = false;
             btnReversePlay.Text = "Ⅱ";
-            btnPlayPause.Text = "▶";
+            UpdatePlaybackButtonImages();
             StartPlaybackTimer();
         }
 
@@ -1709,8 +2589,27 @@ namespace Data_Manager
             _playbackTimer?.Stop();
             _isPlaying = false;
             _isReversePlaying = false;
-            btnPlayPause.Text = "▶";
+            UpdatePlaybackButtonImages();
             btnReversePlay.Text = "◀";
+        }
+
+        private void UpdatePlaybackButtonImages()
+        {
+            if (btnPlayPause == null || btnPlayPause.IsDisposed)
+            {
+                return;
+            }
+
+            btnPlayPause.Text = "";
+            btnPlayPause.BackgroundImage =
+                _isPlaying
+                    ? Properties.Resources.pause
+                    : Properties.Resources.PlaySlide4655096;
+            btnPlayPause.BackgroundImageLayout = ImageLayout.Zoom;
+            btnPlayPause.AccessibleName =
+                _isPlaying
+                    ? "일시정지"
+                    : "재생";
         }
 
         private int GetPlaybackInterval()
@@ -1724,36 +2623,45 @@ namespace Data_Manager
 
         private void PositionImageOverlays()
         {
+            if (IsDisposed ||
+                picPilotImage.IsDisposed ||
+                picPilotImage.ClientSize.Width <= 0 ||
+                picPilotImage.ClientSize.Height <= 0)
+            {
+                return;
+            }
+
             EnsureImageOverlayParent();
 
-            int hostWidth = picPilotImage.ClientSize.Width;
-            int hostHeight = picPilotImage.ClientSize.Height;
-            int visibleHostHeight = GetVisibleImageHostHeight(hostHeight);
+            Rectangle imageBounds = GetVisibleImageOverlayBounds();
+            int visibleHostHeight = Math.Max(1, imageBounds.Height);
 
             ConfigureAngleOverlayLayout();
-            UpdatePilotOverlaySizes(hostWidth, visibleHostHeight);
-            pnlImageIndexOverlay.Location = new Point(12, 12);
-            int margin = Math.Max(12, (int)(hostWidth * 0.016));
-            int throttleX = margin;
-            int throttleGap = Math.Max(6, (int)(10 * GetOverlayScale(hostWidth, visibleHostHeight)));
+            UpdatePilotOverlaySizes(imageBounds.Width, visibleHostHeight);
+            int margin = Math.Max(8, (int)Math.Round(imageBounds.Width * 0.016));
+            pnlImageIndexOverlay.Location = new Point(
+                ClampInt(imageBounds.Left + margin, 0, Math.Max(0, picPilotImage.ClientSize.Width - pnlImageIndexOverlay.Width)),
+                ClampInt(imageBounds.Top + margin, 0, Math.Max(0, picPilotImage.ClientSize.Height - pnlImageIndexOverlay.Height)));
+
+            int throttleX = imageBounds.Left + margin;
+            int throttleGap = Math.Max(6, (int)(10 * GetOverlayScale(imageBounds.Width, visibleHostHeight)));
             int aiThrottleY =
-                Math.Max(82, visibleHostHeight - pliotAiThrottleGauge.Height - margin);
+                imageBounds.Bottom - pliotAiThrottleGauge.Height - margin;
             int tubThrottleY =
-                Math.Max(82, aiThrottleY - pliotTubThrottleGauge.Height - throttleGap);
-            int angleX = (hostWidth - pliotAngleIndicator.Width) / 2;
+                aiThrottleY - pliotTubThrottleGauge.Height - throttleGap;
+            int angleX = imageBounds.Left + (imageBounds.Width - pliotAngleIndicator.Width) / 2;
+            int angleY = imageBounds.Bottom - pliotAngleIndicator.Height - margin;
 
             pliotTubThrottleGauge.Location = new Point(
-                throttleX,
-                tubThrottleY);
+                ClampInt(throttleX, 0, Math.Max(0, picPilotImage.ClientSize.Width - pliotTubThrottleGauge.Width)),
+                ClampInt(tubThrottleY, imageBounds.Top + margin, Math.Max(imageBounds.Top + margin, imageBounds.Bottom - pliotTubThrottleGauge.Height - margin)));
             pliotAiThrottleGauge.Location = new Point(
-                throttleX,
-                aiThrottleY);
+                ClampInt(throttleX, 0, Math.Max(0, picPilotImage.ClientSize.Width - pliotAiThrottleGauge.Width)),
+                ClampInt(aiThrottleY, imageBounds.Top + margin, Math.Max(imageBounds.Top + margin, imageBounds.Bottom - pliotAiThrottleGauge.Height - margin)));
 
             pliotAngleIndicator.Location = new Point(
-                Math.Min(
-                    Math.Max(margin, angleX),
-                    Math.Max(margin, hostWidth - pliotAngleIndicator.Width - margin)),
-                Math.Max(12, visibleHostHeight - pliotAngleIndicator.Height - margin));
+                ClampInt(angleX, imageBounds.Left + margin, Math.Max(imageBounds.Left + margin, imageBounds.Right - pliotAngleIndicator.Width - margin)),
+                ClampInt(angleY, imageBounds.Top + margin, Math.Max(imageBounds.Top + margin, imageBounds.Bottom - pliotAngleIndicator.Height - margin)));
 
             picPilotImage.SendToBack();
             pnlImageIndexOverlay.BringToFront();
@@ -1765,15 +2673,114 @@ namespace Data_Manager
             pliotAngleIndicator.Invalidate();
         }
 
-        private void PositionImageOverlaysIfNeeded()
+        private Rectangle GetVisibleImageOverlayBounds()
         {
-            Size hostSize = picPilotImage.ClientSize;
-            if (hostSize == _lastOverlayHostSize)
+            Rectangle displayedImageBounds = GetDisplayedImageBounds();
+            Rectangle visiblePictureBounds = picPilotImage.ClientRectangle;
+
+            int coveredTop = int.MaxValue;
+            AddCoveringPanelTop(pnlTrackBar, ref coveredTop);
+            AddCoveringPanelTop(pnlPlaybackControls, ref coveredTop);
+
+            if (coveredTop != int.MaxValue)
+            {
+                int visibleBottom = Math.Max(
+                    visiblePictureBounds.Top,
+                    coveredTop - 8);
+
+                visiblePictureBounds.Height =
+                    Math.Max(
+                        1,
+                        Math.Min(
+                            visiblePictureBounds.Height,
+                            visibleBottom - visiblePictureBounds.Top));
+            }
+
+            Rectangle visibleImageBounds =
+                Rectangle.Intersect(displayedImageBounds, visiblePictureBounds);
+
+            if (visibleImageBounds.Width <= 0 || visibleImageBounds.Height <= 0)
+            {
+                return displayedImageBounds;
+            }
+
+            return visibleImageBounds;
+        }
+
+        private void AddCoveringPanelTop(Control panel, ref int coveredTop)
+        {
+            if (panel.Parent != pnlPilotCard || pnlImageHost.Parent != pnlPilotCard)
             {
                 return;
             }
 
-            _lastOverlayHostSize = hostSize;
+            int panelTopInPictureBox =
+                panel.Top -
+                pnlImageHost.Top -
+                picPilotImage.Top;
+
+            if (panelTopInPictureBox <= 0 ||
+                panelTopInPictureBox >= picPilotImage.ClientSize.Height)
+            {
+                return;
+            }
+
+            coveredTop = Math.Min(coveredTop, panelTopInPictureBox);
+        }
+
+        private Rectangle GetDisplayedImageBounds()
+        {
+            Rectangle client = picPilotImage.ClientRectangle;
+
+            if (picPilotImage.Image == null ||
+                client.Width <= 0 ||
+                client.Height <= 0)
+            {
+                return client;
+            }
+
+            Size imageSize = picPilotImage.Image.Size;
+            if (imageSize.Width <= 0 || imageSize.Height <= 0)
+            {
+                return client;
+            }
+
+            double imageRatio = imageSize.Width / (double)imageSize.Height;
+            double clientRatio = client.Width / (double)client.Height;
+
+            int width;
+            int height;
+
+            if (clientRatio > imageRatio)
+            {
+                height = client.Height;
+                width = Math.Max(1, (int)Math.Round(height * imageRatio));
+            }
+            else
+            {
+                width = client.Width;
+                height = Math.Max(1, (int)Math.Round(width / imageRatio));
+            }
+
+            int x = client.Left + (client.Width - width) / 2;
+            int y = client.Top + (client.Height - height) / 2;
+            return new Rectangle(x, y, width, height);
+        }
+
+        private void PositionImageOverlaysIfNeeded()
+        {
+            Size hostSize = picPilotImage.ClientSize;
+            Size imageSize = picPilotImage.Image?.Size ?? Size.Empty;
+            Size layoutKey = new Size(
+                hostSize.Width ^ imageSize.Width,
+                hostSize.Height ^ imageSize.Height);
+
+            if (layoutKey == _lastOverlayHostSize)
+            {
+                return;
+            }
+
+            _lastOverlayHostSize = layoutKey;
             PositionImageOverlays();
         }
 
@@ -1795,13 +2802,16 @@ namespace Data_Manager
             double widthScale = hostWidth / 1130.0;
             double heightScale = visibleHostHeight / 629.0;
             double angleFitScale = Math.Max(0.1, (hostWidth - 24) / 420.0);
+            double throttleFitScale = Math.Max(0.1, (visibleHostHeight - 42) / 250.0);
             double scale = Math.Min(widthScale, heightScale);
             scale = Math.Min(scale, angleFitScale);
-            return Math.Max(0.62, Math.Min(1.35, scale));
+            scale = Math.Min(scale, throttleFitScale);
+            return Math.Max(0.34, Math.Min(1.35, scale));
         }
 
         private static int ClampInt(int value, int min, int max)
         {
+            if (max < min) return min;
             if (value < min) return min;
             if (value > max) return max;
             return value;

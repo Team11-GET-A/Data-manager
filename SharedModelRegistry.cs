@@ -21,6 +21,8 @@ namespace Data_Manager
         public string SourceTubWslPath { get; set; } = "";
 
         public DateTime CreatedAt { get; set; }
+
+        public bool IsDeleted { get; set; }
     }
 
     public static class SharedModelRegistry
@@ -71,6 +73,19 @@ namespace Data_Manager
 
             List<SharedModelRegistryEntry> entries =
                 Load();
+
+            SharedModelRegistryEntry? existingEntry =
+                entries.FirstOrDefault(
+                    item =>
+                        string.Equals(
+                            item.WindowsPath,
+                            entry.WindowsPath,
+                            StringComparison.OrdinalIgnoreCase));
+
+            if (existingEntry != null)
+            {
+                entry.IsDeleted = existingEntry.IsDeleted;
+            }
 
             entries.RemoveAll(
                 item =>

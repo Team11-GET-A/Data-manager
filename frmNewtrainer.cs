@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Threading;
 using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text;
@@ -234,6 +235,9 @@ namespace DonkeyDataManager
 
             WireUiEvents();
             InitializeCatalogListDrawing();
+            EnableDoubleBuffering(lstModels);
+            EnableDoubleBuffering(lstCatalogRows);
+            EnableDoubleBuffering(lstTubFolders);
 
             InitializePlaybackTimer();
 
@@ -326,15 +330,21 @@ namespace DonkeyDataManager
 
                 isLoadingModels = true;
 
-                List<ModelRegistryEntry> entries =
-                    LoadModelRegistry()
-                        .Where(IsValidModelRegistryEntry)
-                        .ToList();
-
                 string modelFolder =
                     Path.Combine(
                         wslBasePath,
                         ModelDirectoryName);
+
+                bool registryChanged = false;
+
+                List<ModelRegistryEntry> entries =
+                    LoadModelRegistry()
+                        .Where(IsValidModelRegistryEntry)
+                        .Where(entry =>
+                            ModelImportService.IsPathInsideDirectory(
+                                entry.WindowsPath,
+                                modelFolder))
+                        .ToList();
 
                 if (Directory.Exists(modelFolder))
                 {
@@ -371,20 +381,16 @@ namespace DonkeyDataManager
                                     File.GetCreationTime(file),
                                 IsDeleted = false
                             });
+
+                        registryChanged = true;
                     }
                 }
 
-                List<ModelRegistryEntry> activeEntries =
+                List<ModelRegistryEntry> displayEntries =
                     entries
-                        .Where(entry => !entry.IsDeleted)
+                        .OrderBy(entry => entry.IsDeleted ? 1 : 0)
+                        .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
                         .ToList();
-
-                activeEntries.Sort(
-                    (left, right) =>
-                        string.Compare(
-                            left.Name,
-                            right.Name,
-                            StringComparison.OrdinalIgnoreCase));
 
                 string newSignature =
                     BuildModelListSignature(entries);
@@ -404,11 +410,11 @@ namespace DonkeyDataManager
                 {
                     lstModels.Items.Clear();
 
-                    for (int i = 0; i < activeEntries.Count; i++)
+                    for (int i = 0; i < displayEntries.Count; i++)
                     {
                         lstModels.Items.Add(
                             CreateModelListItem(
-                                activeEntries[i],
+                                displayEntries[i],
                                 i + 1));
                     }
                 }
@@ -417,8 +423,10 @@ namespace DonkeyDataManager
                     lstModels.EndUpdate();
                 }
 
-                LoadModelTrashToList(entries);
-                SaveModelRegistry(entries);
+                if (registryChanged)
+                {
+                    SaveModelRegistry(entries);
+                }
             }
             catch
             {
@@ -516,6 +524,21 @@ namespace DonkeyDataManager
             playbackTimer.Interval = 100;
 
             playbackTimer.Tick += PlaybackTimer_Tick;
+        }
+
+        private void EnableDoubleBuffering(Control control)
+        {
+            try
+            {
+                typeof(Control)
+                    .GetProperty(
+                        "DoubleBuffered",
+                        BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.SetValue(control, true, null);
+            }
+            catch
+            {
+            }
         }
 
         private void WireUiEvents()
@@ -1738,6 +1761,12 @@ namespace DonkeyDataManager
             item.SubItems.Add(entry.WindowsPath);
             item.Tag = entry;
 
+            if (entry.IsDeleted)
+            {
+                item.ForeColor = Color.FromArgb(190, 52, 52);
+                item.BackColor = Color.FromArgb(255, 244, 244);
+            }
+
             return item;
         }
 
@@ -2844,10 +2873,7 @@ namespace DonkeyDataManager
             object sender,
             EventArgs e)
         {
-            if (UpdateSelectedDeletedIndexes(markDeleted: true))
-            {
-                MessageBox.Show("선택 프레임 제외 완료");
-            }
+            UpdateSelectedDeletedIndexes(markDeleted: true);
         }
 
         // =====================================================
@@ -2858,10 +2884,7 @@ namespace DonkeyDataManager
             object sender,
             EventArgs e)
         {
-            if (UpdateSelectedDeletedIndexes(markDeleted: false))
-            {
-                MessageBox.Show("선택 프레임 복원 완료");
-            }
+            UpdateSelectedDeletedIndexes(markDeleted: false);
         }
 
         private bool UpdateSelectedDeletedIndexes(bool markDeleted)
@@ -3688,7 +3711,7 @@ namespace DonkeyDataManager
                     {
                         trainingStopRequested = true;
                         statusForm.AppendLog(
-                            "학습 중단 요청됨. 현재까지의 학습 결과로 모델 저장을 시도합니다.");
+                            "학습 중단 요청됨. 현재 학습을 즉시 멈추고 모델 저장을 시도합니다.");
                         TryRequestTrainingStop(statusForm);
                     };
 
@@ -3993,10 +4016,21 @@ namespace DonkeyDataManager
                 "PGID=$(ps -o pgid= -p \"$PID\" 2>/dev/null | tr -d ' '); " +
                 "if [ -z \"$PGID\" ]; then PGID=\"$PID\"; fi; " +
                 "CHILDREN=$(pgrep -P \"$PID\" 2>/dev/null || true); " +
-                "echo \"Requesting graceful training stop pid=$PID pgid=$PGID\"; " +
+                "echo \"Requesting immediate training stop pid=$PID pgid=$PGID\"; " +
                 "kill -INT -- -\"$PGID\" 2>/dev/null || kill -INT \"$PID\" 2>/dev/null || true; " +
                 "for CHILD in $CHILDREN; do kill -INT \"$CHILD\" 2>/dev/null || true; done; " +
-                "echo \"Stop signal sent. Waiting for train.py to save the model.\"";
+                "for i in 1 2 3 4 5; do " +
+                "if ! kill -0 \"$PID\" 2>/dev/null; then echo \"Training process stopped after interrupt.\"; exit 0; fi; " +
+                "sleep 1; " +
+                "done; " +
+                "echo \"Training still running after interrupt. Sending terminate signal.\"; " +
+                "kill -TERM -- -\"$PGID\" 2>/dev/null || kill -TERM \"$PID\" 2>/dev/null || true; " +
+                "sleep 1; " +
+                "if kill -0 \"$PID\" 2>/dev/null; then " +
+                "echo \"Training still running. Forcing stop.\"; " +
+                "kill -KILL -- -\"$PGID\" 2>/dev/null || kill -KILL \"$PID\" 2>/dev/null || true; " +
+                "fi; " +
+                "echo \"Stop signal sent. Checking saved model.\"";
         }
 
         private void TryTerminateTrainingProcess()
@@ -5449,76 +5483,16 @@ namespace DonkeyDataManager
 
                 Directory.CreateDirectory(destinationModelsPath);
 
+                ModelImportResult importResult =
+                    ModelImportService.ImportModelToFolder(
+                        sourceModelPath,
+                        destinationModelsPath);
+
                 string destinationModelPath =
-                    Path.Combine(
-                        destinationModelsPath,
-                        modelName);
+                    importResult.DestinationModelPath;
 
-                if (File.Exists(destinationModelPath))
-                {
-                    MessageBox.Show(
-                        "같은 이름의 모델이 이미 존재합니다.\n" +
-                        destinationModelPath);
-                    return;
-                }
-
-                List<string> relatedFiles =
-                    GetRelatedModelFilesFromPath(sourceModelPath);
-
-                if (relatedFiles.Count == 0)
-                {
-                    relatedFiles.Add(sourceModelPath);
-                }
-
-                if (!HasDonkeyModelDatabaseEntry(
-                    sourceModelPath,
-                    out string databaseErrorMessage))
-                {
-                    MessageBox.Show(
-                        "모델 가져오기를 취소했습니다.\n" +
-                        databaseErrorMessage);
-
-                    return;
-                }
-
-                foreach (string sourceFile in relatedFiles)
-                {
-                    string destinationFile =
-                        Path.Combine(
-                            destinationModelsPath,
-                            Path.GetFileName(sourceFile));
-
-                    if (!string.Equals(sourceFile, destinationFile, StringComparison.OrdinalIgnoreCase) &&
-                        File.Exists(destinationFile))
-                    {
-                        MessageBox.Show(
-                            "같은 이름의 관련 모델 파일이 이미 존재합니다.\n" +
-                            destinationFile);
-                        return;
-                    }
-                }
-
-                bool destinationModelsEmpty =
-                    Directory.GetFiles(destinationModelsPath, "*.*", SearchOption.TopDirectoryOnly)
-                        .Length == 0;
-
-                foreach (string sourceFile in relatedFiles)
-                {
-                    string destinationFile =
-                        Path.Combine(
-                            destinationModelsPath,
-                            Path.GetFileName(sourceFile));
-
-                    if (!string.Equals(sourceFile, destinationFile, StringComparison.OrdinalIgnoreCase))
-                    {
-                        File.Copy(sourceFile, destinationFile, overwrite: false);
-                    }
-                }
-
-                ImportDonkeyModelDatabaseEntry(
-                    sourceModelPath,
-                    destinationModelPath,
-                    destinationModelsEmpty);
+                modelName =
+                    importResult.ModelFileName;
 
                 ModelRegistryEntry importedEntry =
                     new ModelRegistryEntry
@@ -5549,15 +5523,6 @@ namespace DonkeyDataManager
         {
             try
             {
-                List<ModelRegistryEntry> trashEntries =
-                    GetSelectedTrashModelEntries();
-
-                if (trashEntries.Count > 0)
-                {
-                    DeleteModelsPermanently(trashEntries);
-                    return;
-                }
-
                 if (lstModels.SelectedItems.Count == 0)
                 {
                     MessageBox.Show(
@@ -5713,11 +5678,13 @@ namespace DonkeyDataManager
             try
             {
                 List<ModelRegistryEntry> selectedEntries =
-                    GetSelectedTrashModelEntries();
+                    GetSelectedModelEntries()
+                        .Where(entry => entry.IsDeleted)
+                        .ToList();
 
                 if (selectedEntries.Count == 0)
                 {
-                    MessageBox.Show("복원할 제외 모델을 선택하세요.");
+                    MessageBox.Show("복원할 제외 모델을 모델 리스트에서 선택하세요.");
                     return;
                 }
 

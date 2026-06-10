@@ -1,4 +1,4 @@
-namespace Data_Manager
+﻿namespace Data_Manager
 {
     partial class Pliot
     {
@@ -40,6 +40,7 @@ namespace Data_Manager
             lblSelectedModelPath = new Label();
             lblSelectedModelType = new Label();
             lblSelectedTubPath = new Label();
+            lblPilotShortcutGuide = new Label();
             lvModelList = new ListView();
             colModelNo = new ColumnHeader();
             colModelName = new ColumnHeader();
@@ -91,47 +92,53 @@ namespace Data_Manager
             // 
             // splitMain
             // 
-            splitMain.Dock = DockStyle.Fill;
+            splitMain.Anchor = AnchorStyles.None;
+            splitMain.BackColor = Color.White;
             splitMain.Location = new Point(8, 8);
             splitMain.Name = "splitMain";
             // 
             // splitMain.Panel1
             // 
             splitMain.Panel1.Controls.Add(pnlLeft);
-            splitMain.Panel1MinSize = 400;
+            splitMain.Panel1MinSize = 1;
             // 
             // splitMain.Panel2
             // 
             splitMain.Panel2.Controls.Add(pnlRight);
-            splitMain.Panel2MinSize = 600;
+            splitMain.Panel2MinSize = 1;
             splitMain.Size = new Size(1584, 884);
             splitMain.SplitterDistance = 404;
             splitMain.TabIndex = 0;
             // 
             // pnlLeft
             // 
+            pnlLeft.Anchor = AnchorStyles.None;
+            pnlLeft.BackColor = Color.White;
+            pnlLeft.BorderStyle = BorderStyle.FixedSingle;
             pnlLeft.Controls.Add(grpSelectedModel);
+            pnlLeft.Controls.Add(lblPilotShortcutGuide);
             pnlLeft.Controls.Add(lvModelList);
             pnlLeft.Controls.Add(btnImportModel);
-            pnlLeft.Dock = DockStyle.Fill;
             pnlLeft.Location = new Point(0, 0);
             pnlLeft.Name = "pnlLeft";
-            pnlLeft.Padding = new Padding(0, 0, 8, 0);
+            pnlLeft.Padding = new Padding(8);
             pnlLeft.Size = new Size(404, 884);
             pnlLeft.TabIndex = 0;
             // 
             // grpSelectedModel
             // 
+            grpSelectedModel.Anchor = AnchorStyles.None;
+            grpSelectedModel.BackColor = Color.White;
             grpSelectedModel.Controls.Add(tblSelectedModel);
-            grpSelectedModel.Dock = DockStyle.Bottom;
             grpSelectedModel.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            grpSelectedModel.Location = new Point(0, 684);
+            grpSelectedModel.ForeColor = Color.FromArgb(30, 39, 50);
+            grpSelectedModel.Location = new Point(7, 675);
             grpSelectedModel.Name = "grpSelectedModel";
             grpSelectedModel.Padding = new Padding(10, 8, 10, 10);
-            grpSelectedModel.Size = new Size(396, 200);
+            grpSelectedModel.Size = new Size(388, 200);
             grpSelectedModel.TabIndex = 2;
             grpSelectedModel.TabStop = false;
-            grpSelectedModel.Text = "선택된 모델 정보";
+            grpSelectedModel.Text = "선택한 모델 정보";
             // 
             // tblSelectedModel
             // 
@@ -154,13 +161,14 @@ namespace Data_Manager
             tblSelectedModel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             tblSelectedModel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
             tblSelectedModel.RowStyles.Add(new RowStyle(SizeType.Percent, 25F));
-            tblSelectedModel.Size = new Size(376, 164);
+            tblSelectedModel.Size = new Size(368, 164);
             tblSelectedModel.TabIndex = 0;
             // 
             // lblSelectedModelNameTitle
             // 
             lblSelectedModelNameTitle.Dock = DockStyle.Fill;
-            lblSelectedModelNameTitle.Font = new Font("맑은 고딕", 9F, FontStyle.Bold);
+            lblSelectedModelNameTitle.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
+            lblSelectedModelNameTitle.ForeColor = Color.FromArgb(92, 105, 122);
             lblSelectedModelNameTitle.Location = new Point(3, 0);
             lblSelectedModelNameTitle.Name = "lblSelectedModelNameTitle";
             lblSelectedModelNameTitle.Size = new Size(84, 41);
@@ -171,7 +179,8 @@ namespace Data_Manager
             // lblSelectedModelPathTitle
             // 
             lblSelectedModelPathTitle.Dock = DockStyle.Fill;
-            lblSelectedModelPathTitle.Font = new Font("맑은 고딕", 9F, FontStyle.Bold);
+            lblSelectedModelPathTitle.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
+            lblSelectedModelPathTitle.ForeColor = Color.FromArgb(92, 105, 122);
             lblSelectedModelPathTitle.Location = new Point(3, 41);
             lblSelectedModelPathTitle.Name = "lblSelectedModelPathTitle";
             lblSelectedModelPathTitle.Size = new Size(84, 41);
@@ -182,7 +191,8 @@ namespace Data_Manager
             // lblSelectedModelTypeTitle
             // 
             lblSelectedModelTypeTitle.Dock = DockStyle.Fill;
-            lblSelectedModelTypeTitle.Font = new Font("맑은 고딕", 9F, FontStyle.Bold);
+            lblSelectedModelTypeTitle.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
+            lblSelectedModelTypeTitle.ForeColor = Color.FromArgb(92, 105, 122);
             lblSelectedModelTypeTitle.Location = new Point(3, 82);
             lblSelectedModelTypeTitle.Name = "lblSelectedModelTypeTitle";
             lblSelectedModelTypeTitle.Size = new Size(84, 41);
@@ -193,21 +203,23 @@ namespace Data_Manager
             // lblSelectedTubPathTitle
             // 
             lblSelectedTubPathTitle.Dock = DockStyle.Fill;
-            lblSelectedTubPathTitle.Font = new Font("맑은 고딕", 9F, FontStyle.Bold);
+            lblSelectedTubPathTitle.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
+            lblSelectedTubPathTitle.ForeColor = Color.FromArgb(92, 105, 122);
             lblSelectedTubPathTitle.Location = new Point(3, 123);
             lblSelectedTubPathTitle.Name = "lblSelectedTubPathTitle";
             lblSelectedTubPathTitle.Size = new Size(84, 41);
             lblSelectedTubPathTitle.TabIndex = 3;
-            lblSelectedTubPathTitle.Text = "Tubs 경로";
+            lblSelectedTubPathTitle.Text = "주행데이터 경로";
             lblSelectedTubPathTitle.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // lblSelectedModelName
             // 
             lblSelectedModelName.Dock = DockStyle.Fill;
-            lblSelectedModelName.Font = new Font("맑은 고딕", 9F);
+            lblSelectedModelName.Font = new Font("맑은 고딕", 9.5F);
+            lblSelectedModelName.ForeColor = Color.FromArgb(30, 39, 50);
             lblSelectedModelName.Location = new Point(93, 0);
             lblSelectedModelName.Name = "lblSelectedModelName";
-            lblSelectedModelName.Size = new Size(280, 41);
+            lblSelectedModelName.Size = new Size(272, 41);
             lblSelectedModelName.TabIndex = 4;
             lblSelectedModelName.Text = "model_20260531_001";
             lblSelectedModelName.TextAlign = ContentAlignment.MiddleLeft;
@@ -215,10 +227,11 @@ namespace Data_Manager
             // lblSelectedModelPath
             // 
             lblSelectedModelPath.Dock = DockStyle.Fill;
-            lblSelectedModelPath.Font = new Font("맑은 고딕", 9F);
+            lblSelectedModelPath.Font = new Font("맑은 고딕", 9.5F);
+            lblSelectedModelPath.ForeColor = Color.FromArgb(30, 39, 50);
             lblSelectedModelPath.Location = new Point(93, 41);
             lblSelectedModelPath.Name = "lblSelectedModelPath";
-            lblSelectedModelPath.Size = new Size(280, 41);
+            lblSelectedModelPath.Size = new Size(272, 41);
             lblSelectedModelPath.TabIndex = 5;
             lblSelectedModelPath.Text = "C:\\data\\model_20260531_001.h5";
             lblSelectedModelPath.TextAlign = ContentAlignment.MiddleLeft;
@@ -226,10 +239,11 @@ namespace Data_Manager
             // lblSelectedModelType
             // 
             lblSelectedModelType.Dock = DockStyle.Fill;
-            lblSelectedModelType.Font = new Font("맑은 고딕", 9F);
+            lblSelectedModelType.Font = new Font("맑은 고딕", 9.5F);
+            lblSelectedModelType.ForeColor = Color.FromArgb(30, 39, 50);
             lblSelectedModelType.Location = new Point(93, 82);
             lblSelectedModelType.Name = "lblSelectedModelType";
-            lblSelectedModelType.Size = new Size(280, 41);
+            lblSelectedModelType.Size = new Size(272, 41);
             lblSelectedModelType.TabIndex = 6;
             lblSelectedModelType.Text = "linear";
             lblSelectedModelType.TextAlign = ContentAlignment.MiddleLeft;
@@ -237,43 +251,46 @@ namespace Data_Manager
             // lblSelectedTubPath
             // 
             lblSelectedTubPath.Dock = DockStyle.Fill;
-            lblSelectedTubPath.Font = new Font("맑은 고딕", 9F);
+            lblSelectedTubPath.Font = new Font("맑은 고딕", 9.5F);
+            lblSelectedTubPath.ForeColor = Color.FromArgb(30, 39, 50);
             lblSelectedTubPath.Location = new Point(93, 123);
             lblSelectedTubPath.Name = "lblSelectedTubPath";
-            lblSelectedTubPath.Size = new Size(280, 41);
+            lblSelectedTubPath.Size = new Size(272, 41);
             lblSelectedTubPath.TabIndex = 7;
             lblSelectedTubPath.Text = "/mnt/c/Users/cheon/.../data";
             lblSelectedTubPath.TextAlign = ContentAlignment.MiddleLeft;
             // 
+            // lblPilotShortcutGuide
+            // 
+            lblPilotShortcutGuide.Anchor = AnchorStyles.None;
+            lblPilotShortcutGuide.Font = new Font("맑은 고딕", 8.5F);
+            lblPilotShortcutGuide.ForeColor = Color.FromArgb(92, 105, 122);
+            lblPilotShortcutGuide.Location = new Point(7, 587);
+            lblPilotShortcutGuide.Name = "lblPilotShortcutGuide";
+            lblPilotShortcutGuide.Padding = new Padding(8, 4, 8, 4);
+            lblPilotShortcutGuide.Size = new Size(388, 88);
+            lblPilotShortcutGuide.TabIndex = 3;
+            lblPilotShortcutGuide.Text = "Space 재생/일시정지 | Esc 정지\r\n←/→ 1프레임 | Shift+←/→ 5프레임\r\nEnter 모델 로드 | Ctrl+I 모델 가져오기\r\nCtrl+T 주행데이터 입력 | Ctrl+G 그래프 | Ctrl+J AI 판단";
+            lblPilotShortcutGuide.TextAlign = ContentAlignment.MiddleLeft;
+            // 
             // lvModelList
             // 
+            lvModelList.Anchor = AnchorStyles.None;
+            lvModelList.BackColor = Color.White;
+            lvModelList.BorderStyle = BorderStyle.FixedSingle;
             lvModelList.Columns.AddRange(new ColumnHeader[] { colModelNo, colModelName, colModelPath });
-            lvModelList.Dock = DockStyle.Fill;
+            lvModelList.Font = new Font("맑은 고딕", 9.5F);
+            lvModelList.ForeColor = Color.FromArgb(30, 39, 50);
             lvModelList.FullRowSelect = true;
+            lvModelList.GridLines = true;
             lvModelList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
-            lvModelList.Location = new Point(0, 0);
+            lvModelList.Location = new Point(-1, -1);
             lvModelList.MultiSelect = false;
             lvModelList.Name = "lvModelList";
             lvModelList.Size = new Size(396, 684);
             lvModelList.TabIndex = 1;
             lvModelList.UseCompatibleStateImageBehavior = false;
             lvModelList.View = View.Details;
-            // 
-            // btnImportModel
-            // 
-            btnImportModel.BackColor = Color.FromArgb(62, 150, 255);
-            btnImportModel.Cursor = Cursors.Hand;
-            btnImportModel.Dock = DockStyle.Top;
-            btnImportModel.FlatAppearance.BorderColor = Color.FromArgb(96, 172, 255);
-            btnImportModel.FlatStyle = FlatStyle.Flat;
-            btnImportModel.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            btnImportModel.ForeColor = Color.White;
-            btnImportModel.Location = new Point(0, 0);
-            btnImportModel.Name = "btnImportModel";
-            btnImportModel.Size = new Size(396, 48);
-            btnImportModel.TabIndex = 0;
-            btnImportModel.Text = "모델 가져오기";
-            btnImportModel.UseVisualStyleBackColor = false;
             // 
             // colModelNo
             // 
@@ -290,10 +307,27 @@ namespace Data_Manager
             colModelPath.Text = "경로";
             colModelPath.Width = 200;
             // 
+            // btnImportModel
+            // 
+            btnImportModel.Anchor = AnchorStyles.None;
+            btnImportModel.BackColor = Color.FromArgb(62, 150, 255);
+            btnImportModel.Cursor = Cursors.Hand;
+            btnImportModel.FlatAppearance.BorderColor = Color.FromArgb(96, 172, 255);
+            btnImportModel.FlatStyle = FlatStyle.Flat;
+            btnImportModel.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            btnImportModel.ForeColor = Color.White;
+            btnImportModel.Location = new Point(-1, -1);
+            btnImportModel.Name = "btnImportModel";
+            btnImportModel.Size = new Size(396, 48);
+            btnImportModel.TabIndex = 0;
+            btnImportModel.Text = "모델 가져오기";
+            btnImportModel.UseVisualStyleBackColor = false;
+            // 
             // pnlRight
             // 
+            pnlRight.Anchor = AnchorStyles.None;
+            pnlRight.BackColor = Color.White;
             pnlRight.Controls.Add(pnlPilotCard);
-            pnlRight.Dock = DockStyle.Fill;
             pnlRight.Location = new Point(0, 0);
             pnlRight.Name = "pnlRight";
             pnlRight.Padding = new Padding(8, 0, 0, 0);
@@ -302,39 +336,46 @@ namespace Data_Manager
             // 
             // pnlPilotCard
             // 
+            pnlPilotCard.Anchor = AnchorStyles.None;
+            pnlPilotCard.BackColor = Color.White;
             pnlPilotCard.BorderStyle = BorderStyle.FixedSingle;
             pnlPilotCard.Controls.Add(pnlTrackBar);
             pnlPilotCard.Controls.Add(pnlPlaybackControls);
             pnlPilotCard.Controls.Add(pnlImageHost);
             pnlPilotCard.Controls.Add(pnlPilotHeader);
-            pnlPilotCard.Dock = DockStyle.Fill;
             pnlPilotCard.Location = new Point(8, 0);
             pnlPilotCard.Name = "pnlPilotCard";
-            pnlPilotCard.Padding = new Padding(12);
+            pnlPilotCard.Padding = new Padding(14);
             pnlPilotCard.Size = new Size(1168, 884);
             pnlPilotCard.TabIndex = 0;
             // 
             // pnlTrackBar
             // 
+            pnlTrackBar.BackColor = Color.White;
+            pnlTrackBar.BorderStyle = BorderStyle.FixedSingle;
             pnlTrackBar.Controls.Add(trbLocation);
-            pnlTrackBar.Dock = DockStyle.Bottom;
-            pnlTrackBar.Location = new Point(12, 740);
+            pnlTrackBar.Location = new Point(14, 732);
             pnlTrackBar.Name = "pnlTrackBar";
-            pnlTrackBar.Size = new Size(1142, 57);
+            pnlTrackBar.Padding = new Padding(8, 4, 8, 4);
+            pnlTrackBar.Size = new Size(1138, 57);
             pnlTrackBar.TabIndex = 2;
             // 
             // trbLocation
             // 
-            trbLocation.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            trbLocation.Anchor = AnchorStyles.None;
+            trbLocation.BackColor = Color.White;
             trbLocation.Enabled = false;
-            trbLocation.Location = new Point(0, 7);
+            trbLocation.Location = new Point(8, 7);
             trbLocation.Maximum = 0;
             trbLocation.Name = "trbLocation";
-            trbLocation.Size = new Size(1142, 45);
+            trbLocation.Size = new Size(1122, 45);
             trbLocation.TabIndex = 1;
+            trbLocation.TickStyle = TickStyle.Both;
             // 
             // pnlPlaybackControls
             // 
+            pnlPlaybackControls.BackColor = Color.White;
+            pnlPlaybackControls.BorderStyle = BorderStyle.FixedSingle;
             pnlPlaybackControls.Controls.Add(btnJumpPrev5);
             pnlPlaybackControls.Controls.Add(btnPrevImage);
             pnlPlaybackControls.Controls.Add(btnPlayPause);
@@ -342,111 +383,145 @@ namespace Data_Manager
             pnlPlaybackControls.Controls.Add(btnReversePlay);
             pnlPlaybackControls.Controls.Add(btnNextImage);
             pnlPlaybackControls.Controls.Add(btnJumpNext5);
-            pnlPlaybackControls.Dock = DockStyle.Bottom;
-            pnlPlaybackControls.Location = new Point(12, 797);
+            pnlPlaybackControls.Location = new Point(14, 797);
             pnlPlaybackControls.Name = "pnlPlaybackControls";
-            pnlPlaybackControls.Size = new Size(1142, 73);
+            pnlPlaybackControls.Padding = new Padding(8, 4, 8, 4);
+            pnlPlaybackControls.Size = new Size(1138, 73);
             pnlPlaybackControls.TabIndex = 3;
             // 
             // btnJumpPrev5
             // 
-            btnJumpPrev5.Anchor = AnchorStyles.Top;
-            btnJumpPrev5.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
+            btnJumpPrev5.Anchor = AnchorStyles.None;
+            btnJumpPrev5.BackColor = Color.FromArgb(245, 247, 250);
+            btnJumpPrev5.BackgroundImage = Properties.Resources.arrow5_left;
+            btnJumpPrev5.BackgroundImageLayout = ImageLayout.Zoom;
+            btnJumpPrev5.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
+            btnJumpPrev5.FlatStyle = FlatStyle.Flat;
+            btnJumpPrev5.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
+            btnJumpPrev5.ForeColor = Color.FromArgb(30, 39, 50);
             btnJumpPrev5.Location = new Point(118, 20);
             btnJumpPrev5.Name = "btnJumpPrev5";
             btnJumpPrev5.Size = new Size(116, 36);
             btnJumpPrev5.TabIndex = 1;
-            btnJumpPrev5.Text = "<< 5";
-            btnJumpPrev5.UseVisualStyleBackColor = true;
+            btnJumpPrev5.UseVisualStyleBackColor = false;
             // 
             // btnPrevImage
             // 
-            btnPrevImage.Anchor = AnchorStyles.Top;
-            btnPrevImage.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
+            btnPrevImage.Anchor = AnchorStyles.None;
+            btnPrevImage.BackColor = Color.FromArgb(245, 247, 250);
+            btnPrevImage.BackgroundImage = Properties.Resources.arrow1_left;
+            btnPrevImage.BackgroundImageLayout = ImageLayout.Zoom;
+            btnPrevImage.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
+            btnPrevImage.FlatStyle = FlatStyle.Flat;
+            btnPrevImage.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
+            btnPrevImage.ForeColor = Color.FromArgb(30, 39, 50);
             btnPrevImage.Location = new Point(246, 20);
             btnPrevImage.Name = "btnPrevImage";
             btnPrevImage.Size = new Size(116, 36);
             btnPrevImage.TabIndex = 2;
-            btnPrevImage.Text = "<";
-            btnPrevImage.UseVisualStyleBackColor = true;
+            btnPrevImage.UseVisualStyleBackColor = false;
             // 
             // btnPlayPause
             // 
-            btnPlayPause.Anchor = AnchorStyles.Top;
-            btnPlayPause.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
+            btnPlayPause.Anchor = AnchorStyles.None;
+            btnPlayPause.BackColor = Color.FromArgb(245, 247, 250);
+            btnPlayPause.BackgroundImage = Properties.Resources.PlaySlide4655096;
+            btnPlayPause.BackgroundImageLayout = ImageLayout.Zoom;
+            btnPlayPause.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
+            btnPlayPause.FlatStyle = FlatStyle.Flat;
+            btnPlayPause.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
+            btnPlayPause.ForeColor = Color.FromArgb(30, 39, 50);
             btnPlayPause.Location = new Point(374, 20);
             btnPlayPause.Name = "btnPlayPause";
             btnPlayPause.Size = new Size(116, 36);
             btnPlayPause.TabIndex = 3;
-            btnPlayPause.Text = "▶";
-            btnPlayPause.UseVisualStyleBackColor = true;
+            btnPlayPause.UseVisualStyleBackColor = false;
             // 
             // cmbSpeed
             // 
-            cmbSpeed.Anchor = AnchorStyles.Top;
+            cmbSpeed.Anchor = AnchorStyles.None;
+            cmbSpeed.BackColor = Color.FromArgb(245, 247, 250);
             cmbSpeed.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbSpeed.Font = new Font("맑은 고딕", 12F);
+            cmbSpeed.FlatStyle = FlatStyle.Flat;
+            cmbSpeed.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
+            cmbSpeed.ForeColor = Color.FromArgb(30, 39, 50);
             cmbSpeed.FormattingEnabled = true;
             cmbSpeed.Items.AddRange(new object[] { "0.5x", "1.0x", "2.0x", "3.0x" });
             cmbSpeed.Location = new Point(502, 23);
             cmbSpeed.Name = "cmbSpeed";
-            cmbSpeed.Size = new Size(126, 29);
+            cmbSpeed.Size = new Size(126, 28);
             cmbSpeed.TabIndex = 4;
             // 
             // btnReversePlay
             // 
-            btnReversePlay.Anchor = AnchorStyles.Top;
-            btnReversePlay.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
+            btnReversePlay.Anchor = AnchorStyles.None;
+            btnReversePlay.BackColor = Color.FromArgb(245, 247, 250);
+            btnReversePlay.BackgroundImage = Properties.Resources.UTurnArrow12262463;
+            btnReversePlay.BackgroundImageLayout = ImageLayout.Zoom;
+            btnReversePlay.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
+            btnReversePlay.FlatStyle = FlatStyle.Flat;
+            btnReversePlay.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
+            btnReversePlay.ForeColor = Color.FromArgb(30, 39, 50);
             btnReversePlay.Location = new Point(640, 20);
             btnReversePlay.Name = "btnReversePlay";
             btnReversePlay.Size = new Size(116, 36);
             btnReversePlay.TabIndex = 5;
-            btnReversePlay.Text = "◀";
-            btnReversePlay.UseVisualStyleBackColor = true;
+            btnReversePlay.UseVisualStyleBackColor = false;
             // 
             // btnNextImage
             // 
-            btnNextImage.Anchor = AnchorStyles.Top;
-            btnNextImage.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
+            btnNextImage.Anchor = AnchorStyles.None;
+            btnNextImage.BackColor = Color.FromArgb(245, 247, 250);
+            btnNextImage.BackgroundImage = Properties.Resources.arrow1_right;
+            btnNextImage.BackgroundImageLayout = ImageLayout.Zoom;
+            btnNextImage.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
+            btnNextImage.FlatStyle = FlatStyle.Flat;
+            btnNextImage.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
+            btnNextImage.ForeColor = Color.FromArgb(30, 39, 50);
             btnNextImage.Location = new Point(768, 20);
             btnNextImage.Name = "btnNextImage";
             btnNextImage.Size = new Size(116, 36);
             btnNextImage.TabIndex = 6;
-            btnNextImage.Text = ">";
-            btnNextImage.UseVisualStyleBackColor = true;
+            btnNextImage.UseVisualStyleBackColor = false;
             // 
             // btnJumpNext5
             // 
-            btnJumpNext5.Anchor = AnchorStyles.Top;
-            btnJumpNext5.Font = new Font("맑은 고딕", 13F, FontStyle.Bold);
+            btnJumpNext5.Anchor = AnchorStyles.None;
+            btnJumpNext5.BackColor = Color.FromArgb(245, 247, 250);
+            btnJumpNext5.BackgroundImage = Properties.Resources.arrow5_right;
+            btnJumpNext5.BackgroundImageLayout = ImageLayout.Zoom;
+            btnJumpNext5.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
+            btnJumpNext5.FlatStyle = FlatStyle.Flat;
+            btnJumpNext5.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
+            btnJumpNext5.ForeColor = Color.FromArgb(30, 39, 50);
             btnJumpNext5.Location = new Point(896, 20);
             btnJumpNext5.Name = "btnJumpNext5";
             btnJumpNext5.Size = new Size(116, 36);
             btnJumpNext5.TabIndex = 7;
-            btnJumpNext5.Text = "5 >>";
-            btnJumpNext5.UseVisualStyleBackColor = true;
+            btnJumpNext5.UseVisualStyleBackColor = false;
             // 
             // pnlImageHost
             // 
-            pnlImageHost.BackColor = Color.FromArgb(28, 32, 36);
+            pnlImageHost.BackColor = Color.White;
+            pnlImageHost.BorderStyle = BorderStyle.FixedSingle;
             pnlImageHost.Controls.Add(picPilotImage);
-            pnlImageHost.Dock = DockStyle.Fill;
-            pnlImageHost.Location = new Point(12, 64);
+            pnlImageHost.Location = new Point(14, 74);
             pnlImageHost.Name = "pnlImageHost";
-            pnlImageHost.Size = new Size(1142, 806);
+            pnlImageHost.Padding = new Padding(4);
+            pnlImageHost.Size = new Size(1138, 650);
             pnlImageHost.TabIndex = 1;
             // 
             // picPilotImage
             // 
-            picPilotImage.BackColor = Color.FromArgb(35, 39, 44);
+            picPilotImage.BackColor = Color.White;
             picPilotImage.Controls.Add(pliotAngleIndicator);
             picPilotImage.Controls.Add(pliotAiThrottleGauge);
             picPilotImage.Controls.Add(pliotTubThrottleGauge);
             picPilotImage.Controls.Add(pnlImageIndexOverlay);
             picPilotImage.Dock = DockStyle.Fill;
-            picPilotImage.Location = new Point(0, 0);
+            picPilotImage.Location = new Point(4, 4);
             picPilotImage.Name = "picPilotImage";
-            picPilotImage.Size = new Size(1142, 806);
+            picPilotImage.Size = new Size(1128, 640);
             picPilotImage.SizeMode = PictureBoxSizeMode.Zoom;
             picPilotImage.TabIndex = 0;
             picPilotImage.TabStop = false;
@@ -463,11 +538,9 @@ namespace Data_Manager
             // pliotAiThrottleGauge
             // 
             pliotAiThrottleGauge.BackColor = Color.Transparent;
-            pliotAiThrottleGauge.FillColor = Color.FromArgb(255, 55, 145, 255);
             pliotAiThrottleGauge.ForeColor = Color.White;
             pliotAiThrottleGauge.GaugeTitle = "AI";
             pliotAiThrottleGauge.Location = new Point(18, 629);
-            pliotAiThrottleGauge.Mirrored = true;
             pliotAiThrottleGauge.Name = "pliotAiThrottleGauge";
             pliotAiThrottleGauge.Size = new Size(240, 120);
             pliotAiThrottleGauge.TabIndex = 2;
@@ -475,11 +548,9 @@ namespace Data_Manager
             // pliotTubThrottleGauge
             // 
             pliotTubThrottleGauge.BackColor = Color.Transparent;
-            pliotTubThrottleGauge.FillColor = Color.FromArgb(255, 255, 92, 76);
             pliotTubThrottleGauge.ForeColor = Color.White;
             pliotTubThrottleGauge.GaugeTitle = "사람";
             pliotTubThrottleGauge.Location = new Point(18, 499);
-            pliotTubThrottleGauge.Mirrored = true;
             pliotTubThrottleGauge.Name = "pliotTubThrottleGauge";
             pliotTubThrottleGauge.Size = new Size(240, 120);
             pliotTubThrottleGauge.TabIndex = 4;
@@ -507,51 +578,64 @@ namespace Data_Manager
             // 
             // pnlPilotHeader
             // 
+            pnlPilotHeader.BackColor = Color.White;
             pnlPilotHeader.Controls.Add(btnGenerateJudement);
             pnlPilotHeader.Controls.Add(btnPilotChart);
             pnlPilotHeader.Controls.Add(btnTubInput);
             pnlPilotHeader.Controls.Add(lblTubPathValue);
             pnlPilotHeader.Controls.Add(lblTubPathTitle);
-            pnlPilotHeader.Dock = DockStyle.Top;
-            pnlPilotHeader.Location = new Point(12, 12);
+            pnlPilotHeader.Location = new Point(14, 14);
             pnlPilotHeader.Name = "pnlPilotHeader";
             pnlPilotHeader.Size = new Size(1142, 52);
             pnlPilotHeader.TabIndex = 0;
             // 
             // btnGenerateJudement
             // 
-            btnGenerateJudement.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnGenerateJudement.Anchor = AnchorStyles.None;
+            btnGenerateJudement.BackColor = Color.FromArgb(255, 168, 72);
+            btnGenerateJudement.FlatAppearance.BorderColor = Color.FromArgb(255, 202, 106);
+            btnGenerateJudement.FlatStyle = FlatStyle.Flat;
+            btnGenerateJudement.ForeColor = Color.FromArgb(34, 20, 6);
             btnGenerateJudement.Location = new Point(880, 8);
             btnGenerateJudement.Name = "btnGenerateJudement";
             btnGenerateJudement.Size = new Size(126, 36);
             btnGenerateJudement.TabIndex = 3;
             btnGenerateJudement.Text = "AI 판단 생성";
-            btnGenerateJudement.UseVisualStyleBackColor = true;
+            btnGenerateJudement.UseVisualStyleBackColor = false;
             // 
             // btnPilotChart
             // 
-            btnPilotChart.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnPilotChart.Anchor = AnchorStyles.None;
+            btnPilotChart.BackColor = Color.FromArgb(65, 190, 125);
+            btnPilotChart.FlatAppearance.BorderColor = Color.FromArgb(99, 224, 159);
+            btnPilotChart.FlatStyle = FlatStyle.Flat;
+            btnPilotChart.ForeColor = Color.FromArgb(9, 30, 20);
             btnPilotChart.Location = new Point(748, 8);
             btnPilotChart.Name = "btnPilotChart";
             btnPilotChart.Size = new Size(126, 36);
             btnPilotChart.TabIndex = 4;
             btnPilotChart.Text = "그래프";
-            btnPilotChart.UseVisualStyleBackColor = true;
+            btnPilotChart.UseVisualStyleBackColor = false;
             // 
             // btnTubInput
             // 
-            btnTubInput.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnTubInput.Anchor = AnchorStyles.None;
+            btnTubInput.BackColor = Color.FromArgb(44, 205, 220);
+            btnTubInput.FlatAppearance.BorderColor = Color.FromArgb(78, 239, 254);
+            btnTubInput.FlatStyle = FlatStyle.Flat;
+            btnTubInput.ForeColor = Color.FromArgb(10, 24, 32);
             btnTubInput.Location = new Point(1012, 8);
             btnTubInput.Name = "btnTubInput";
             btnTubInput.Size = new Size(126, 36);
             btnTubInput.TabIndex = 2;
-            btnTubInput.Text = "TUB 입력";
-            btnTubInput.UseVisualStyleBackColor = true;
+            btnTubInput.Text = "주행데이터 입력";
+            btnTubInput.UseVisualStyleBackColor = false;
             // 
             // lblTubPathValue
             // 
-            lblTubPathValue.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            lblTubPathValue.Font = new Font("맑은 고딕", 11F);
+            lblTubPathValue.Anchor = AnchorStyles.None;
+            lblTubPathValue.Font = new Font("맑은 고딕", 9.5F);
+            lblTubPathValue.ForeColor = Color.FromArgb(30, 39, 50);
             lblTubPathValue.Location = new Point(90, 12);
             lblTubPathValue.Name = "lblTubPathValue";
             lblTubPathValue.Size = new Size(652, 28);
@@ -563,178 +647,26 @@ namespace Data_Manager
             // 
             lblTubPathTitle.AutoSize = true;
             lblTubPathTitle.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
+            lblTubPathTitle.ForeColor = Color.FromArgb(92, 105, 122);
             lblTubPathTitle.Location = new Point(0, 14);
             lblTubPathTitle.Name = "lblTubPathTitle";
-            lblTubPathTitle.Size = new Size(58, 20);
+            lblTubPathTitle.Size = new Size(74, 20);
             lblTubPathTitle.TabIndex = 0;
-            lblTubPathTitle.Text = "모델명:";
+            lblTubPathTitle.Text = "선택 모델";
             // 
             // Pliot
             // 
-            AutoScaleDimensions = new SizeF(9F, 20F);
+            AutoScaleDimensions = new SizeF(8F, 19F);
             AutoScaleMode = AutoScaleMode.Font;
+            BackColor = Color.White;
             ClientSize = new Size(1600, 900);
             Controls.Add(splitMain);
-            Font = new Font("맑은 고딕", 11.25F);
+            Font = new Font("맑은 고딕", 10.5F);
             Margin = new Padding(2);
+            MinimumSize = new Size(900, 520);
             Name = "Pliot";
             Padding = new Padding(8);
             Text = "파일럿";
-            // Designer-visible pilot styling.
-            BackColor = Color.White;
-            Font = new Font("맑은 고딕", 10.5F);
-            Text = "파일럿";
-            splitMain.BackColor = Color.White;
-            pnlLeft.BackColor = Color.White;
-            pnlRight.BackColor = Color.White;
-            pnlPilotCard.BackColor = Color.White;
-            pnlPilotCard.BorderStyle = BorderStyle.None;
-            pnlPilotHeader.BackColor = Color.White;
-            pnlPlaybackControls.BackColor = Color.White;
-            pnlTrackBar.BackColor = Color.White;
-            pnlImageHost.BackColor = Color.White;
-            picPilotImage.BackColor = Color.White;
-            grpSelectedModel.BackColor = Color.White;
-            grpSelectedModel.ForeColor = Color.FromArgb(30, 39, 50);
-            grpSelectedModel.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
-            grpSelectedModel.Text = "선택한 모델 정보";
-            lblSelectedModelNameTitle.Text = "모델명";
-            lblSelectedModelPathTitle.Text = "파일 경로";
-            lblSelectedModelTypeTitle.Text = "타입";
-            lblSelectedTubPathTitle.Text = "Tubs 경로";
-            lblSelectedModelNameTitle.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
-            lblSelectedModelPathTitle.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
-            lblSelectedModelTypeTitle.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
-            lblSelectedTubPathTitle.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
-            lblSelectedModelNameTitle.ForeColor = Color.FromArgb(92, 105, 122);
-            lblSelectedModelPathTitle.ForeColor = Color.FromArgb(92, 105, 122);
-            lblSelectedModelTypeTitle.ForeColor = Color.FromArgb(92, 105, 122);
-            lblSelectedTubPathTitle.ForeColor = Color.FromArgb(92, 105, 122);
-            lblSelectedModelName.Font = new Font("맑은 고딕", 9.5F);
-            lblSelectedModelPath.Font = new Font("맑은 고딕", 9.5F);
-            lblSelectedModelType.Font = new Font("맑은 고딕", 9.5F);
-            lblSelectedTubPath.Font = new Font("맑은 고딕", 9.5F);
-            lblSelectedModelName.ForeColor = Color.FromArgb(30, 39, 50);
-            lblSelectedModelPath.ForeColor = Color.FromArgb(30, 39, 50);
-            lblSelectedModelType.ForeColor = Color.FromArgb(30, 39, 50);
-            lblSelectedTubPath.ForeColor = Color.FromArgb(30, 39, 50);
-            lvModelList.BackColor = Color.White;
-            lvModelList.ForeColor = Color.FromArgb(30, 39, 50);
-            lvModelList.Font = new Font("맑은 고딕", 9.5F);
-            lvModelList.BorderStyle = BorderStyle.None;
-            lvModelList.GridLines = true;
-            colModelNo.Text = "번호";
-            colModelName.Text = "모델 이름";
-            colModelPath.Text = "경로";
-            btnTubInput.Text = "TUB 입력";
-            btnTubInput.BackColor = Color.FromArgb(44, 205, 220);
-            btnTubInput.ForeColor = Color.FromArgb(10, 24, 32);
-            btnTubInput.FlatStyle = FlatStyle.Flat;
-            btnTubInput.FlatAppearance.BorderColor = Color.FromArgb(78, 239, 254);
-            btnTubInput.UseVisualStyleBackColor = false;
-            btnPilotChart.Text = "그래프";
-            btnPilotChart.BackColor = Color.FromArgb(65, 190, 125);
-            btnPilotChart.ForeColor = Color.FromArgb(9, 30, 20);
-            btnPilotChart.FlatStyle = FlatStyle.Flat;
-            btnPilotChart.FlatAppearance.BorderColor = Color.FromArgb(99, 224, 159);
-            btnPilotChart.UseVisualStyleBackColor = false;
-            btnGenerateJudement.Text = "AI 판단 생성";
-            btnGenerateJudement.BackColor = Color.FromArgb(255, 168, 72);
-            btnGenerateJudement.ForeColor = Color.FromArgb(34, 20, 6);
-            btnGenerateJudement.FlatStyle = FlatStyle.Flat;
-            btnGenerateJudement.FlatAppearance.BorderColor = Color.FromArgb(255, 202, 106);
-            btnGenerateJudement.UseVisualStyleBackColor = false;
-            btnJumpPrev5.Text = "<< 5";
-            btnPrevImage.Text = "<";
-            btnPlayPause.Text = "▶";
-            btnReversePlay.Text = "◀";
-            btnNextImage.Text = ">";
-            btnJumpNext5.Text = "5 >>";
-            btnJumpPrev5.BackColor = Color.FromArgb(245, 247, 250);
-            btnJumpPrev5.ForeColor = Color.FromArgb(30, 39, 50);
-            btnJumpPrev5.FlatStyle = FlatStyle.Flat;
-            btnJumpPrev5.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
-            btnJumpPrev5.UseVisualStyleBackColor = false;
-            btnJumpPrev5.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
-            btnPrevImage.BackColor = Color.FromArgb(245, 247, 250);
-            btnPrevImage.ForeColor = Color.FromArgb(30, 39, 50);
-            btnPrevImage.FlatStyle = FlatStyle.Flat;
-            btnPrevImage.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
-            btnPrevImage.UseVisualStyleBackColor = false;
-            btnPrevImage.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
-            btnPlayPause.BackColor = Color.FromArgb(245, 247, 250);
-            btnPlayPause.ForeColor = Color.FromArgb(30, 39, 50);
-            btnPlayPause.FlatStyle = FlatStyle.Flat;
-            btnPlayPause.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
-            btnPlayPause.UseVisualStyleBackColor = false;
-            btnPlayPause.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
-            btnReversePlay.BackColor = Color.FromArgb(245, 247, 250);
-            btnReversePlay.ForeColor = Color.FromArgb(30, 39, 50);
-            btnReversePlay.FlatStyle = FlatStyle.Flat;
-            btnReversePlay.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
-            btnReversePlay.UseVisualStyleBackColor = false;
-            btnReversePlay.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
-            btnNextImage.BackColor = Color.FromArgb(245, 247, 250);
-            btnNextImage.ForeColor = Color.FromArgb(30, 39, 50);
-            btnNextImage.FlatStyle = FlatStyle.Flat;
-            btnNextImage.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
-            btnNextImage.UseVisualStyleBackColor = false;
-            btnNextImage.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
-            btnJumpNext5.BackColor = Color.FromArgb(245, 247, 250);
-            btnJumpNext5.ForeColor = Color.FromArgb(30, 39, 50);
-            btnJumpNext5.FlatStyle = FlatStyle.Flat;
-            btnJumpNext5.FlatAppearance.BorderColor = Color.FromArgb(205, 214, 225);
-            btnJumpNext5.UseVisualStyleBackColor = false;
-            btnJumpNext5.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
-            cmbSpeed.BackColor = Color.FromArgb(245, 247, 250);
-            cmbSpeed.ForeColor = Color.FromArgb(30, 39, 50);
-            cmbSpeed.FlatStyle = FlatStyle.Flat;
-            cmbSpeed.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
-            lblTubPathTitle.Text = "선택 모델";
-            lblTubPathTitle.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
-            lblTubPathTitle.ForeColor = Color.FromArgb(92, 105, 122);
-            lblTubPathValue.Font = new Font("맑은 고딕", 9.5F);
-            lblTubPathValue.ForeColor = Color.FromArgb(30, 39, 50);
-            lblImageIndexOverlay.Font = new Font("맑은 고딕", 18F, FontStyle.Bold);
-            pliotTubThrottleGauge.GaugeTitle = "사람";
-            // Designer-visible Korean text normalization.
-            Font = new Font("\uB9D1\uC740 \uACE0\uB515", 10.5F);
-            Text = "\uD30C\uC77C\uB7FF";
-            grpSelectedModel.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 10F, FontStyle.Bold);
-            grpSelectedModel.Text = "\uC120\uD0DD\uD55C \uBAA8\uB378 \uC815\uBCF4";
-            lblSelectedModelNameTitle.Text = "\uBAA8\uB378\uBA85";
-            lblSelectedModelPathTitle.Text = "\uD30C\uC77C \uACBD\uB85C";
-            lblSelectedModelTypeTitle.Text = "\uD0C0\uC785";
-            lblSelectedTubPathTitle.Text = "Tubs \uACBD\uB85C";
-            lblSelectedModelNameTitle.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F, FontStyle.Bold);
-            lblSelectedModelPathTitle.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F, FontStyle.Bold);
-            lblSelectedModelTypeTitle.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F, FontStyle.Bold);
-            lblSelectedTubPathTitle.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F, FontStyle.Bold);
-            lblSelectedModelName.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F);
-            lblSelectedModelPath.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F);
-            lblSelectedModelType.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F);
-            lblSelectedTubPath.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F);
-            lvModelList.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F);
-            colModelNo.Text = "\uBC88\uD638";
-            colModelName.Text = "\uBAA8\uB378 \uC774\uB984";
-            colModelPath.Text = "\uACBD\uB85C";
-            btnTubInput.Text = "TUB \uC785\uB825";
-            btnPilotChart.Text = "\uADF8\uB798\uD504";
-            btnGenerateJudement.Text = "AI \uD310\uB2E8 \uC0DD\uC131";
-            btnPlayPause.Text = "\u25B6";
-            btnReversePlay.Text = "\u25C0";
-            btnJumpPrev5.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 12F, FontStyle.Bold);
-            btnPrevImage.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 12F, FontStyle.Bold);
-            btnPlayPause.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 12F, FontStyle.Bold);
-            btnReversePlay.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 12F, FontStyle.Bold);
-            btnNextImage.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 12F, FontStyle.Bold);
-            btnJumpNext5.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 12F, FontStyle.Bold);
-            cmbSpeed.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 11F, FontStyle.Bold);
-            lblTubPathTitle.Text = "\uC120\uD0DD \uBAA8\uB378";
-            lblTubPathTitle.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 11F, FontStyle.Bold);
-            lblTubPathValue.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 9.5F);
-            lblImageIndexOverlay.Font = new Font("\uB9D1\uC740 \uACE0\uB515", 18F, FontStyle.Bold);
-            pliotTubThrottleGauge.GaugeTitle = "\uC0AC\uB78C";
             splitMain.Panel1.ResumeLayout(false);
             splitMain.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)splitMain).EndInit();
@@ -763,6 +695,7 @@ namespace Data_Manager
         private Panel pnlLeft;
         private ListView lvModelList;
         private Button btnImportModel;
+        private Label lblPilotShortcutGuide;
         private ColumnHeader colModelNo;
         private ColumnHeader colModelName;
         private ColumnHeader colModelPath;
