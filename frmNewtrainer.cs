@@ -2671,7 +2671,7 @@ namespace DonkeyDataManager
                 return false;
             }
 
-            int next = lstCatalogRows.SelectedIndex;
+            int next = GetCurrentCatalogSelectionIndex(delta);
 
             if (next < 0)
             {
@@ -2689,8 +2689,52 @@ namespace DonkeyDataManager
             }
             while (IsCatalogHeaderRow(next));
 
-            lstCatalogRows.SelectedIndex = next;
+            SelectCatalogRow(next);
             return true;
+        }
+
+        private int GetCurrentCatalogSelectionIndex(int delta)
+        {
+            if (lstCatalogRows.SelectedIndices.Count == 0)
+            {
+                return lstCatalogRows.SelectedIndex;
+            }
+
+            return delta >= 0
+                ? lstCatalogRows.SelectedIndices
+                    .Cast<int>()
+                    .DefaultIfEmpty(lstCatalogRows.SelectedIndex)
+                    .Max()
+                : lstCatalogRows.SelectedIndices
+                    .Cast<int>()
+                    .DefaultIfEmpty(lstCatalogRows.SelectedIndex)
+                    .Min();
+        }
+
+        private void SelectCatalogRow(int index)
+        {
+            if (index < 0 || index >= lstCatalogRows.Items.Count)
+            {
+                return;
+            }
+
+            lstCatalogRows.BeginUpdate();
+            try
+            {
+                lstCatalogRows.ClearSelected();
+                lstCatalogRows.SelectedIndex = index;
+
+                int visiblePadding = 4;
+                int topIndex = Math.Max(0, index - visiblePadding);
+                if (lstCatalogRows.TopIndex != topIndex)
+                {
+                    lstCatalogRows.TopIndex = topIndex;
+                }
+            }
+            finally
+            {
+                lstCatalogRows.EndUpdate();
+            }
         }
 
         private void CmbSpeed_SelectedIndexChanged(

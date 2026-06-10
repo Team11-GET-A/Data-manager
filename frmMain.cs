@@ -1483,7 +1483,8 @@ namespace AD_AI_LearningData_Editor
         {
             if (pnlColorProperty.Visible && activeControl != pnlColorProperty)
             {
-                CancelColorFilterPreview();
+                CommitColorFilterPreview();
+                ResetPaletteStatus();
             }
 
             pnlContrastProperty.Visible = activeControl == pnlContrastProperty;
@@ -1497,7 +1498,8 @@ namespace AD_AI_LearningData_Editor
         {
             if (pnlColorProperty.Visible)
             {
-                CancelColorFilterPreview();
+                CommitColorFilterPreview();
+                ResetPaletteStatus();
             }
 
             pnlContrastProperty.Visible = false;
@@ -2150,14 +2152,31 @@ namespace AD_AI_LearningData_Editor
         {
             CommitColorFilterPreview();
             ResetPaletteStatus();
-            LoadUploadedFilesToD();
+            RefreshUploadedFilesPreservingCurrentSlide();
+            ClosePropertyPanelsWithoutColorDecision();
         }
 
         private void btnColorCancle_Click(object sender, EventArgs e)
         {
-            CancelColorFilterPreview();
+            CancelColorFilterPreviewForCurrentSelection();
             ResetPaletteStatus();
+            RefreshUploadedFilesPreservingCurrentSlide();
+            ClosePropertyPanelsWithoutColorDecision();
+        }
+
+        private void RefreshUploadedFilesPreservingCurrentSlide()
+        {
+            int restoreIndex = Math.Max(0, currentSlideIndex);
             LoadUploadedFilesToD();
+            MoveToSlideIndexAfterEdit(restoreIndex);
+        }
+
+        private void ClosePropertyPanelsWithoutColorDecision()
+        {
+            pnlContrastProperty.Visible = false;
+            pnlROI.Visible = false;
+            pnlColorProperty.Visible = false;
+            crdProperty.Visible = true;
         }
 
         private void ResetPaletteStatus()
@@ -2197,6 +2216,11 @@ namespace AD_AI_LearningData_Editor
 
         private void RestoreColorFilterPreview(bool deletePreviewFiles)
         {
+            RestoreColorFilterPreview(deletePreviewFiles, colorFilterPreviewTargets);
+        }
+
+        private void RestoreColorFilterPreview(bool deletePreviewFiles, IEnumerable<string> restoreTargets)
+        {
             if (!isColorFilterPreviewActive && colorFilterPreviewTargets.Count == 0)
             {
                 return;
@@ -2204,12 +2228,31 @@ namespace AD_AI_LearningData_Editor
 
             string dataFolder = GetUploadedDataFolder();
             string tempFolder = GetColorTempFolder();
+            HashSet<string> restoreSet = new HashSet<string>(
+                (restoreTargets ?? Enumerable.Empty<string>())
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => Path.GetFullPath(path)),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (restoreSet.Count == 0)
+            {
+                restoreSet.UnionWith(
+                    colorFilterPreviewTargets
+                        .Where(path => !string.IsNullOrWhiteSpace(path))
+                        .Select(path => Path.GetFullPath(path)));
+            }
+
             ReleaseCurrentImage();
 
             foreach (string targetPath in colorFilterPreviewTargets.ToList())
             {
                 try
                 {
+                    if (!restoreSet.Contains(Path.GetFullPath(targetPath)))
+                    {
+                        continue;
+                    }
+
                     string relativePath = GetRelativePathFromBase(dataFolder, targetPath);
                     string backupPath = Path.Combine(tempFolder, relativePath);
                     if (File.Exists(backupPath))
@@ -2236,6 +2279,32 @@ namespace AD_AI_LearningData_Editor
         private void CancelColorFilterPreview()
         {
             RestoreColorFilterPreview(deletePreviewFiles: true);
+            ResetPaletteStatus();
+        }
+
+        private void CancelColorFilterPreviewForCurrentSelection()
+        {
+            List<string> currentTargets = GetTargetImageFilesForEdit();
+            HashSet<string> previewTargets = new HashSet<string>(
+                colorFilterPreviewTargets
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => Path.GetFullPath(path)),
+                StringComparer.OrdinalIgnoreCase);
+
+            List<string> selectedPreviewTargets = currentTargets
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Where(path => previewTargets.Contains(Path.GetFullPath(path)))
+                .ToList();
+
+            if (selectedPreviewTargets.Count > 0)
+            {
+                RestoreColorFilterPreview(deletePreviewFiles: true, selectedPreviewTargets);
+            }
+            else
+            {
+                ClearColorFilterPreviewState();
+            }
+
             ResetPaletteStatus();
         }
 

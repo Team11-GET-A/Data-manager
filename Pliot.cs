@@ -397,12 +397,12 @@ namespace Data_Manager
             StylePilotButton(btnTubInput, PilotCyanColor, Color.FromArgb(10, 24, 32));
             StylePilotButton(btnPilotChart, PilotGreenColor, Color.FromArgb(9, 30, 20));
             StylePilotButton(btnGenerateJudement, PilotOrangeColor, Color.FromArgb(34, 20, 6));
-            StylePlaybackButton(btnJumpPrev5, "<< 5");
-            StylePlaybackButton(btnPrevImage, "<");
-            StylePlaybackButton(btnPlayPause, "▶");
-            StylePlaybackButton(btnReversePlay, "◀");
-            StylePlaybackButton(btnNextImage, ">");
-            StylePlaybackButton(btnJumpNext5, "5 >>");
+            StylePlaybackButton(btnJumpPrev5);
+            StylePlaybackButton(btnPrevImage);
+            StylePlaybackButton(btnPlayPause);
+            StylePlaybackButton(btnReversePlay);
+            StylePlaybackButton(btnNextImage);
+            StylePlaybackButton(btnJumpNext5);
             UpdatePlaybackButtonImages();
         }
 
@@ -426,9 +426,8 @@ namespace Data_Manager
             cmbSpeed.Font = new Font("맑은 고딕", 11F, FontStyle.Bold);
         }
 
-        private void StylePlaybackButton(Button button, string text)
+        private void StylePlaybackButton(Button button)
         {
-            button.Text = text;
             button.Font = new Font("맑은 고딕", 12F, FontStyle.Bold);
             StylePilotButton(button, PilotSurfaceLightColor, PilotTextColor);
         }
@@ -2531,7 +2530,6 @@ namespace Data_Manager
             _isPlaying = true;
             _isReversePlaying = false;
             UpdatePlaybackButtonImages();
-            btnReversePlay.Text = "◀";
             StartPlaybackTimer();
         }
 
@@ -2545,7 +2543,6 @@ namespace Data_Manager
 
             _isReversePlaying = true;
             _isPlaying = false;
-            btnReversePlay.Text = "Ⅱ";
             UpdatePlaybackButtonImages();
             StartPlaybackTimer();
         }
@@ -2594,7 +2591,6 @@ namespace Data_Manager
             _isPlaying = false;
             _isReversePlaying = false;
             UpdatePlaybackButtonImages();
-            btnReversePlay.Text = "◀";
         }
 
         private void UpdatePlaybackButtonImages()
@@ -2604,7 +2600,6 @@ namespace Data_Manager
                 return;
             }
 
-            btnPlayPause.Text = "";
             btnPlayPause.BackgroundImage =
                 _isPlaying
                     ? Properties.Resources.pause
@@ -2614,6 +2609,14 @@ namespace Data_Manager
                 _isPlaying
                     ? "일시정지"
                     : "재생";
+
+            if (btnReversePlay != null && !btnReversePlay.IsDisposed)
+            {
+                btnReversePlay.AccessibleName =
+                    _isReversePlaying
+                        ? "역재생 중"
+                        : "역재생";
+            }
         }
 
         private int GetPlaybackInterval()
