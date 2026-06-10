@@ -379,7 +379,7 @@ namespace Data_Manager
                 "Space 재생/일시정지 | Esc 정지\r\n" +
                 "←/→ 1프레임 | Shift+←/→ 5프레임\r\n" +
                 "Enter 모델 로드 | Ctrl+I 모델 가져오기\r\n" +
-                "Ctrl+T 주행데이터 입력 | Ctrl+G 그래프 | Ctrl+J AI 판단";
+                "Ctrl+T 데이터 로드 | Ctrl+G 그래프";
             lblPilotShortcutGuide.Font = new Font("맑은 고딕", 8.5F, FontStyle.Regular);
             lblPilotShortcutGuide.ForeColor = PilotMutedTextColor;
             lblPilotShortcutGuide.BackColor = PilotPanelColor;
