@@ -5152,6 +5152,16 @@ namespace AD_AI_LearningData_Editor
             ActivateMainTab(MainTabKind.Trainer);
         }
 
+        public void PreloadTrainerDataFolder(string folderPath)
+        {
+            if (trainerForm == null || trainerForm.IsDisposed)
+            {
+                return;
+            }
+
+            trainerForm.LoadDataFolder(folderPath);
+        }
+
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
             ShowTrashModeButtons(false);

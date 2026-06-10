@@ -1749,6 +1749,55 @@ namespace Data_Manager
                 SetTubPathLabels(tubPaths);
                 await LoadTubFramesAsync(tubPaths, progress, token);
                 await LoadAndMergeJudementAsync(progress, token);
+
+                bool hasJudement = _frameList.Any(
+                    f => f.PilotAngle.HasValue || f.PilotThrottle.HasValue);
+
+                if (!hasJudement)
+                {
+                    try
+                    {
+                        progress.Report(new DonkeyAsyncWorker.ProgressReport
+                        {
+                            Step = "AI 판단 데이터 자동 생성 중...",
+                            Log = "AI 판단 데이터가 없어 자동 생성을 시도합니다.",
+                            IsIndeterminate = true
+                        });
+
+                        DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> autoResult =
+                            await DonkeyAsyncWorker.GenerateJudementAsync(
+                                _cardState,
+                                progress,
+                                token);
+
+                        if (autoResult.Success && autoResult.Data != null)
+                        {
+                            _cardState.JudementRecords = autoResult.Data;
+                            MergeJudementRecords(autoResult.Data);
+                        }
+                        else
+                        {
+                            MessageBox.Show(
+                                autoResult.ErrorMessage ?? "AI 판단 데이터를 생성하지 못했습니다.",
+                                "AI 판단 생성",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception judementEx)
+                    {
+                        MessageBox.Show(
+                            "AI 판단 데이터 자동 생성 실패: " + judementEx.Message,
+                            "AI 판단 생성",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+                    }
+                }
+
                 ConfigureLocationTrackBar();
                 MoveToFrame(0);
                 CacheCurrentModelFrames();

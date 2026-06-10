@@ -867,7 +867,7 @@ namespace Data_Manager
                         _mainForm.LoadUploadedFilesToD();
                         if (copiedRootFolders.Count > 0)
                         {
-                            _mainForm.LoadTrainerDataFolder(copiedRootFolders[0]);
+                            _mainForm.PreloadTrainerDataFolder(copiedRootFolders[0]);
                         }
                     }));
             }
