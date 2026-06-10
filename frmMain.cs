@@ -44,6 +44,7 @@ namespace AD_AI_LearningData_Editor
         private Dictionary<string, string> gammaBackupPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private bool isColorFilterPreviewActive = false;
         private HashSet<string> colorFilterPreviewTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private HashSet<string> colorFilterCommittedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private HashSet<string> imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".bit" };
         private string mirrorYBackupFolderName = "MirrorYBackupFile";
 
@@ -2220,7 +2221,10 @@ namespace AD_AI_LearningData_Editor
                     Directory.CreateDirectory(backupDirectory);
                 }
 
-                File.Copy(targetPath, backupPath, true);
+                if (!colorFilterCommittedTargets.Contains(targetPath))
+                {
+                    File.Copy(targetPath, backupPath, true);
+                }
                 colorFilterPreviewTargets.Add(targetPath);
             }
 
@@ -2234,7 +2238,7 @@ namespace AD_AI_LearningData_Editor
 
         private void RestoreColorFilterPreview(bool deletePreviewFiles, IEnumerable<string> restoreTargets)
         {
-            if (!isColorFilterPreviewActive && colorFilterPreviewTargets.Count == 0)
+            if (!isColorFilterPreviewActive && colorFilterPreviewTargets.Count == 0 && colorFilterCommittedTargets.Count == 0)
             {
                 return;
             }
@@ -2247,17 +2251,21 @@ namespace AD_AI_LearningData_Editor
                     .Select(path => Path.GetFullPath(path)),
                 StringComparer.OrdinalIgnoreCase);
 
+            HashSet<string> allBackedUp = new HashSet<string>(
+                colorFilterPreviewTargets
+                    .Concat(colorFilterCommittedTargets)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => Path.GetFullPath(path)),
+                StringComparer.OrdinalIgnoreCase);
+
             if (restoreSet.Count == 0)
             {
-                restoreSet.UnionWith(
-                    colorFilterPreviewTargets
-                        .Where(path => !string.IsNullOrWhiteSpace(path))
-                        .Select(path => Path.GetFullPath(path)));
+                restoreSet.UnionWith(allBackedUp);
             }
 
             ReleaseCurrentImage();
 
-            foreach (string targetPath in colorFilterPreviewTargets.ToList())
+            foreach (string targetPath in allBackedUp)
             {
                 try
                 {
@@ -2286,7 +2294,10 @@ namespace AD_AI_LearningData_Editor
 
         private void CommitColorFilterPreview()
         {
-            ClearColorFilterPreviewState();
+            foreach (string path in colorFilterPreviewTargets)
+                colorFilterCommittedTargets.Add(path);
+            colorFilterPreviewTargets.Clear();
+            isColorFilterPreviewActive = false;
         }
 
         private void CancelColorFilterPreview()
@@ -2298,15 +2309,16 @@ namespace AD_AI_LearningData_Editor
         private void CancelColorFilterPreviewForCurrentSelection()
         {
             List<string> currentTargets = GetTargetImageFilesForEdit();
-            HashSet<string> previewTargets = new HashSet<string>(
+            HashSet<string> allBackedUpTargets = new HashSet<string>(
                 colorFilterPreviewTargets
+                    .Concat(colorFilterCommittedTargets)
                     .Where(path => !string.IsNullOrWhiteSpace(path))
                     .Select(path => Path.GetFullPath(path)),
                 StringComparer.OrdinalIgnoreCase);
 
             List<string> selectedPreviewTargets = currentTargets
                 .Where(path => !string.IsNullOrWhiteSpace(path))
-                .Where(path => previewTargets.Contains(Path.GetFullPath(path)))
+                .Where(path => allBackedUpTargets.Contains(Path.GetFullPath(path)))
                 .ToList();
 
             if (selectedPreviewTargets.Count > 0)
@@ -2336,6 +2348,7 @@ namespace AD_AI_LearningData_Editor
             }
 
             colorFilterPreviewTargets.Clear();
+            colorFilterCommittedTargets.Clear();
             isColorFilterPreviewActive = false;
         }
 
