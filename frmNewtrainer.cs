@@ -4143,17 +4143,12 @@ namespace DonkeyDataManager
                 "echo \"Requesting immediate training stop pid=$PID pgid=$PGID\"; " +
                 "kill -INT -- -\"$PGID\" 2>/dev/null || kill -INT \"$PID\" 2>/dev/null || true; " +
                 "for CHILD in $CHILDREN; do kill -INT \"$CHILD\" 2>/dev/null || true; done; " +
-                "for i in 1 2 3 4 5; do " +
+                "for i in 1 2; do " +
                 "if ! kill -0 \"$PID\" 2>/dev/null; then echo \"Training process stopped after interrupt.\"; exit 0; fi; " +
                 "sleep 1; " +
                 "done; " +
-                "echo \"Training still running after interrupt. Sending terminate signal.\"; " +
-                "kill -TERM -- -\"$PGID\" 2>/dev/null || kill -TERM \"$PID\" 2>/dev/null || true; " +
-                "sleep 1; " +
-                "if kill -0 \"$PID\" 2>/dev/null; then " +
-                "echo \"Training still running. Forcing stop.\"; " +
+                "echo \"Training still running after interrupt. Forcing stop.\"; " +
                 "kill -KILL -- -\"$PGID\" 2>/dev/null || kill -KILL \"$PID\" 2>/dev/null || true; " +
-                "fi; " +
                 "echo \"Stop signal sent. Checking saved model.\"";
         }
 
@@ -4784,15 +4779,7 @@ namespace DonkeyDataManager
             string databasePath =
                 GetDonkeyModelDatabasePath(entry);
 
-            if (!File.Exists(databasePath) || sourceTubWslPaths == null || sourceTubWslPaths.Count == 0)
-            {
-                return;
-            }
-
-            JsonNode root =
-                JsonNode.Parse(File.ReadAllText(databasePath));
-
-            if (root == null)
+            if (sourceTubWslPaths == null || sourceTubWslPaths.Count == 0)
             {
                 return;
             }
@@ -4800,33 +4787,56 @@ namespace DonkeyDataManager
             string modelBaseName =
                 Path.GetFileNameWithoutExtension(entry.Name);
 
-            bool changed = false;
+            JsonArray array;
 
-            if (root is JsonArray array)
+            if (File.Exists(databasePath))
             {
-                foreach (JsonNode node in array)
+                JsonNode root = JsonNode.Parse(File.ReadAllText(databasePath));
+                array = root as JsonArray ?? new JsonArray();
+            }
+            else
+            {
+                string dir = Path.GetDirectoryName(databasePath) ?? "";
+                if (!string.IsNullOrWhiteSpace(dir))
                 {
-                    if (node is JsonObject modelObject &&
-                        IsDonkeyModelDatabaseEntry(modelObject, modelBaseName, entry.Name))
-                    {
-                        JsonArray tubs = new JsonArray();
-                        foreach (string tubPath in sourceTubWslPaths
-                            .Where(path => !string.IsNullOrWhiteSpace(path))
-                            .Distinct(StringComparer.OrdinalIgnoreCase))
-                        {
-                            tubs.Add(tubPath);
-                        }
+                    Directory.CreateDirectory(dir);
+                }
+                array = new JsonArray();
+            }
 
-                        modelObject["Tubs"] = tubs;
-                        changed = true;
-                    }
+            JsonArray tubsArray = new JsonArray();
+            foreach (string tubPath in sourceTubWslPaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                tubsArray.Add(tubPath);
+            }
+
+            bool found = false;
+            foreach (JsonNode node in array)
+            {
+                if (node is JsonObject modelObject &&
+                    IsDonkeyModelDatabaseEntry(modelObject, modelBaseName, entry.Name))
+                {
+                    modelObject["Tubs"] = tubsArray;
+                    found = true;
                 }
             }
 
-            if (changed)
+            if (!found)
             {
-                WriteJsonNode(databasePath, root);
+                double unixTime = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+                JsonObject newEntry = new JsonObject
+                {
+                    ["Name"] = JsonValue.Create(modelBaseName),
+                    ["Time"] = JsonValue.Create(unixTime),
+                    ["Type"] = JsonValue.Create("linear"),
+                    ["Tubs"] = tubsArray
+                };
+                array.Add(newEntry);
             }
+
+            WriteJsonNode(databasePath, array);
         }
 
         private bool IsDonkeyModelDatabaseEntry(

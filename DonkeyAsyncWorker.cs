@@ -1116,7 +1116,11 @@ namespace Data_Manager
                     nameSamples.Add(name);
                 }
 
-                if (!string.Equals(name, cardState.ModelName, StringComparison.OrdinalIgnoreCase))
+                string modelBaseName = Path.GetFileNameWithoutExtension(cardState.ModelName);
+                bool nameMatches =
+                    string.Equals(name, cardState.ModelName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(name, modelBaseName, StringComparison.OrdinalIgnoreCase);
+                if (!nameMatches)
                 {
                     continue;
                 }
