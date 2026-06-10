@@ -677,6 +677,7 @@ namespace Data_Manager
             }
 
             string targetFolder = GetUploadedDataFolder();
+            bool createdTargetFolderForThisCopy = !Directory.Exists(targetFolder);
 
             if (!Directory.Exists(targetFolder))
             {
@@ -818,6 +819,24 @@ namespace Data_Manager
                     }
                 }
 
+                if (createdTargetFolderForThisCopy)
+                {
+                    try
+                    {
+                        if (Directory.Exists(targetFolder))
+                        {
+                            Directory.Delete(targetFolder, recursive: true);
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+                else
+                {
+                    DeleteEmptyDirectories(targetFolder);
+                }
+
                 if (!popup.IsDisposed)
                 {
                     popup.Close();
@@ -851,6 +870,29 @@ namespace Data_Manager
                             _mainForm.LoadTrainerDataFolder(copiedRootFolders[0]);
                         }
                     }));
+            }
+        }
+
+        private void DeleteEmptyDirectories(string rootFolder)
+        {
+            if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder))
+            {
+                return;
+            }
+
+            foreach (string directory in Directory.GetDirectories(rootFolder, "*", SearchOption.AllDirectories)
+                .OrderByDescending(path => path.Length))
+            {
+                try
+                {
+                    if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                    {
+                        Directory.Delete(directory);
+                    }
+                }
+                catch
+                {
+                }
             }
         }
 

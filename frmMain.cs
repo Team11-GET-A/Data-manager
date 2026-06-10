@@ -42,6 +42,8 @@ namespace AD_AI_LearningData_Editor
         private List<Button> paletteButtons = new List<Button>();
         private bool[,] roiState = new bool[3, 3];
         private Dictionary<string, string> gammaBackupPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private bool isColorFilterPreviewActive = false;
+        private HashSet<string> colorFilterPreviewTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private HashSet<string> imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".bit" };
         private string mirrorYBackupFolderName = "MirrorYBackupFile";
 
@@ -1055,13 +1057,47 @@ namespace AD_AI_LearningData_Editor
             if (lstviewFileListD != null)
             {
                 lstviewFileListD.HideSelection = false;
+                lstviewFileListD.MouseDown -= lstviewFileListD_MouseDown;
+                lstviewFileListD.MouseDown += lstviewFileListD_MouseDown;
                 lstviewFileListD.SelectedIndexChanged += lstviewFileListD_SelectedIndexChangedForPersistence;
             }
 
             if (lstviewTrash != null)
             {
                 lstviewTrash.HideSelection = false;
+                lstviewTrash.MouseDown -= lstviewTrash_MouseDown;
+                lstviewTrash.MouseDown += lstviewTrash_MouseDown;
                 lstviewTrash.SelectedIndexChanged += lstviewTrash_SelectedIndexChangedForPersistence;
+            }
+        }
+
+        private void lstviewFileListD_MouseDown(object sender, MouseEventArgs e)
+        {
+            PrepareManualListSelection(lstviewFileListD, preservedFileListSelection);
+        }
+
+        private void lstviewTrash_MouseDown(object sender, MouseEventArgs e)
+        {
+            PrepareManualListSelection(lstviewTrash, preservedTrashSelection);
+        }
+
+        private void PrepareManualListSelection(ListView listView, HashSet<string> preservedSelection)
+        {
+            if (listView == null || (!HasSelectedInterval() && intervalPointIndices.Count == 0))
+            {
+                return;
+            }
+
+            try
+            {
+                isUpdatingListSelection = true;
+                ResetSelectedInterval();
+                preservedSelection?.Clear();
+                listView.SelectedItems.Clear();
+            }
+            finally
+            {
+                isUpdatingListSelection = false;
             }
         }
 
@@ -1072,6 +1108,7 @@ namespace AD_AI_LearningData_Editor
                 return;
             }
 
+            ClearIntervalForManualListSelection(lstviewFileListD);
             SaveListViewSelection(lstviewFileListD, preservedFileListSelection);
             UpdateIntervalLabelFromListViewSelection(lstviewFileListD);
             MoveToUploadedSelection();
@@ -1084,9 +1121,23 @@ namespace AD_AI_LearningData_Editor
                 return;
             }
 
+            ClearIntervalForManualListSelection(lstviewTrash);
             SaveListViewSelection(lstviewTrash, preservedTrashSelection);
             UpdateIntervalLabelFromListViewSelection(lstviewTrash);
             MoveToTrashSelection();
+        }
+
+        private void ClearIntervalForManualListSelection(ListView listView)
+        {
+            if (listView == null || listView.SelectedItems.Count == 0)
+            {
+                return;
+            }
+
+            if (HasSelectedInterval() || intervalPointIndices.Count > 0)
+            {
+                ResetSelectedInterval();
+            }
         }
 
         private void SaveListViewSelection(ListView listView, HashSet<string> storage)
@@ -1419,6 +1470,11 @@ namespace AD_AI_LearningData_Editor
 
         private void ShowPropertyPanel(Control activeControl)
         {
+            if (pnlColorProperty.Visible && activeControl != pnlColorProperty)
+            {
+                CancelColorFilterPreview();
+            }
+
             pnlContrastProperty.Visible = activeControl == pnlContrastProperty;
             pnlROI.Visible = activeControl == pnlROI;
             pnlColorProperty.Visible = activeControl == pnlColorProperty;
@@ -1428,6 +1484,11 @@ namespace AD_AI_LearningData_Editor
 
         private void HidePropertyPanels()
         {
+            if (pnlColorProperty.Visible)
+            {
+                CancelColorFilterPreview();
+            }
+
             pnlContrastProperty.Visible = false;
             pnlROI.Visible = false;
             pnlColorProperty.Visible = false;
@@ -1977,6 +2038,19 @@ namespace AD_AI_LearningData_Editor
 
         private void HandlePaletteClick(int filterType, Button targetButton)
         {
+            List<string> targets = GetTargetImageFilesForEdit();
+            if (targets.Count == 0)
+            {
+                return;
+            }
+
+            if (isColorFilterPreviewActive)
+            {
+                RestoreColorFilterPreview(deletePreviewFiles: false);
+            }
+
+            CreateColorFilterPreviewBackups(targets);
+
             activePaletteButton = targetButton;
             ResetPaletteStatus();
             activePaletteButton = targetButton;
@@ -2063,12 +2137,14 @@ namespace AD_AI_LearningData_Editor
 
         private void btnColorCfm_Click(object sender, EventArgs e)
         {
+            CommitColorFilterPreview();
             ResetPaletteStatus();
             LoadUploadedFilesToD();
         }
 
         private void btnColorCancle_Click(object sender, EventArgs e)
         {
+            CancelColorFilterPreview();
             ResetPaletteStatus();
             LoadUploadedFilesToD();
         }
@@ -2079,6 +2155,95 @@ namespace AD_AI_LearningData_Editor
             {
                 btn.Enabled = true;
             }
+        }
+
+        private void CreateColorFilterPreviewBackups(List<string> targets)
+        {
+            string dataFolder = GetUploadedDataFolder();
+            string tempFolder = GetColorTempFolder();
+
+            foreach (string targetPath in targets)
+            {
+                if (string.IsNullOrWhiteSpace(targetPath) || !File.Exists(targetPath))
+                {
+                    continue;
+                }
+
+                string relativePath = GetRelativePathFromBase(dataFolder, targetPath);
+                string backupPath = Path.Combine(tempFolder, relativePath);
+                string backupDirectory = Path.GetDirectoryName(backupPath);
+                if (!string.IsNullOrWhiteSpace(backupDirectory))
+                {
+                    Directory.CreateDirectory(backupDirectory);
+                }
+
+                File.Copy(targetPath, backupPath, true);
+                colorFilterPreviewTargets.Add(targetPath);
+            }
+
+            isColorFilterPreviewActive = colorFilterPreviewTargets.Count > 0;
+        }
+
+        private void RestoreColorFilterPreview(bool deletePreviewFiles)
+        {
+            if (!isColorFilterPreviewActive && colorFilterPreviewTargets.Count == 0)
+            {
+                return;
+            }
+
+            string dataFolder = GetUploadedDataFolder();
+            string tempFolder = GetColorTempFolder();
+            ReleaseCurrentImage();
+
+            foreach (string targetPath in colorFilterPreviewTargets.ToList())
+            {
+                try
+                {
+                    string relativePath = GetRelativePathFromBase(dataFolder, targetPath);
+                    string backupPath = Path.Combine(tempFolder, relativePath);
+                    if (File.Exists(backupPath))
+                    {
+                        File.Copy(backupPath, targetPath, true);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            if (deletePreviewFiles)
+            {
+                ClearColorFilterPreviewState();
+            }
+        }
+
+        private void CommitColorFilterPreview()
+        {
+            ClearColorFilterPreviewState();
+        }
+
+        private void CancelColorFilterPreview()
+        {
+            RestoreColorFilterPreview(deletePreviewFiles: true);
+            ResetPaletteStatus();
+        }
+
+        private void ClearColorFilterPreviewState()
+        {
+            try
+            {
+                string tempFolder = GetColorTempFolder();
+                if (Directory.Exists(tempFolder))
+                {
+                    Directory.Delete(tempFolder, true);
+                }
+            }
+            catch
+            {
+            }
+
+            colorFilterPreviewTargets.Clear();
+            isColorFilterPreviewActive = false;
         }
 
 
@@ -2122,29 +2287,11 @@ namespace AD_AI_LearningData_Editor
 
             if (lstviewFileListD != null)
             {
-                HashSet<string> selectedPaths = new HashSet<string>(
-                    slideImages.Select(path => Path.GetFullPath(path)),
-                    StringComparer.OrdinalIgnoreCase
-                );
-
                 try
                 {
                     isUpdatingListSelection = true;
                     lstviewFileListD.BeginUpdate();
-
-                    foreach (ListViewItem item in lstviewFileListD.Items)
-                    {
-                        string itemPath = item.Tag as string;
-                        bool selected = !string.IsNullOrWhiteSpace(itemPath) &&
-                            selectedPaths.Contains(Path.GetFullPath(itemPath));
-
-                        item.Selected = selected;
-
-                        if (selected)
-                        {
-                            preservedFileListSelection.Add(item.Text);
-                        }
-                    }
+                    lstviewFileListD.SelectedItems.Clear();
                 }
                 finally
                 {
@@ -2260,6 +2407,8 @@ namespace AD_AI_LearningData_Editor
                 }
 
                 gammaBackupPaths.Clear();
+                trcbrContrastProperty.Value = 0;
+                CancelColorFilterPreview();
                 Array.Clear(roiState, 0, roiState.Length);
 
                 int restoreIndex = currentSlideIndex;
@@ -3921,6 +4070,11 @@ namespace AD_AI_LearningData_Editor
 
             foreach (Control control in parent.Controls)
             {
+                if (IsEmbeddedTabForm(control))
+                {
+                    continue;
+                }
+
                 if (!originalControlBounds.ContainsKey(control))
                 {
                     originalControlBounds.Add(control, control.Bounds);
@@ -3991,6 +4145,12 @@ namespace AD_AI_LearningData_Editor
                 return;
             }
 
+            if (IsEmbeddedTabForm(control))
+            {
+                control.Dock = DockStyle.Fill;
+                return;
+            }
+
             // Dock으로 부모 전체를 채우는 컨트롤은 WinForms의 Dock 계산에 맡깁니다.
             // 대신 그 내부의 자식 컨트롤들은 계속 비율에 맞춰 조정합니다.
             if (control.Dock == DockStyle.None && originalControlBounds.TryGetValue(control, out Rectangle originalBounds))
@@ -4023,6 +4183,13 @@ namespace AD_AI_LearningData_Editor
             {
                 listView.Columns[0].Width = Math.Max(1, listView.ClientSize.Width - 4);
             }
+        }
+
+        private bool IsEmbeddedTabForm(Control control)
+        {
+            return control is Form form &&
+                !ReferenceEquals(form, this) &&
+                form.TopLevel == false;
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
