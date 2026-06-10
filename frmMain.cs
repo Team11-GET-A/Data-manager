@@ -75,6 +75,19 @@ namespace AD_AI_LearningData_Editor
         private bool suppressListSelectionSync = false;
         private int lastPlaybackScrollBucket = -1;
         private DonkeyDataManager.frmNewtrainer trainerForm;
+        private Data_Manager.Pliot pilotForm;
+        private Panel mainTabHost;
+        private Panel managerTabPage;
+        private Panel trainerTabPage;
+        private Panel pilotTabPage;
+        private MainTabKind activeMainTab = MainTabKind.Manager;
+
+        private enum MainTabKind
+        {
+            Manager,
+            Trainer,
+            Pilot
+        }
 
         #endregion
 
@@ -4147,6 +4160,17 @@ namespace AD_AI_LearningData_Editor
 
             foreach (Control control in parent.Controls)
             {
+                if (IsTopNavigationControl(control))
+                {
+                    continue;
+                }
+
+                if (IsMainTabHostControl(control))
+                {
+                    CaptureOriginalControlLayout(control);
+                    continue;
+                }
+
                 if (IsEmbeddedTabForm(control))
                 {
                     continue;
@@ -4207,6 +4231,13 @@ namespace AD_AI_LearningData_Editor
                 }
 
                 ConfigureDrivingVisualControlLayout();
+                PositionMainTabHost();
+                PositionTopNavigationTabs();
+
+                if (topNavigationTabs != null && !topNavigationTabs.IsDisposed)
+                {
+                    topNavigationTabs.BringToFront();
+                }
             }
             finally
             {
@@ -4219,6 +4250,24 @@ namespace AD_AI_LearningData_Editor
         {
             if (control == null || control.IsDisposed)
             {
+                return;
+            }
+
+            if (IsTopNavigationControl(control))
+            {
+                PositionTopNavigationTabs();
+                return;
+            }
+
+            if (IsMainTabHostControl(control))
+            {
+                PositionMainTabHost();
+
+                foreach (Control child in control.Controls)
+                {
+                    ApplyResponsiveLayoutToControl(child, scaleX, scaleY, fontScale);
+                }
+
                 return;
             }
 
@@ -4269,9 +4318,29 @@ namespace AD_AI_LearningData_Editor
                 form.TopLevel == false;
         }
 
+        private bool IsTopNavigationControl(Control control)
+        {
+            return control == topNavigationTabs ||
+                control == btnTabManager ||
+                control == btnTabTrainer ||
+                control == btnTabPilot ||
+                string.Equals(control?.Name, "topNavigationTabs", StringComparison.Ordinal);
+        }
+
+        private bool IsMainTabHostControl(Control control)
+        {
+            return control == mainTabHost ||
+                string.Equals(control?.Name, "mainTabHost", StringComparison.Ordinal);
+        }
+
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             Keys keyCode = keyData & Keys.KeyCode;
+
+            if (activeMainTab != MainTabKind.Manager)
+            {
+                return base.ProcessCmdKey(ref msg, keyData);
+            }
 
             if (IsTextInputFocused())
             {
@@ -4816,47 +4885,260 @@ namespace AD_AI_LearningData_Editor
 
         private void SetupTabs()
         {
-            MaterialTabControl tabControl = new MaterialTabControl();
-            tabControl.Dock = DockStyle.Fill;
+            DrawerTabControl = null;
 
-            TabPage tabManager = new TabPage("매니저");
-            TabPage tabTrainer = new TabPage("트레이너");
-            TabPage tabPilot = new TabPage("파일럿");
-
-            tabControl.Controls.Add(tabManager);
-            tabControl.Controls.Add(tabTrainer);
-            tabControl.Controls.Add(tabPilot);
-
-            var controlsToMove = new System.Collections.Generic.List<Control>();
-            foreach (Control c in this.Controls)
+            mainTabHost = new Panel
             {
-                if (c != tabControl && c.Name != "DrawerTabControl")
+                Name = "mainTabHost",
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                BackColor = BackColor
+            };
+
+            managerTabPage = CreateMainTabPage("managerTabPage");
+            trainerTabPage = CreateMainTabPage("trainerTabPage");
+            pilotTabPage = CreateMainTabPage("pilotTabPage");
+
+            List<Control> controlsToMove = new List<Control>();
+            foreach (Control control in Controls)
+            {
+                if (!IsTopNavigationControl(control))
                 {
-                    controlsToMove.Add(c);
+                    controlsToMove.Add(control);
                 }
             }
-            foreach (Control c in controlsToMove)
+
+            foreach (Control control in controlsToMove)
             {
-                tabManager.Controls.Add(c);
+                managerTabPage.Controls.Add(control);
             }
 
-            this.Controls.Add(tabControl);
+            mainTabHost.Controls.Add(managerTabPage);
+            mainTabHost.Controls.Add(trainerTabPage);
+            mainTabHost.Controls.Add(pilotTabPage);
+            Controls.Add(mainTabHost);
+            PositionMainTabHost();
 
-            trainerForm = new DonkeyDataManager.frmNewtrainer();
-            trainerForm.TopLevel = false;
-            trainerForm.FormBorderStyle = FormBorderStyle.None;
-            trainerForm.Dock = DockStyle.Fill;
-            tabTrainer.Controls.Add(trainerForm);
+            trainerForm = new DonkeyDataManager.frmNewtrainer
+            {
+                TopLevel = false,
+                FormBorderStyle = FormBorderStyle.None,
+                Dock = DockStyle.Fill
+            };
+            trainerTabPage.Controls.Add(trainerForm);
             trainerForm.Show();
 
-            Data_Manager.Pliot form2 = new Data_Manager.Pliot();
-            form2.TopLevel = false;
-            form2.FormBorderStyle = FormBorderStyle.None;
-            form2.Dock = DockStyle.Fill;
-            tabPilot.Controls.Add(form2);
-            form2.Show();
+            pilotForm = new Data_Manager.Pliot
+            {
+                TopLevel = false,
+                FormBorderStyle = FormBorderStyle.None,
+                Dock = DockStyle.Fill
+            };
+            pilotTabPage.Controls.Add(pilotForm);
+            pilotForm.Show();
 
-            this.DrawerTabControl = tabControl;
+            CreateTopNavigationTabs();
+            ActivateMainTab(MainTabKind.Manager);
+        }
+
+        private Panel CreateMainTabPage(string name)
+        {
+            return new Panel
+            {
+                Name = name,
+                Dock = DockStyle.Fill,
+                BackColor = BackColor
+            };
+        }
+
+        private void PositionMainTabHost()
+        {
+            if (mainTabHost == null || mainTabHost.IsDisposed)
+            {
+                return;
+            }
+
+            int materialHeaderHeight = 64;
+            mainTabHost.Bounds = new Rectangle(
+                0,
+                materialHeaderHeight,
+                Math.Max(1, ClientSize.Width),
+                Math.Max(1, ClientSize.Height - materialHeaderHeight));
+        }
+
+        private void CreateTopNavigationTabs()
+        {
+            if (topNavigationTabs == null || topNavigationTabs.IsDisposed)
+            {
+                topNavigationTabs = new Panel
+                {
+                    Name = "topNavigationTabs",
+                    Height = 38,
+                    BackColor = Color.Transparent
+                };
+            }
+
+            btnTabManager = EnsureNavigationTabButton(btnTabManager, "매니저", MainTabKind.Manager);
+            btnTabTrainer = EnsureNavigationTabButton(btnTabTrainer, "트레이너", MainTabKind.Trainer);
+            btnTabPilot = EnsureNavigationTabButton(btnTabPilot, "파일럿", MainTabKind.Pilot);
+
+            EnsureNavigationButtonParent(btnTabManager);
+            EnsureNavigationButtonParent(btnTabTrainer);
+            EnsureNavigationButtonParent(btnTabPilot);
+
+            if (!Controls.Contains(topNavigationTabs))
+            {
+                Controls.Add(topNavigationTabs);
+            }
+
+            PositionTopNavigationTabs();
+            topNavigationTabs.BringToFront();
+        }
+
+        private Button EnsureNavigationTabButton(Button button, string text, MainTabKind tabKind)
+        {
+            if (button == null || button.IsDisposed)
+            {
+                button = new Button();
+            }
+
+            button.Text = text;
+            button.Tag = tabKind;
+            button.Width = 96;
+            button.Height = 34;
+            button.FlatStyle = FlatStyle.Flat;
+            button.BackColor = Color.FromArgb(42, 73, 96);
+            button.ForeColor = Color.White;
+            button.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            button.Cursor = Cursors.Hand;
+            button.UseVisualStyleBackColor = false;
+
+            button.FlatAppearance.BorderSize = 1;
+            button.FlatAppearance.BorderColor = Color.FromArgb(120, 160, 190);
+            button.Click -= btnMainTab_Click;
+            button.Click += btnMainTab_Click;
+            return button;
+        }
+
+        private void EnsureNavigationButtonParent(Button button)
+        {
+            if (button == null || topNavigationTabs == null)
+            {
+                return;
+            }
+
+            if (button.Parent != topNavigationTabs)
+            {
+                topNavigationTabs.Controls.Add(button);
+            }
+        }
+
+        private void btnMainTab_Click(object sender, EventArgs e)
+        {
+            if (sender is Button button && button.Tag is MainTabKind tabKind)
+            {
+                ActivateMainTab(tabKind);
+            }
+        }
+
+        private void PositionTopNavigationTabs()
+        {
+            if (topNavigationTabs == null || topNavigationTabs.IsDisposed)
+            {
+                return;
+            }
+
+            int gap = 4;
+            int buttonWidth = Math.Max(84, Math.Min(110, ClientSize.Width / 11));
+            int buttonHeight = 32;
+            int totalWidth = buttonWidth * 3 + gap * 2;
+
+            topNavigationTabs.SuspendLayout();
+            try
+            {
+                topNavigationTabs.Width = totalWidth;
+                topNavigationTabs.Height = buttonHeight + 4;
+                int rightMargin = 16;
+                int titleReserveWidth = 180;
+                topNavigationTabs.Left = Math.Max(titleReserveWidth, ClientSize.Width - totalWidth - rightMargin);
+                topNavigationTabs.Top = 28;
+
+                Button[] buttons = new[] { btnTabManager, btnTabTrainer, btnTabPilot };
+                for (int i = 0; i < buttons.Length; i++)
+                {
+                    if (buttons[i] == null)
+                    {
+                        continue;
+                    }
+
+                    buttons[i].Bounds = new Rectangle(i * (buttonWidth + gap), 0, buttonWidth, buttonHeight);
+                }
+            }
+            finally
+            {
+                topNavigationTabs.ResumeLayout(true);
+            }
+        }
+
+        private void ActivateMainTab(MainTabKind tabKind)
+        {
+            activeMainTab = tabKind;
+
+            if (videoTimer != null && videoTimer.Enabled && tabKind != MainTabKind.Manager)
+            {
+                videoTimer.Stop();
+                UpdatePlayStopButtonState();
+            }
+
+            SetMainTabVisible(managerTabPage, tabKind == MainTabKind.Manager);
+            SetMainTabVisible(trainerTabPage, tabKind == MainTabKind.Trainer);
+            SetMainTabVisible(pilotTabPage, tabKind == MainTabKind.Pilot);
+
+            UpdateNavigationTabStyles();
+
+            if (topNavigationTabs != null)
+            {
+                topNavigationTabs.BringToFront();
+            }
+        }
+
+        private void SetMainTabVisible(Control tabPage, bool visible)
+        {
+            if (tabPage == null)
+            {
+                return;
+            }
+
+            tabPage.Visible = visible;
+            if (visible)
+            {
+                tabPage.BringToFront();
+            }
+        }
+
+        private void UpdateNavigationTabStyles()
+        {
+            UpdateNavigationTabStyle(btnTabManager, MainTabKind.Manager);
+            UpdateNavigationTabStyle(btnTabTrainer, MainTabKind.Trainer);
+            UpdateNavigationTabStyle(btnTabPilot, MainTabKind.Pilot);
+        }
+
+        private void UpdateNavigationTabStyle(Button button, MainTabKind tabKind)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            bool selected = activeMainTab == tabKind;
+            button.BackColor = selected
+                ? Color.White
+                : Color.FromArgb(42, 73, 96);
+            button.ForeColor = selected
+                ? Color.FromArgb(32, 52, 70)
+                : Color.White;
+            button.FlatAppearance.BorderColor = selected
+                ? Color.White
+                : Color.FromArgb(120, 160, 190);
         }
 
         public void LoadTrainerDataFolder(string folderPath)
@@ -4867,6 +5149,7 @@ namespace AD_AI_LearningData_Editor
             }
 
             trainerForm.LoadDataFolder(folderPath);
+            ActivateMainTab(MainTabKind.Trainer);
         }
 
         private void btnOpnFolderList1_Click(object sender, EventArgs e)

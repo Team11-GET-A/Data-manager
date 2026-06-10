@@ -95,6 +95,10 @@
             btnNxt5F = new MaterialSkin.Controls.MaterialButton();
             btnNxt1F = new MaterialSkin.Controls.MaterialButton();
             btnOpnFolderList2 = new Button();
+            topNavigationTabs = new Panel();
+            btnTabManager = new Button();
+            btnTabTrainer = new Button();
+            btnTabPilot = new Button();
             pnlROI.SuspendLayout();
             pnlContrastProperty.SuspendLayout();
             groupBox1.SuspendLayout();
@@ -107,6 +111,7 @@
             pnlCtrl.SuspendLayout();
             pnlSpeedPopup.SuspendLayout();
             groupBox2.SuspendLayout();
+            topNavigationTabs.SuspendLayout();
             SuspendLayout();
             // 
             // sdrSeekBar
@@ -959,6 +964,62 @@
             btnOpnFolderList2.TabIndex = 11;
             btnOpnFolderList2.UseVisualStyleBackColor = true;
             // 
+            // topNavigationTabs
+            // 
+            topNavigationTabs.BackColor = Color.Transparent;
+            topNavigationTabs.Controls.Add(btnTabManager);
+            topNavigationTabs.Controls.Add(btnTabTrainer);
+            topNavigationTabs.Controls.Add(btnTabPilot);
+            topNavigationTabs.Location = new Point(1505, 28);
+            topNavigationTabs.Name = "topNavigationTabs";
+            topNavigationTabs.Size = new Size(308, 36);
+            topNavigationTabs.TabIndex = 22;
+            // 
+            // btnTabManager
+            // 
+            btnTabManager.BackColor = Color.White;
+            btnTabManager.Cursor = Cursors.Hand;
+            btnTabManager.FlatAppearance.BorderColor = Color.White;
+            btnTabManager.FlatStyle = FlatStyle.Flat;
+            btnTabManager.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            btnTabManager.ForeColor = Color.FromArgb(32, 52, 70);
+            btnTabManager.Location = new Point(0, 0);
+            btnTabManager.Name = "btnTabManager";
+            btnTabManager.Size = new Size(100, 32);
+            btnTabManager.TabIndex = 0;
+            btnTabManager.Text = "매니저";
+            btnTabManager.UseVisualStyleBackColor = false;
+            // 
+            // btnTabTrainer
+            // 
+            btnTabTrainer.BackColor = Color.FromArgb(42, 73, 96);
+            btnTabTrainer.Cursor = Cursors.Hand;
+            btnTabTrainer.FlatAppearance.BorderColor = Color.FromArgb(120, 160, 190);
+            btnTabTrainer.FlatStyle = FlatStyle.Flat;
+            btnTabTrainer.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            btnTabTrainer.ForeColor = Color.White;
+            btnTabTrainer.Location = new Point(104, 0);
+            btnTabTrainer.Name = "btnTabTrainer";
+            btnTabTrainer.Size = new Size(100, 32);
+            btnTabTrainer.TabIndex = 1;
+            btnTabTrainer.Text = "트레이너";
+            btnTabTrainer.UseVisualStyleBackColor = false;
+            // 
+            // btnTabPilot
+            // 
+            btnTabPilot.BackColor = Color.FromArgb(42, 73, 96);
+            btnTabPilot.Cursor = Cursors.Hand;
+            btnTabPilot.FlatAppearance.BorderColor = Color.FromArgb(120, 160, 190);
+            btnTabPilot.FlatStyle = FlatStyle.Flat;
+            btnTabPilot.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            btnTabPilot.ForeColor = Color.White;
+            btnTabPilot.Location = new Point(208, 0);
+            btnTabPilot.Name = "btnTabPilot";
+            btnTabPilot.Size = new Size(100, 32);
+            btnTabPilot.TabIndex = 2;
+            btnTabPilot.Text = "파일럿";
+            btnTabPilot.UseVisualStyleBackColor = false;
+            // 
             // frmMain
             // 
             AutoScaleDimensions = new SizeF(8F, 17F);
@@ -973,6 +1034,7 @@
             Controls.Add(pnlProperty);
             Controls.Add(pnlROI);
             Controls.Add(pnlCtrl);
+            Controls.Add(topNavigationTabs);
             Font = new Font("맑은 고딕", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
             Name = "frmMain";
             Padding = new Padding(0);
@@ -991,6 +1053,7 @@
             pnlCtrl.ResumeLayout(false);
             pnlSpeedPopup.ResumeLayout(false);
             groupBox2.ResumeLayout(false);
+            topNavigationTabs.ResumeLayout(false);
             ResumeLayout(false);
         }
 
@@ -1058,5 +1121,9 @@
         private GroupBox groupBox2;
         private MaterialSkin.Controls.MaterialButton btnEditCncl;
         private MaterialSkin.Controls.MaterialButton btnSelctAll;
+        private Panel topNavigationTabs;
+        private Button btnTabManager;
+        private Button btnTabTrainer;
+        private Button btnTabPilot;
     }
 }
