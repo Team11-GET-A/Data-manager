@@ -1953,7 +1953,8 @@ namespace Data_Manager
                     await DonkeyAsyncWorker.GenerateJudementAsync(
                         _cardState,
                         progress,
-                        token);
+                        token,
+                        forceRegenerate: true);
 
                 if (!result.Success || result.Data == null)
                 {

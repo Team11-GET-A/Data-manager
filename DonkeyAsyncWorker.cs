@@ -1299,7 +1299,37 @@ namespace Data_Manager
             }
 
             string json = await File.ReadAllTextAsync(judementPath, cancellationToken);
-            List<JudementRecord> records = ParseJudementRecords(json);
+            JudementFileContent fileContent = ParseJudementFile(json);
+
+            // 선택된 tub들이 모두 세션에 기록되어 있는지 확인합니다.
+            List<string> resolvedKeys = (cardState.TrainingTubPaths ?? new List<string>())
+                .Select(path => NormalizeTubKey(ResolveTubPathForPython(path, cardState.WslDistroName)))
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            bool allTubsHaveSessions = resolvedKeys.Count == 0 ||
+                resolvedKeys.All(key => fileContent.TubSessions.ContainsKey(key));
+
+            if (!allTubsHaveSessions)
+            {
+                return new OperationResult<List<JudementRecord>>
+                {
+                    Success = false,
+                    ErrorMessage = "일부 주행데이터의 AI 판단 데이터가 없습니다. 생성 버튼을 눌러 생성하세요.",
+                    Data = new List<JudementRecord>()
+                };
+            }
+
+            HashSet<string> requestedKeySet =
+                new HashSet<string>(resolvedKeys, StringComparer.OrdinalIgnoreCase);
+
+            List<JudementRecord> records = requestedKeySet.Count == 0
+                ? fileContent.Records
+                : fileContent.Records
+                    .Where(r => requestedKeySet.Contains(NormalizeTubKey(r.TubPath)))
+                    .ToList();
+
             HashSet<int> deletedIndexes = GetDeletedIndexesForPilotCardState(cardState);
             if (deletedIndexes.Count > 0)
             {
@@ -1317,10 +1347,11 @@ namespace Data_Manager
         public static async Task<OperationResult<List<JudementRecord>>> GenerateJudementAsync(
             PilotCardState cardState,
             IProgress<ProgressReport>? progress,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool forceRegenerate = false)
         {
-            // 선택 모델과 tub를 Python 스크립트에 전달해 프레임별 AI 조향/스로틀 예측값을 생성합니다.
-            // 결과 JSON은 모델별 output 폴더에 저장하고 다시 읽어 JudementRecord 목록으로 반환합니다.
+            // 선택 모델과 tub를 Python 스크립트에 전달해 프레임별 AI 예측값을 생성합니다.
+            // tub 별로 결과를 누적 저장하며, 이미 생성된 tub는 재실행 없이 파일에서 로드합니다.
             await EnsurePilotRuntimePathsAsync(cardState, progress, cancellationToken);
 
             string scriptPath = await EnsurePythonScriptAsync(cardState, cancellationToken);
@@ -1337,6 +1368,58 @@ namespace Data_Manager
             string judementPath = Path.Combine(modelFolder, $"{cardState.ModelName}_judement.json");
             cardState.JudementJsonPath = judementPath;
 
+            // DB에는 Windows/WSL 경로가 섞여 저장될 수 있으므로 Python에 넘기기 전에 실제 경로로 정규화합니다.
+            List<string> resolvedTubPaths = (cardState.TrainingTubPaths ?? new List<string>())
+                .Select(path => ResolveTubPathForPython(path, cardState.WslDistroName))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            // 기존 판단 파일을 읽거나 빈 내용으로 초기화합니다.
+            JudementFileContent existingContent = new JudementFileContent
+            {
+                ModelName = cardState.ModelName,
+                ModelPath = cardState.ModelPath
+            };
+            if (File.Exists(judementPath))
+            {
+                string existingJson = await File.ReadAllTextAsync(judementPath, cancellationToken);
+                existingContent = ParseJudementFile(existingJson);
+            }
+
+            // 판단 데이터가 없는 tub만 추려 실제 생성이 필요한 목록을 만듭니다.
+            List<string> tubsToGenerate = forceRegenerate
+                ? resolvedTubPaths
+                : resolvedTubPaths
+                    .Where(tub => !existingContent.TubSessions.ContainsKey(NormalizeTubKey(tub)))
+                    .ToList();
+
+            // 모든 tub에 이미 판단 데이터가 있으면 기존 데이터를 바로 반환합니다.
+            if (tubsToGenerate.Count == 0)
+            {
+                progress?.Report(new ProgressReport
+                {
+                    Step = "기존 AI 판단 데이터 로드 중...",
+                    Log = "모든 주행데이터의 AI 판단이 이미 생성되어 있습니다. 기존 데이터를 불러옵니다.",
+                    IsIndeterminate = true
+                });
+
+                HashSet<string> cachedKeySet = resolvedTubPaths
+                    .Select(NormalizeTubKey)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                List<JudementRecord> cachedRecords = existingContent.Records
+                    .Where(r => cachedKeySet.Contains(NormalizeTubKey(r.TubPath)))
+                    .ToList();
+
+                cachedRecords = FilterJudementRecordsByDeletedIndexes(cachedRecords, cardState);
+                return new OperationResult<List<JudementRecord>>
+                {
+                    Success = true,
+                    Data = cachedRecords
+                };
+            }
+
             progress?.Report(new ProgressReport
             {
                 Step = "WSL Python 실행 중...",
@@ -1344,15 +1427,12 @@ namespace Data_Manager
                 IsIndeterminate = true
             });
 
-            // DB에는 Windows/WSL 경로가 섞여 저장될 수 있으므로 Python에 넘기기 전에 실제 경로로 정규화합니다.
-            List<string> resolvedTubPaths = (cardState.TrainingTubPaths ?? new List<string>())
-                .Select(path => ResolveTubPathForPython(path, cardState.WslDistroName))
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            string tubsArg = string.Join(";", resolvedTubPaths);
+            // Python 스크립트 결과를 임시 파일에 저장하고, 완료 후 기존 파일과 병합합니다.
+            string tempOutputPath = judementPath + ".generating.tmp";
+            string tubsArg = string.Join(";", tubsToGenerate);
             string modelPathForWsl = ToWslPathFromWindowsPath(cardState.ModelPath);
-            string outputPathForWsl = ToWslPathFromWindowsPath(judementPath);
+            string tempOutputPathForWsl = ToWslPathFromWindowsPath(tempOutputPath);
+
             string pythonPath = await FindJudementPythonAsync(cardState, progress, cancellationToken);
             if (string.IsNullOrWhiteSpace(pythonPath))
             {
@@ -1363,12 +1443,12 @@ namespace Data_Manager
                 };
             }
 
-            string command = BuildPythonCommand(cardState, scriptPath, modelPathForWsl, outputPathForWsl, tubsArg, pythonPath);
+            string command = BuildPythonCommand(cardState, scriptPath, modelPathForWsl, tempOutputPathForWsl, tubsArg, pythonPath);
 
             progress?.Report(new ProgressReport
             {
                 Step = "WSL Python 실행 중...",
-                Log = $"Python 판단 생성 실행: python={pythonPath}, model={modelPathForWsl}, output={outputPathForWsl}",
+                Log = $"Python 판단 생성 실행: python={pythonPath}, model={modelPathForWsl}, output={tempOutputPathForWsl}",
                 IsIndeterminate = true
             });
 
@@ -1382,7 +1462,7 @@ namespace Data_Manager
                 };
             }
 
-            if (!File.Exists(judementPath))
+            if (!File.Exists(tempOutputPath))
             {
                 return new OperationResult<List<JudementRecord>>
                 {
@@ -1391,19 +1471,62 @@ namespace Data_Manager
                 };
             }
 
-            string json = await File.ReadAllTextAsync(judementPath, cancellationToken);
-            List<JudementRecord> records = ParseJudementRecords(json);
+            // 새로 생성된 기록을 읽어 기존 파일과 병합합니다.
+            string tempJson = await File.ReadAllTextAsync(tempOutputPath, cancellationToken);
+            JudementFileContent newContent = ParseJudementFile(tempJson);
+
+            HashSet<string> generatedKeySet = tubsToGenerate
+                .Select(NormalizeTubKey)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // 새로 생성한 tub의 기존 기록을 교체합니다.
+            existingContent.Records.RemoveAll(r => generatedKeySet.Contains(NormalizeTubKey(r.TubPath)));
+            existingContent.Records.AddRange(newContent.Records);
+
+            if (!string.IsNullOrWhiteSpace(newContent.ModelType))
+            {
+                existingContent.ModelType = newContent.ModelType;
+            }
+
+            // tub 세션 타임스탬프를 갱신합니다.
+            string nowIso = DateTime.Now.ToString("o");
+            foreach (string tub in tubsToGenerate)
+            {
+                existingContent.TubSessions[NormalizeTubKey(tub)] = nowIso;
+            }
+
+            // 병합된 내용을 파일에 저장합니다.
+            string mergedJson = BuildJudementFileJson(existingContent);
+            await File.WriteAllTextAsync(judementPath, mergedJson, cancellationToken);
+
+            try
+            {
+                File.Delete(tempOutputPath);
+            }
+            catch
+            {
+            }
+
+            // 요청된 tub의 기록만 필터링해 반환합니다.
+            HashSet<string> allRequestedKeySet = resolvedTubPaths
+                .Select(NormalizeTubKey)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            List<JudementRecord> result = existingContent.Records
+                .Where(r => allRequestedKeySet.Contains(NormalizeTubKey(r.TubPath)))
+                .ToList();
+
             HashSet<int> generatedDeletedIndexes = GetDeletedIndexesForPilotCardState(cardState);
             if (generatedDeletedIndexes.Count > 0)
             {
                 RemoveDeletedJudementRecordsFromFile(judementPath, generatedDeletedIndexes);
             }
 
-            records = FilterJudementRecordsByDeletedIndexes(records, cardState);
+            result = FilterJudementRecordsByDeletedIndexes(result, cardState);
             return new OperationResult<List<JudementRecord>>
             {
                 Success = true,
-                Data = records
+                Data = result
             };
         }
 
@@ -2267,6 +2390,109 @@ namespace Data_Manager
             }
 
             return 0;
+        }
+
+        private class JudementFileContent
+        {
+            public string ModelName { get; set; } = string.Empty;
+            public string ModelPath { get; set; } = string.Empty;
+            public string ModelType { get; set; } = string.Empty;
+
+            // tub 경로 정규화 키 → 생성 시각 (ISO 8601)
+            public Dictionary<string, string> TubSessions { get; set; } =
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            public List<JudementRecord> Records { get; set; } = new List<JudementRecord>();
+        }
+
+        private static string NormalizeTubKey(string tubPath)
+        {
+            if (string.IsNullOrWhiteSpace(tubPath))
+            {
+                return string.Empty;
+            }
+
+            return tubPath.Replace('\\', '/').TrimEnd('/').ToLowerInvariant();
+        }
+
+        private static JudementFileContent ParseJudementFile(string json)
+        {
+            JudementFileContent content = new JudementFileContent();
+            try
+            {
+                JsonNode? root = JsonNode.Parse(json);
+                if (root == null)
+                {
+                    return content;
+                }
+
+                content.ModelName = root["model_name"]?.ToString() ?? string.Empty;
+                content.ModelPath = root["model_path"]?.ToString() ?? string.Empty;
+                content.ModelType = root["model_type"]?.ToString() ?? string.Empty;
+                content.Records = ParseJudementRecords(json);
+
+                if (root["tub_sessions"] is JsonObject sessionsObj)
+                {
+                    foreach (KeyValuePair<string, JsonNode?> kvp in sessionsObj)
+                    {
+                        content.TubSessions[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+                    }
+                }
+
+                // 하위 호환: tub_sessions가 없는 구 형식은 records의 tub_path로 세션을 추정합니다.
+                if (content.TubSessions.Count == 0 && content.Records.Count > 0)
+                {
+                    foreach (string tubPath in content.Records
+                        .Select(r => r.TubPath)
+                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                        .Distinct(StringComparer.OrdinalIgnoreCase))
+                    {
+                        content.TubSessions[NormalizeTubKey(tubPath)] = "legacy";
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return content;
+        }
+
+        private static string BuildJudementFileJson(JudementFileContent content)
+        {
+            JsonObject root = new JsonObject();
+            root["model_name"] = content.ModelName;
+            root["model_path"] = content.ModelPath;
+            root["model_type"] = content.ModelType;
+
+            JsonObject sessionsObj = new JsonObject();
+            foreach (KeyValuePair<string, string> kvp in content.TubSessions)
+            {
+                sessionsObj[kvp.Key] = kvp.Value;
+            }
+
+            root["tub_sessions"] = sessionsObj;
+
+            JsonArray recordsArray = new JsonArray();
+            foreach (JudementRecord record in content.Records)
+            {
+                JsonObject recordObj = new JsonObject();
+                recordObj["index"] = record.Index;
+                recordObj["tub_path"] = record.TubPath;
+                recordObj["image_path"] = record.ImagePath;
+                if (record.UserAngle.HasValue) recordObj["user_angle"] = record.UserAngle.Value;
+                if (record.UserThrottle.HasValue) recordObj["user_throttle"] = record.UserThrottle.Value;
+                if (record.PilotAngle.HasValue) recordObj["pilot_angle"] = record.PilotAngle.Value;
+                if (record.PilotThrottle.HasValue) recordObj["pilot_throttle"] = record.PilotThrottle.Value;
+                if (record.AngleError.HasValue) recordObj["angle_error"] = record.AngleError.Value;
+                if (record.ThrottleError.HasValue) recordObj["throttle_error"] = record.ThrottleError.Value;
+                recordObj["mode"] = record.Mode;
+                recordsArray.Add(recordObj);
+            }
+
+            root["records"] = recordsArray;
+
+            return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         }
 
         private static List<JudementRecord> ParseJudementRecords(string json)
