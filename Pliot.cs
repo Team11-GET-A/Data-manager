@@ -191,7 +191,8 @@ namespace Data_Manager
             ConfigurePilotCardRegions();
             btnImportModel.BringToFront();
 
-            // Keep event wiring in one place so Designer files stay focused on layout only.
+            // 이벤트 연결은 이 메서드에 모아 둡니다.
+            // 디자이너 파일은 컨트롤 생성/기본 배치만 담당하게 유지하기 위한 규칙입니다.
             btnImportModel.Click += BtnImportModel_Click;
             lvModelList.SelectedIndexChanged += LvModelList_SelectedIndexChanged;
             lvModelList.SizeChanged += (s, e) => ResizeModelColumns();
@@ -1108,6 +1109,9 @@ namespace Data_Manager
 
         private void ApplyPilotResponsiveLayout()
         {
+            // 1600x900 디자이너 기준 좌표를 현재 폼 크기에 맞춰 다시 계산합니다.
+            // Dock/Anchor와 수동 배치를 섞으면 이중 스케일이 생기므로,
+            // Pilot 화면은 이 메서드와 하위 Layout* 메서드에서만 크기와 위치를 조정합니다.
             if (_isApplyingPilotLayout ||
                 IsDisposed ||
                 ClientSize.Width <= 0 ||

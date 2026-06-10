@@ -102,7 +102,7 @@ namespace DonkeyDataManager
         private bool isApplyingResponsiveLayout;
 
         // =====================================================
-        // ⭐ 모델 자동 로드 추가
+        // 모델 목록 동기화 상태
         // =====================================================
 
         private System.Windows.Forms.Timer modelRefreshTimer =
@@ -248,10 +248,10 @@ namespace DonkeyDataManager
             InitializeTrainerButtonStyles();
             InitializeResponsiveLayout();
 
-            // ⭐ 추가
+            // 모델 폴더와 registry를 주기적으로 동기화합니다.
             InitializeModelRefreshTimer();
 
-            // ⭐ 추가
+            // 시작 시 mycar/models 내부 모델만 표시합니다.
             LoadModelsToList();
 
             SharedModelRegistry.ModelsChanged +=
@@ -297,7 +297,7 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // ⭐ 모델 감시 타이머
+        // 모델 목록 로드와 registry 동기화
         // =====================================================
 
         private void InitializeModelRefreshTimer()
@@ -316,10 +316,6 @@ namespace DonkeyDataManager
 
             modelRefreshTimer.Start();
         }
-
-        // =====================================================
-        // ⭐ 모델 리스트 로드
-        // =====================================================
 
         private void LoadModelsToList()
         {
@@ -516,7 +512,7 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // 타이머 초기화
+        // UI 이벤트와 반응형 배치 초기화
         // =====================================================
 
         private void InitializePlaybackTimer()
@@ -800,7 +796,7 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // WSL PATH
+        // WSL/mycar 경로 탐색
         // =====================================================
 
         private void InitializeWSLPaths()
@@ -1966,7 +1962,7 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // DATA LOAD
+        // tub 폴더 선택과 catalog 로드
         // =====================================================
 
         private void BtnLoadData_Click(
@@ -3538,7 +3534,7 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // TRAIN
+        // 학습 실행과 중단/취소 처리
         // =====================================================
 
         private async void BtnTrain_Click(
@@ -5445,7 +5441,7 @@ namespace DonkeyDataManager
             }
         }
         // =====================================================
-        // MODEL DELETE
+        // 모델 가져오기, 제외, 복원, 영구 삭제
         // =====================================================
 
         private void BtnImportModel_Click(object sender, EventArgs e)
@@ -5724,7 +5720,7 @@ namespace DonkeyDataManager
             }
         }
         // =====================================================
-        // MODEL RENAME
+        // 모델 이름 변경
         // =====================================================
 
         private void BtnNameCh_Click(

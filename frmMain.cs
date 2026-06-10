@@ -24,6 +24,8 @@ namespace AD_AI_LearningData_Editor
     // 주행값(angle/throttle) 표시와 Trainer/Pilot 탭 연결을 담당합니다.
     public partial class frmMain : MaterialForm
     {
+        #region Fields
+
         // 현재 화면에서 재생할 이미지 목록과 재생 위치입니다.
         private System.Windows.Forms.Timer videoTimer;
         private DoubleBufferedPictureBox picVideoBox;
@@ -35,9 +37,7 @@ namespace AD_AI_LearningData_Editor
         private int currentTrashIndex = 0;
 
         // 이미지 편집/표시 상태입니다. 사용자가 슬라이더나 팔레트를 조작할 때 중복 이벤트를 막습니다.
-        private ListViewItem lastHighlightedItem = null;
         private bool isUpdatingSlider = false;
-        private FileSystemWatcher trashWatcher;
         private Button activePaletteButton = null;
         private List<Button> paletteButtons = new List<Button>();
         private bool[,] roiState = new bool[3, 3];
@@ -75,6 +75,8 @@ namespace AD_AI_LearningData_Editor
         private bool suppressListSelectionSync = false;
         private int lastPlaybackScrollBucket = -1;
         private DonkeyDataManager.frmNewtrainer trainerForm;
+
+        #endregion
 
         // 큰 이미지가 많은 화면에서 리사이즈/전환 시 깜빡임을 줄이기 위한 Win32 스타일입니다.
         protected override CreateParams CreateParams
@@ -213,7 +215,6 @@ namespace AD_AI_LearningData_Editor
             SetupTabs();
             LoadUploadedFilesToD();
             LoadTrashCanFiles();
-            SetupTrashWatcher();
 
             this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
 
@@ -227,6 +228,8 @@ namespace AD_AI_LearningData_Editor
             RegisterEditCancelButton();
             RegisterSelectAllButton();
         }
+
+        #region Folder And Manifest Helpers
 
         private string GetBinFolder()
         {
@@ -550,6 +553,10 @@ namespace AD_AI_LearningData_Editor
                 MessageBox.Show("deleted_index 저장 중 오류가 발생했습니다.\n" + ex.Message);
             }
         }
+
+        #endregion
+
+        #region Image List, Deleted Index, And Selection Helpers
 
         private int ExtractImageIndexFromFileName(string fileNameOrPath)
         {
@@ -1342,6 +1349,10 @@ namespace AD_AI_LearningData_Editor
                 SetIntervalLabelText("(" + min.ToString() + "~" + max.ToString() + ")");
             }
         }
+
+        #endregion
+
+        #region Playback Speed And Image Editing
 
         private void InitializeSpeedController()
         {
@@ -2246,6 +2257,10 @@ namespace AD_AI_LearningData_Editor
             isColorFilterPreviewActive = false;
         }
 
+        #endregion
+
+        #region Bulk Selection And Edit Rollback
+
 
         private void RegisterSelectAllButton()
         {
@@ -2502,6 +2517,10 @@ namespace AD_AI_LearningData_Editor
             RestoreEditCancelBackups();
         }
 
+        #endregion
+
+        #region Tooltips And Driving Value Overlay
+
         private void InitializeToolTips()
         {
             SetToolTipByName("btnPlayStop", "단축키 : 스패이스 바");
@@ -2677,6 +2696,10 @@ namespace AD_AI_LearningData_Editor
             return null;
         }
 
+        #endregion
+
+        #region Uploaded Data Loading And Display
+
         private void InitializeVideoPlayer()
         {
             picVideoBox = new DoubleBufferedPictureBox();
@@ -2695,25 +2718,6 @@ namespace AD_AI_LearningData_Editor
             videoTimer = new System.Windows.Forms.Timer();
             videoTimer.Interval = 67;
             videoTimer.Tick += VideoTimer_Tick;
-        }
-
-        private void SetupTrashWatcher()
-        {
-            // 이제 휴지통 목록은 실제 TrashCan 폴더가 아니라
-            // manifest JSON의 deleted_index를 기준으로 표시합니다.
-        }
-
-
-        private void TrashWatcher_Changed(object sender, FileSystemEventArgs e)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new Action(LoadTrashCanFiles));
-            }
-            else
-            {
-                LoadTrashCanFiles();
-            }
         }
 
         public void LoadUploadedFilesToD()
@@ -3943,6 +3947,10 @@ namespace AD_AI_LearningData_Editor
             return null;
         }
 
+        #endregion
+
+        #region Hold Buttons, Responsive Layout, And Shortcuts
+
         private void InitializeSlideHoldButtons()
         {
             slideHoldStartTimer = new System.Windows.Forms.Timer();
@@ -4427,6 +4435,10 @@ namespace AD_AI_LearningData_Editor
         private void btnPre1F_Click(object sender, EventArgs e) { MoveSlide(-1); }
         private void btnPre5F_Click(object sender, EventArgs e) { MoveSlide(-5); }
 
+        #endregion
+
+        #region Delete, Restore, Save, And Tabs
+
         private void btnDel_Click(object sender, EventArgs e)
         {
             List<string> targets = new List<string>();
@@ -4788,11 +4800,6 @@ namespace AD_AI_LearningData_Editor
             trainerForm.LoadDataFolder(folderPath);
         }
 
-        private void materialSlider1_Click(object sender, EventArgs e) { }
-        private void materialButton2_Click(object sender, EventArgs e) { }
-        private void listView1_SelectedIndexChanged(object sender, EventArgs e) { }
-        private void listView1_SelectedIndexChanged_1(object sender, EventArgs e) { }
-
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
             ShowTrashModeButtons(false);
@@ -4845,11 +4852,6 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        private void trackBar1_Scroll(object sender, EventArgs e) { }
-        private void pnlContrastProperty_Paint(object sender, PaintEventArgs e) { }
-        private void pnlCloseProperty_Paint(object sender, PaintEventArgs e) { }
-        private void GBPalete_Enter(object sender, EventArgs e) { }
-        private void ColorTrackBar_Scroll(object sender, EventArgs e) { }
         private class NaturalFileNameComparer : IComparer<string>
         {
             public int Compare(string x, string y)
@@ -4940,13 +4942,12 @@ namespace AD_AI_LearningData_Editor
 
         private void lstviewFileListD_SelectedIndexChanged(object sender, EventArgs e)
         {
-
+            // Designer compatibility hook.
+            // 실제 선택 동기화는 InitializeListViewSelectionPersistence에서 연결한
+            // lstviewFileListD_SelectedIndexChangedForPersistence가 담당합니다.
         }
 
-        private void groupBox2_Enter(object sender, EventArgs e)
-        {
-
-        }
+        #endregion
     }
 
     public class ClickOutsideFilter : IMessageFilter

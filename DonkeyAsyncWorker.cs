@@ -21,6 +21,10 @@ namespace Data_Manager
         private const string FallbackWslDistroName = "Ubuntu-22.04";
         private const string FallbackCondaEnvName = "e2e_env";
 
+        // =====================================================
+        // WSL 설정과 기본 경로 탐색
+        // =====================================================
+
         // 설정 데이터
         public class AppSettings
         {
@@ -95,6 +99,10 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            // =====================================================
+            // tub 폴더 파싱 진입점
+            // =====================================================
+            //
             // 하나의 tub 폴더 또는 tub들이 들어 있는 상위 폴더를 읽어 프레임 목록으로 변환합니다.
             // catalog_*.catalog, record_*.json, images-only 구조를 순서대로 시도합니다.
             if (string.IsNullOrWhiteSpace(distroName))
@@ -868,6 +876,10 @@ namespace Data_Manager
                 : FallbackWslDistroName;
         }
 
+        // =====================================================
+        // Pilot/Trainer가 공유하는 데이터 모델
+        // =====================================================
+
         public class PilotCardState
         {
             // Pilot 화면이 모델 하나에 대해 기억해야 하는 상태 묶음입니다.
@@ -953,6 +965,10 @@ namespace Data_Manager
         }
 
         private const string SettingsFileName = "Data_Manager_settings.json";
+
+        // =====================================================
+        // Pilot 모델 정보와 tub/AI 판단 데이터 로드
+        // =====================================================
 
         public static async Task<OperationResult<string>> FindMyCarPathInWslAsync(
             string distroName,
@@ -1397,6 +1413,10 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            // =====================================================
+            // WSL 명령 실행과 Windows/WSL 경로 변환
+            // =====================================================
+            //
             // wsl.exe -d <distro> bash -lc "<command>" 형태로 명령을 실행합니다.
             // 표준 출력/오류를 모아 실패 원인을 UI 로그에 전달할 수 있게 합니다.
             var psi = new ProcessStartInfo

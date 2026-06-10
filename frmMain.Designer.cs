@@ -120,7 +120,6 @@
             sdrSeekBar.Size = new Size(1240, 40);
             sdrSeekBar.TabIndex = 0;
             sdrSeekBar.Text = "n/m";
-            sdrSeekBar.Click += materialSlider1_Click;
             // 
             // pnlVideo
             // 
@@ -230,7 +229,6 @@
             pnlContrastProperty.Size = new Size(552, 87);
             pnlContrastProperty.TabIndex = 17;
             pnlContrastProperty.Visible = false;
-            pnlContrastProperty.Paint += pnlContrastProperty_Paint;
             // 
             // groupBox1
             // 
@@ -279,7 +277,6 @@
             GBPalete.TabIndex = 11;
             GBPalete.TabStop = false;
             GBPalete.Text = "필터";
-            GBPalete.Enter += GBPalete_Enter;
             // 
             // btnColorCancle
             // 
@@ -453,7 +450,6 @@
             btnMirror.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnMirror.UseAccentColor = false;
             btnMirror.UseVisualStyleBackColor = true;
-            btnMirror.Click += materialButton2_Click;
             // 
             // btnNoise
             // 
@@ -682,7 +678,6 @@
             lstviewMain.TabIndex = 12;
             lstviewMain.UseCompatibleStateImageBehavior = false;
             lstviewMain.View = View.List;
-            lstviewMain.SelectedIndexChanged += listView1_SelectedIndexChanged;
             // 
             // imglst1
             // 
@@ -846,7 +841,6 @@
             groupBox2.TabIndex = 18;
             groupBox2.TabStop = false;
             groupBox2.Text = "선택된 이미지";
-            groupBox2.Enter += groupBox2_Enter;
             // 
             // lblSetInterval
             // 
@@ -1054,9 +1048,6 @@
         private Button btnROIR;
         private Button btnROIL;
         private TrackBar trcbrContrastProperty;
-        private TrackBar trackBar3;
-        private TrackBar trackBar2;
-        private TrackBar trackBar1;
         private MaterialSkin.Controls.MaterialButton btnColorCfm;
         private MaterialSkin.Controls.MaterialButton btnColorCancle;
         private Button btnRemove;
