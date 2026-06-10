@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -20,6 +20,10 @@ namespace Data_Manager
     {
         private const string FallbackWslDistroName = "Ubuntu-22.04";
         private const string FallbackCondaEnvName = "e2e_env";
+
+        // =====================================================
+        // WSL 설정과 기본 경로 탐색
+        // =====================================================
 
         // 설정 데이터
         public class AppSettings
@@ -95,6 +99,10 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            // =====================================================
+            // tub 폴더 파싱 진입점
+            // =====================================================
+            //
             // 하나의 tub 폴더 또는 tub들이 들어 있는 상위 폴더를 읽어 프레임 목록으로 변환합니다.
             // catalog_*.catalog, record_*.json, images-only 구조를 순서대로 시도합니다.
             if (string.IsNullOrWhiteSpace(distroName))
@@ -270,6 +278,20 @@ namespace Data_Manager
                     rootFrames = BuildFramesFromImagesOnly(rootWsl, tubRoot);
                 }
 
+                HashSet<int> deletedIndexes = ReadDeletedIndexesFromTubRoot(tubRoot);
+                if (deletedIndexes.Count > 0)
+                {
+                    int beforeCount = rootFrames.Count;
+                    rootFrames = rootFrames
+                        .Where(frame => !deletedIndexes.Contains(frame.Index))
+                        .ToList();
+
+                    progress?.Report(new ProgressReport
+                    {
+                        Log = $"manifest 제외 인덱스 적용: {beforeCount - rootFrames.Count}개 제외"
+                    });
+                }
+
                 frames.AddRange(rootFrames);
 
                 progress?.Report(new ProgressReport
@@ -385,6 +407,80 @@ namespace Data_Manager
             });
 
             return frames;
+        }
+
+        private static HashSet<int> ReadDeletedIndexesFromTubRoot(string tubRoot)
+        {
+            HashSet<int> deletedIndexes = new HashSet<int>();
+
+            if (string.IsNullOrWhiteSpace(tubRoot) || !Directory.Exists(tubRoot))
+            {
+                return deletedIndexes;
+            }
+
+            string[] manifestCandidates =
+            {
+                Path.Combine(tubRoot, "manifest.json"),
+                Path.Combine(tubRoot, "catalog_manifest.json")
+            };
+
+            foreach (string manifestPath in manifestCandidates.Where(File.Exists))
+            {
+                try
+                {
+                    foreach (string line in File.ReadLines(manifestPath))
+                    {
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            continue;
+                        }
+
+                        using JsonDocument document = JsonDocument.Parse(line);
+                        if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                            !TryGetDeletedIndexesElement(document.RootElement, out JsonElement deletedElement) ||
+                            deletedElement.ValueKind != JsonValueKind.Array)
+                        {
+                            continue;
+                        }
+
+                        foreach (JsonElement item in deletedElement.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out int number))
+                            {
+                                deletedIndexes.Add(number);
+                            }
+                            else if (int.TryParse(item.ToString(), out number))
+                            {
+                                deletedIndexes.Add(number);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return deletedIndexes;
+        }
+
+        private static bool TryGetDeletedIndexesElement(JsonElement root, out JsonElement deletedElement)
+        {
+            if (root.TryGetProperty("deleted_index", out deletedElement))
+            {
+                return true;
+            }
+
+            deletedElement = default;
+            return false;
+        }
+
+        private static bool IsDeletedIndexesProperty(string propertyName)
+        {
+            return string.Equals(propertyName, "deleted_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_index", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "deleted_index", StringComparison.OrdinalIgnoreCase);
         }
 
         private static async Task<List<PilotFrameData>> ParseRecordJsonFilesAsFramesAsync(
@@ -780,6 +876,10 @@ namespace Data_Manager
                 : FallbackWslDistroName;
         }
 
+        // =====================================================
+        // Pilot/Trainer가 공유하는 데이터 모델
+        // =====================================================
+
         public class PilotCardState
         {
             // Pilot 화면이 모델 하나에 대해 기억해야 하는 상태 묶음입니다.
@@ -865,6 +965,10 @@ namespace Data_Manager
         }
 
         private const string SettingsFileName = "Data_Manager_settings.json";
+
+        // =====================================================
+        // Pilot 모델 정보와 tub/AI 판단 데이터 로드
+        // =====================================================
 
         public static async Task<OperationResult<string>> FindMyCarPathInWslAsync(
             string distroName,
@@ -1196,6 +1300,13 @@ namespace Data_Manager
 
             string json = await File.ReadAllTextAsync(judementPath, cancellationToken);
             List<JudementRecord> records = ParseJudementRecords(json);
+            HashSet<int> deletedIndexes = GetDeletedIndexesForPilotCardState(cardState);
+            if (deletedIndexes.Count > 0)
+            {
+                RemoveDeletedJudementRecordsFromFile(judementPath, deletedIndexes);
+            }
+
+            records = FilterJudementRecordsByDeletedIndexes(records, cardState);
             return new OperationResult<List<JudementRecord>>
             {
                 Success = true,
@@ -1282,6 +1393,13 @@ namespace Data_Manager
 
             string json = await File.ReadAllTextAsync(judementPath, cancellationToken);
             List<JudementRecord> records = ParseJudementRecords(json);
+            HashSet<int> generatedDeletedIndexes = GetDeletedIndexesForPilotCardState(cardState);
+            if (generatedDeletedIndexes.Count > 0)
+            {
+                RemoveDeletedJudementRecordsFromFile(judementPath, generatedDeletedIndexes);
+            }
+
+            records = FilterJudementRecordsByDeletedIndexes(records, cardState);
             return new OperationResult<List<JudementRecord>>
             {
                 Success = true,
@@ -1295,6 +1413,10 @@ namespace Data_Manager
             IProgress<ProgressReport>? progress,
             CancellationToken cancellationToken)
         {
+            // =====================================================
+            // WSL 명령 실행과 Windows/WSL 경로 변환
+            // =====================================================
+            //
             // wsl.exe -d <distro> bash -lc "<command>" 형태로 명령을 실행합니다.
             // 표준 출력/오류를 모아 실패 원인을 UI 로그에 전달할 수 있게 합니다.
             var psi = new ProcessStartInfo
@@ -1872,7 +1994,14 @@ namespace Data_Manager
                 return;
             }
 
-            results.Add(trimmed);
+            foreach (string part in trimmed.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string path = part.Trim();
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    results.Add(path);
+                }
+            }
         }
 
         private static string NormalizeTubPath(string tubPath, string? carPathFromConfig, string myCarPath)
@@ -2166,8 +2295,8 @@ namespace Data_Manager
                         ImagePath = node["image_path"]?.ToString() ?? string.Empty,
                         UserAngle = node["user_angle"]?.GetValue<double?>(),
                         UserThrottle = node["user_throttle"]?.GetValue<double?>(),
-                        PilotAngle = node["pilot_angle"]?.GetValue<double?>(),
-                        PilotThrottle = node["pilot_throttle"]?.GetValue<double?>(),
+                        PilotAngle = ClampPilotValue(node["pilot_angle"]?.GetValue<double?>()),
+                        PilotThrottle = ClampPilotValue(node["pilot_throttle"]?.GetValue<double?>()),
                         AngleError = node["angle_error"]?.GetValue<double?>(),
                         ThrottleError = node["throttle_error"]?.GetValue<double?>(),
                         Mode = node["mode"]?.ToString() ?? string.Empty
@@ -2179,6 +2308,119 @@ namespace Data_Manager
             }
 
             return records;
+        }
+
+        private static double? ClampPilotValue(double? value)
+        {
+            if (!value.HasValue)
+            {
+                return null;
+            }
+
+            return Math.Max(-1.0, Math.Min(1.0, value.Value));
+        }
+
+        private static List<JudementRecord> FilterJudementRecordsByDeletedIndexes(
+            List<JudementRecord> records,
+            PilotCardState cardState)
+        {
+            if (records == null || records.Count == 0)
+            {
+                return new List<JudementRecord>();
+            }
+
+            HashSet<int> deletedIndexes = GetDeletedIndexesForPilotCardState(cardState);
+            if (deletedIndexes.Count == 0)
+            {
+                return records;
+            }
+
+            return records
+                .Where(record => !deletedIndexes.Contains(record.Index))
+                .ToList();
+        }
+
+        private static void RemoveDeletedJudementRecordsFromFile(
+            string judementPath,
+            HashSet<int> deletedIndexes)
+        {
+            if (string.IsNullOrWhiteSpace(judementPath) ||
+                deletedIndexes == null ||
+                deletedIndexes.Count == 0 ||
+                !File.Exists(judementPath))
+            {
+                return;
+            }
+
+            try
+            {
+                JsonNode? root = JsonNode.Parse(File.ReadAllText(judementPath));
+                if (root is not JsonObject rootObject ||
+                    rootObject["records"] is not JsonArray recordsArray)
+                {
+                    return;
+                }
+
+                for (int i = recordsArray.Count - 1; i >= 0; i--)
+                {
+                    JsonNode? node = recordsArray[i];
+                    int? index = node?["index"]?.GetValue<int>();
+
+                    if (index.HasValue && deletedIndexes.Contains(index.Value))
+                    {
+                        recordsArray.RemoveAt(i);
+                    }
+                }
+
+                File.WriteAllText(
+                    judementPath,
+                    rootObject.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch
+            {
+            }
+        }
+
+        private static HashSet<int> GetDeletedIndexesForPilotCardState(PilotCardState cardState)
+        {
+            HashSet<int> deletedIndexes = new HashSet<int>();
+
+            if (cardState?.TrainingTubPaths == null)
+            {
+                return deletedIndexes;
+            }
+
+            foreach (string tubPath in cardState.TrainingTubPaths)
+            {
+                if (string.IsNullOrWhiteSpace(tubPath))
+                {
+                    continue;
+                }
+
+                string windowsPath = tubPath.StartsWith("/", StringComparison.Ordinal)
+                    ? ToWindowsPathFromWslPath(tubPath, cardState.WslDistroName)
+                    : tubPath;
+
+                windowsPath = ResolveExistingWindowsPath(windowsPath);
+
+                if (!Directory.Exists(windowsPath))
+                {
+                    continue;
+                }
+
+                List<string> roots = FindTubRoots(windowsPath, null);
+                if (roots.Count == 0)
+                {
+                    roots.Add(windowsPath);
+                }
+
+                foreach (string root in roots)
+                {
+                    deletedIndexes.UnionWith(ReadDeletedIndexesFromTubRoot(root));
+                }
+            }
+
+            return deletedIndexes;
         }
 
         private static async Task<string> EnsurePythonScriptAsync(
@@ -2480,8 +2722,39 @@ namespace Data_Manager
             sb.AppendLine("                    obj = parse_json_line(line)");
             sb.AppendLine("                    if not obj:");
             sb.AppendLine("                        continue");
-            sb.AppendLine("                    records.append((idx, obj))");
+            sb.AppendLine("                    record_idx = obj.get('_index', obj.get('index', idx))");
+            sb.AppendLine("                    records.append((record_idx, obj))");
             sb.AppendLine("    return records");
+            sb.AppendLine("");
+            sb.AppendLine("def load_deleted_index(tub_path):");
+            sb.AppendLine("    deleted = set()");
+            sb.AppendLine("    for name in ['manifest.json', 'catalog_manifest.json']:");
+            sb.AppendLine("        path = os.path.join(tub_path, name)");
+            sb.AppendLine("        if not os.path.exists(path):");
+            sb.AppendLine("            continue");
+            sb.AppendLine("        try:");
+            sb.AppendLine("            with open(path, 'r', encoding='utf-8') as f:");
+            sb.AppendLine("                for line in f:");
+            sb.AppendLine("                    line = line.strip()");
+            sb.AppendLine("                    if not line:");
+            sb.AppendLine("                        continue");
+            sb.AppendLine("                    obj = json.loads(line)");
+            sb.AppendLine("                    values = obj.get('deleted_index')");
+            sb.AppendLine("                    if isinstance(values, list):");
+            sb.AppendLine("                        for value in values:");
+            sb.AppendLine("                            try:");
+            sb.AppendLine("                                deleted.add(int(value))");
+            sb.AppendLine("                            except Exception:");
+            sb.AppendLine("                                pass");
+            sb.AppendLine("        except Exception:");
+            sb.AppendLine("            pass");
+            sb.AppendLine("    return deleted");
+            sb.AppendLine("");
+            sb.AppendLine("def is_deleted_record(idx, deleted_index):");
+            sb.AppendLine("    try:");
+            sb.AppendLine("        return int(idx) in deleted_index");
+            sb.AppendLine("    except Exception:");
+            sb.AppendLine("        return False");
             sb.AppendLine("");
             sb.AppendLine("def load_records_from_files(record_files):");
             sb.AppendLine("    records = []");
@@ -2498,41 +2771,94 @@ namespace Data_Manager
             sb.AppendLine("    with Image.open(image_path) as img:");
             sb.AppendLine("        img = img.convert('RGB')");
             sb.AppendLine("        img = img.resize((w, h))");
-            sb.AppendLine("        arr = np.asarray(img)");
+            sb.AppendLine("        arr = np.asarray(img, dtype=np.float32)");
             sb.AppendLine("    return arr");
             sb.AppendLine("");
-            sb.AppendLine("def predict_model(model, image_arr):");
-            sb.AppendLine("    input_arr = np.expand_dims(image_arr, axis=0)");
-            sb.AppendLine("    pred = model.predict(input_arr)");
-            sb.AppendLine("    if isinstance(pred, list):");
-            sb.AppendLine("        angle = float(pred[0][0])");
-            sb.AppendLine("        throttle = float(pred[1][0]) if len(pred) > 1 else 0.0");
-            sb.AppendLine("        return angle, throttle");
-            sb.AppendLine("    pred = pred[0]");
-            sb.AppendLine("    if len(pred) >= 2:");
-            sb.AppendLine("        return float(pred[0]), float(pred[1])");
-            sb.AppendLine("    return float(pred[0]), 0.0");
+            sb.AppendLine("def clamp_pilot_value(value):");
+            sb.AppendLine("    try:");
+            sb.AppendLine("        value = float(value)");
+            sb.AppendLine("    except Exception:");
+            sb.AppendLine("        return 0.0");
+            sb.AppendLine("    if not np.isfinite(value):");
+            sb.AppendLine("        return 0.0");
+            sb.AppendLine("    return max(-1.0, min(1.0, value))");
             sb.AppendLine("");
-            sb.AppendLine("def predict_batch(model, image_arrs):");
+            sb.AppendLine("def linear_unbin(arr):");
+            sb.AppendLine("    arr = np.asarray(arr).reshape(-1)");
+            sb.AppendLine("    if len(arr) <= 1:");
+            sb.AppendLine("        return clamp_pilot_value(arr[0] if len(arr) else 0.0)");
+            sb.AppendLine("    idx = int(np.argmax(arr))");
+            sb.AppendLine("    return clamp_pilot_value((idx * 2.0 / (len(arr) - 1)) - 1.0)");
+            sb.AppendLine("");
+            sb.AppendLine("def first_scalar(value, default=0.0):");
+            sb.AppendLine("    arr = np.asarray(value).reshape(-1)");
+            sb.AppendLine("    if len(arr) == 0:");
+            sb.AppendLine("        return default");
+            sb.AppendLine("    return arr[0]");
+            sb.AppendLine("");
+            sb.AppendLine("def model_has_internal_normalization(model):");
+            sb.AppendLine("    try:");
+            sb.AppendLine("        layers = getattr(model, 'layers', []) or []");
+            sb.AppendLine("        for layer in layers[:3]:");
+            sb.AppendLine("            name = (getattr(layer, 'name', '') or '').lower()");
+            sb.AppendLine("            cls = layer.__class__.__name__.lower()");
+            sb.AppendLine("            if 'lambda' in cls or 'rescaling' in cls or 'normal' in name or 'scale' in name:");
+            sb.AppendLine("                return True");
+            sb.AppendLine("    except Exception:");
+            sb.AppendLine("        pass");
+            sb.AppendLine("    return False");
+            sb.AppendLine("");
+            sb.AppendLine("def prepare_model_input(model, input_arr):");
+            sb.AppendLine("    input_arr = np.asarray(input_arr, dtype=np.float32)");
+            sb.AppendLine("    if model_has_internal_normalization(model):");
+            sb.AppendLine("        return input_arr");
+            sb.AppendLine("    try:");
+            sb.AppendLine("        if np.nanmax(input_arr) > 2.0:");
+            sb.AppendLine("            return input_arr / 255.0");
+            sb.AppendLine("    except Exception:");
+            sb.AppendLine("        pass");
+            sb.AppendLine("    return input_arr");
+            sb.AppendLine("");
+            sb.AppendLine("def decode_prediction(pred, model_type):");
+            sb.AppendLine("    model_type = (model_type or '').lower()");
+            sb.AppendLine("    if isinstance(pred, list):");
+            sb.AppendLine("        angle_raw = np.asarray(pred[0]).reshape(-1)");
+            sb.AppendLine("        throttle_raw = np.asarray(pred[1]).reshape(-1) if len(pred) > 1 else np.asarray([0.0])");
+            sb.AppendLine("        if 'categorical' in model_type or len(angle_raw) > 2:");
+            sb.AppendLine("            angle = linear_unbin(angle_raw)");
+            sb.AppendLine("        else:");
+            sb.AppendLine("            angle = clamp_pilot_value(first_scalar(angle_raw))");
+            sb.AppendLine("        throttle = clamp_pilot_value(first_scalar(throttle_raw))");
+            sb.AppendLine("        return angle, throttle");
+            sb.AppendLine("    row = np.asarray(pred).reshape(-1)");
+            sb.AppendLine("    if len(row) > 2:");
+            sb.AppendLine("        return linear_unbin(row), 0.0");
+            sb.AppendLine("    if len(row) >= 2:");
+            sb.AppendLine("        return clamp_pilot_value(row[0]), clamp_pilot_value(row[1])");
+            sb.AppendLine("    return clamp_pilot_value(row[0] if len(row) else 0.0), 0.0");
+            sb.AppendLine("");
+            sb.AppendLine("def predict_model(model, image_arr, model_type):");
+            sb.AppendLine("    input_arr = prepare_model_input(model, np.expand_dims(image_arr, axis=0))");
+            sb.AppendLine("    pred = model.predict(input_arr, verbose=0)");
+            sb.AppendLine("    if isinstance(pred, list):");
+            sb.AppendLine("        pred = [np.asarray(item)[0] for item in pred]");
+            sb.AppendLine("    else:");
+            sb.AppendLine("        pred = np.asarray(pred)[0]");
+            sb.AppendLine("    return decode_prediction(pred, model_type)");
+            sb.AppendLine("");
+            sb.AppendLine("def predict_batch(model, image_arrs, model_type):");
             sb.AppendLine("    if not image_arrs:");
             sb.AppendLine("        return []");
-            sb.AppendLine("    input_arr = np.asarray(image_arrs)");
+            sb.AppendLine("    input_arr = prepare_model_input(model, np.asarray(image_arrs))");
             sb.AppendLine("    pred = model.predict(input_arr, verbose=0)");
             sb.AppendLine("    results = []");
             sb.AppendLine("    if isinstance(pred, list):");
-            sb.AppendLine("        angles = pred[0]");
-            sb.AppendLine("        throttles = pred[1] if len(pred) > 1 else None");
             sb.AppendLine("        for i in range(len(image_arrs)):");
-            sb.AppendLine("            angle = float(np.asarray(angles[i]).reshape(-1)[0])");
-            sb.AppendLine("            throttle = float(np.asarray(throttles[i]).reshape(-1)[0]) if throttles is not None else 0.0");
-            sb.AppendLine("            results.append((angle, throttle))");
+            sb.AppendLine("            row = [np.asarray(item)[i] for item in pred]");
+            sb.AppendLine("            results.append(decode_prediction(row, model_type))");
             sb.AppendLine("        return results");
             sb.AppendLine("    for row in pred:");
-            sb.AppendLine("        row = np.asarray(row).reshape(-1)");
-            sb.AppendLine("        if len(row) >= 2:");
-            sb.AppendLine("            results.append((float(row[0]), float(row[1])))");
-            sb.AppendLine("        else:");
-            sb.AppendLine("            results.append((float(row[0]), 0.0))");
+            sb.AppendLine("        results.append(decode_prediction(row, model_type))");
             sb.AppendLine("    return results");
             sb.AppendLine("");
             sb.AppendLine("def append_result(results, tub, idx, obj, image_path, angle, throttle):");
@@ -2574,10 +2900,15 @@ namespace Data_Manager
             sb.AppendLine("            print(f'progress: completed={processed_count}, skipped={skipped_count}, total={total_count}', flush=True)");
             sb.AppendLine("            last_report_at = now");
             sb.AppendLine("    for tub in tubs:");
+            sb.AppendLine("        deleted_index = load_deleted_index(tub)");
             sb.AppendLine("        record_files = collect_records(tub)");
             sb.AppendLine("        records = load_records_from_files(record_files)");
             sb.AppendLine("        if not records:");
             sb.AppendLine("            records = load_records_from_catalog(tub)");
+            sb.AppendLine("        if deleted_index:");
+            sb.AppendLine("            before = len(records)");
+            sb.AppendLine("            records = [(idx, obj) for idx, obj in records if not is_deleted_record(idx, deleted_index)]");
+            sb.AppendLine("            print(f'skip deleted indexes: {tub} -> {before - len(records)}', flush=True)");
             sb.AppendLine("        total_count += len(records)");
             sb.AppendLine("        print(f'tub records: {tub} -> {len(records)}', flush=True)");
             sb.AppendLine("        batch_meta = []");
@@ -2593,14 +2924,14 @@ namespace Data_Manager
             sb.AppendLine("            batch_images.append(image_arr)");
             sb.AppendLine("            batch_meta.append((tub, idx, obj, image_path))");
             sb.AppendLine("            if len(batch_images) >= batch_size:");
-            sb.AppendLine("                for meta, pred in zip(batch_meta, predict_batch(model, batch_images)):");
+            sb.AppendLine("                for meta, pred in zip(batch_meta, predict_batch(model, batch_images, args.model_type)):");
             sb.AppendLine("                    append_result(results, meta[0], meta[1], meta[2], meta[3], pred[0], pred[1])");
             sb.AppendLine("                    processed_count += 1");
             sb.AppendLine("                report_progress()");
             sb.AppendLine("                batch_images = []");
             sb.AppendLine("                batch_meta = []");
             sb.AppendLine("        if batch_images:");
-            sb.AppendLine("            for meta, pred in zip(batch_meta, predict_batch(model, batch_images)):");
+            sb.AppendLine("            for meta, pred in zip(batch_meta, predict_batch(model, batch_images, args.model_type)):");
             sb.AppendLine("                append_result(results, meta[0], meta[1], meta[2], meta[3], pred[0], pred[1])");
             sb.AppendLine("                processed_count += 1");
             sb.AppendLine("            report_progress()");

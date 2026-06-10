@@ -65,7 +65,7 @@
             btnDel = new MaterialSkin.Controls.MaterialButton();
             pnlProperty = new Panel();
             crdProperty = new MaterialSkin.Controls.MaterialCard();
-            btnMirrorY = new MaterialSkin.Controls.MaterialButton();
+            btnEditCncl = new MaterialSkin.Controls.MaterialButton();
             btnPre5F = new MaterialSkin.Controls.MaterialButton();
             btnOpnFolderList = new Button();
             pnlFolderList = new Panel();
@@ -80,6 +80,12 @@
             imglst1 = new ImageList(components);
             lstviewTrash = new ListView();
             pnlCtrl = new Panel();
+            pnlSpeedPopup = new Panel();
+            btnSpeedMinus = new MaterialSkin.Controls.MaterialButton();
+            btnSpeedPlus = new MaterialSkin.Controls.MaterialButton();
+            sdrSpeedController = new MaterialSkin.Controls.MaterialSlider();
+            lblSpeedText = new Label();
+            btnSelctAll = new MaterialSkin.Controls.MaterialButton();
             btnSetInterval = new MaterialSkin.Controls.MaterialButton();
             groupBox2 = new GroupBox();
             lblSetInterval = new Label();
@@ -88,12 +94,11 @@
             btnPlayStop = new MaterialSkin.Controls.MaterialButton();
             btnNxt5F = new MaterialSkin.Controls.MaterialButton();
             btnNxt1F = new MaterialSkin.Controls.MaterialButton();
-            pnlSpeedPopup = new Panel();
-            btnSpeedMinus = new MaterialSkin.Controls.MaterialButton();
-            btnSpeedPlus = new MaterialSkin.Controls.MaterialButton();
-            sdrSpeedController = new MaterialSkin.Controls.MaterialSlider();
-            lblSpeedText = new Label();
             btnOpnFolderList2 = new Button();
+            topNavigationTabs = new Panel();
+            btnTabManager = new Button();
+            btnTabTrainer = new Button();
+            btnTabPilot = new Button();
             pnlROI.SuspendLayout();
             pnlContrastProperty.SuspendLayout();
             groupBox1.SuspendLayout();
@@ -104,8 +109,9 @@
             crdProperty.SuspendLayout();
             pnlFolderList.SuspendLayout();
             pnlCtrl.SuspendLayout();
-            groupBox2.SuspendLayout();
             pnlSpeedPopup.SuspendLayout();
+            groupBox2.SuspendLayout();
+            topNavigationTabs.SuspendLayout();
             SuspendLayout();
             // 
             // sdrSeekBar
@@ -119,7 +125,6 @@
             sdrSeekBar.Size = new Size(1240, 40);
             sdrSeekBar.TabIndex = 0;
             sdrSeekBar.Text = "n/m";
-            sdrSeekBar.Click += materialSlider1_Click;
             // 
             // pnlVideo
             // 
@@ -229,7 +234,6 @@
             pnlContrastProperty.Size = new Size(552, 87);
             pnlContrastProperty.TabIndex = 17;
             pnlContrastProperty.Visible = false;
-            pnlContrastProperty.Paint += pnlContrastProperty_Paint;
             // 
             // groupBox1
             // 
@@ -278,7 +282,6 @@
             GBPalete.TabIndex = 11;
             GBPalete.TabStop = false;
             GBPalete.Text = "필터";
-            GBPalete.Enter += GBPalete_Enter;
             // 
             // btnColorCancle
             // 
@@ -452,7 +455,6 @@
             btnMirror.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnMirror.UseAccentColor = false;
             btnMirror.UseVisualStyleBackColor = true;
-            btnMirror.Click += materialButton2_Click;
             // 
             // btnNoise
             // 
@@ -484,12 +486,12 @@
             btnDel.Depth = 0;
             btnDel.HighEmphasis = true;
             btnDel.Icon = Data_Manager.Properties.Resources.TrashCan11538270;
-            btnDel.Location = new Point(631, 56);
+            btnDel.Location = new Point(889, 55);
             btnDel.Margin = new Padding(5, 7, 5, 7);
             btnDel.MouseState = MaterialSkin.MouseState.HOVER;
             btnDel.Name = "btnDel";
             btnDel.NoAccentTextColor = Color.Empty;
-            btnDel.Size = new Size(126, 113);
+            btnDel.Size = new Size(150, 135);
             btnDel.TabIndex = 0;
             btnDel.Text = "삭제";
             btnDel.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
@@ -510,8 +512,8 @@
             // 
             crdProperty.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             crdProperty.BackColor = Color.FromArgb(255, 255, 255);
-            crdProperty.Controls.Add(btnMirrorY);
             crdProperty.Controls.Add(btnContrastProperty);
+            crdProperty.Controls.Add(btnEditCncl);
             crdProperty.Controls.Add(btnMirror);
             crdProperty.Controls.Add(btnColorProperty);
             crdProperty.Controls.Add(btnROI);
@@ -526,26 +528,26 @@
             crdProperty.Size = new Size(552, 278);
             crdProperty.TabIndex = 0;
             // 
-            // btnMirrorY
+            // btnEditCncl
             // 
-            btnMirrorY.Anchor = AnchorStyles.Bottom;
-            btnMirrorY.AutoSize = false;
-            btnMirrorY.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnMirrorY.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
-            btnMirrorY.Depth = 0;
-            btnMirrorY.HighEmphasis = true;
-            btnMirrorY.Icon = Data_Manager.Properties.Resources.P_mirror_UpDown;
-            btnMirrorY.Location = new Point(371, 145);
-            btnMirrorY.Margin = new Padding(5, 7, 5, 7);
-            btnMirrorY.MouseState = MaterialSkin.MouseState.HOVER;
-            btnMirrorY.Name = "btnMirrorY";
-            btnMirrorY.NoAccentTextColor = Color.Empty;
-            btnMirrorY.Size = new Size(171, 113);
-            btnMirrorY.TabIndex = 6;
-            btnMirrorY.Text = "상하 반전";
-            btnMirrorY.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
-            btnMirrorY.UseAccentColor = false;
-            btnMirrorY.UseVisualStyleBackColor = true;
+            btnEditCncl.AutoSize = false;
+            btnEditCncl.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnEditCncl.BackColor = SystemColors.Control;
+            btnEditCncl.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnEditCncl.Depth = 0;
+            btnEditCncl.HighEmphasis = true;
+            btnEditCncl.Icon = Data_Manager.Properties.Resources.circle;
+            btnEditCncl.Location = new Point(371, 145);
+            btnEditCncl.Margin = new Padding(5, 7, 5, 7);
+            btnEditCncl.MouseState = MaterialSkin.MouseState.HOVER;
+            btnEditCncl.Name = "btnEditCncl";
+            btnEditCncl.NoAccentTextColor = Color.Empty;
+            btnEditCncl.Size = new Size(171, 113);
+            btnEditCncl.TabIndex = 19;
+            btnEditCncl.Text = "복원";
+            btnEditCncl.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnEditCncl.UseAccentColor = true;
+            btnEditCncl.UseVisualStyleBackColor = false;
             // 
             // btnPre5F
             // 
@@ -555,12 +557,12 @@
             btnPre5F.Depth = 0;
             btnPre5F.HighEmphasis = true;
             btnPre5F.Icon = Data_Manager.Properties.Resources.arrow5_left;
-            btnPre5F.Location = new Point(5, 62);
+            btnPre5F.Location = new Point(20, 59);
             btnPre5F.Margin = new Padding(5, 7, 5, 7);
             btnPre5F.MouseState = MaterialSkin.MouseState.HOVER;
             btnPre5F.Name = "btnPre5F";
             btnPre5F.NoAccentTextColor = Color.Empty;
-            btnPre5F.Size = new Size(62, 57);
+            btnPre5F.Size = new Size(82, 67);
             btnPre5F.TabIndex = 10;
             btnPre5F.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnPre5F.UseAccentColor = false;
@@ -681,7 +683,6 @@
             lstviewMain.TabIndex = 12;
             lstviewMain.UseCompatibleStateImageBehavior = false;
             lstviewMain.View = View.List;
-            lstviewMain.SelectedIndexChanged += listView1_SelectedIndexChanged;
             // 
             // imglst1
             // 
@@ -706,6 +707,8 @@
             // 
             // pnlCtrl
             // 
+            pnlCtrl.Controls.Add(pnlSpeedPopup);
+            pnlCtrl.Controls.Add(btnSelctAll);
             pnlCtrl.Controls.Add(btnSetInterval);
             pnlCtrl.Controls.Add(groupBox2);
             pnlCtrl.Controls.Add(btnSpeedPopup);
@@ -715,10 +718,103 @@
             pnlCtrl.Controls.Add(btnNxt1F);
             pnlCtrl.Controls.Add(btnPre5F);
             pnlCtrl.Controls.Add(btnDel);
-            pnlCtrl.Location = new Point(383, 704);
+            pnlCtrl.Location = new Point(192, 716);
             pnlCtrl.Name = "pnlCtrl";
-            pnlCtrl.Size = new Size(776, 204);
+            pnlCtrl.Size = new Size(1061, 204);
             pnlCtrl.TabIndex = 13;
+            // 
+            // pnlSpeedPopup
+            // 
+            pnlSpeedPopup.BackColor = Color.Gray;
+            pnlSpeedPopup.Controls.Add(btnSpeedMinus);
+            pnlSpeedPopup.Controls.Add(btnSpeedPlus);
+            pnlSpeedPopup.Controls.Add(sdrSpeedController);
+            pnlSpeedPopup.Controls.Add(lblSpeedText);
+            pnlSpeedPopup.Location = new Point(20, 32);
+            pnlSpeedPopup.Name = "pnlSpeedPopup";
+            pnlSpeedPopup.Size = new Size(457, 95);
+            pnlSpeedPopup.TabIndex = 15;
+            pnlSpeedPopup.Visible = false;
+            // 
+            // btnSpeedMinus
+            // 
+            btnSpeedMinus.AutoSize = false;
+            btnSpeedMinus.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnSpeedMinus.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnSpeedMinus.Depth = 0;
+            btnSpeedMinus.HighEmphasis = true;
+            btnSpeedMinus.Icon = null;
+            btnSpeedMinus.Location = new Point(0, 1);
+            btnSpeedMinus.Margin = new Padding(5, 7, 5, 7);
+            btnSpeedMinus.MouseState = MaterialSkin.MouseState.HOVER;
+            btnSpeedMinus.Name = "btnSpeedMinus";
+            btnSpeedMinus.NoAccentTextColor = Color.Empty;
+            btnSpeedMinus.Size = new Size(35, 93);
+            btnSpeedMinus.TabIndex = 2;
+            btnSpeedMinus.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnSpeedMinus.UseAccentColor = false;
+            btnSpeedMinus.UseVisualStyleBackColor = true;
+            // 
+            // btnSpeedPlus
+            // 
+            btnSpeedPlus.AutoSize = false;
+            btnSpeedPlus.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnSpeedPlus.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnSpeedPlus.Depth = 0;
+            btnSpeedPlus.HighEmphasis = true;
+            btnSpeedPlus.Icon = null;
+            btnSpeedPlus.Location = new Point(421, 1);
+            btnSpeedPlus.Margin = new Padding(5, 7, 5, 7);
+            btnSpeedPlus.MouseState = MaterialSkin.MouseState.HOVER;
+            btnSpeedPlus.Name = "btnSpeedPlus";
+            btnSpeedPlus.NoAccentTextColor = Color.Empty;
+            btnSpeedPlus.Size = new Size(35, 93);
+            btnSpeedPlus.TabIndex = 1;
+            btnSpeedPlus.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnSpeedPlus.UseAccentColor = false;
+            btnSpeedPlus.UseVisualStyleBackColor = true;
+            // 
+            // sdrSpeedController
+            // 
+            sdrSpeedController.Depth = 0;
+            sdrSpeedController.ForeColor = Color.Gray;
+            sdrSpeedController.Location = new Point(43, 15);
+            sdrSpeedController.MouseState = MaterialSkin.MouseState.HOVER;
+            sdrSpeedController.Name = "sdrSpeedController";
+            sdrSpeedController.ShowValue = false;
+            sdrSpeedController.Size = new Size(370, 40);
+            sdrSpeedController.TabIndex = 0;
+            sdrSpeedController.Text = "";
+            // 
+            // lblSpeedText
+            // 
+            lblSpeedText.ForeColor = Color.Black;
+            lblSpeedText.Location = new Point(195, 54);
+            lblSpeedText.Name = "lblSpeedText";
+            lblSpeedText.Size = new Size(66, 32);
+            lblSpeedText.TabIndex = 3;
+            lblSpeedText.TextAlign = ContentAlignment.MiddleCenter;
+            // 
+            // btnSelctAll
+            // 
+            btnSelctAll.AutoSize = false;
+            btnSelctAll.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            btnSelctAll.BackColor = SystemColors.Control;
+            btnSelctAll.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
+            btnSelctAll.Depth = 0;
+            btnSelctAll.HighEmphasis = true;
+            btnSelctAll.Icon = Data_Manager.Properties.Resources.range;
+            btnSelctAll.Location = new Point(732, 55);
+            btnSelctAll.Margin = new Padding(5, 7, 5, 7);
+            btnSelctAll.MouseState = MaterialSkin.MouseState.HOVER;
+            btnSelctAll.Name = "btnSelctAll";
+            btnSelctAll.NoAccentTextColor = Color.Empty;
+            btnSelctAll.Size = new Size(150, 135);
+            btnSelctAll.TabIndex = 19;
+            btnSelctAll.Text = "전체 선택";
+            btnSelctAll.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
+            btnSelctAll.UseAccentColor = false;
+            btnSelctAll.UseVisualStyleBackColor = false;
             // 
             // btnSetInterval
             // 
@@ -728,7 +824,7 @@
             btnSetInterval.Depth = 0;
             btnSetInterval.HighEmphasis = true;
             btnSetInterval.Icon = Data_Manager.Properties.Resources.range;
-            btnSetInterval.Location = new Point(395, 130);
+            btnSetInterval.Location = new Point(486, 130);
             btnSetInterval.Margin = new Padding(4, 6, 4, 6);
             btnSetInterval.MouseState = MaterialSkin.MouseState.HOVER;
             btnSetInterval.Name = "btnSetInterval";
@@ -744,13 +840,12 @@
             // 
             groupBox2.Controls.Add(lblSetInterval);
             groupBox2.Font = new Font("맑은 고딕", 11.25F, FontStyle.Bold, GraphicsUnit.Point, 129);
-            groupBox2.Location = new Point(395, 44);
+            groupBox2.Location = new Point(487, 44);
             groupBox2.Name = "groupBox2";
             groupBox2.Size = new Size(231, 82);
             groupBox2.TabIndex = 18;
             groupBox2.TabStop = false;
             groupBox2.Text = "선택된 이미지";
-            groupBox2.Enter += groupBox2_Enter;
             // 
             // lblSetInterval
             // 
@@ -770,12 +865,12 @@
             btnSpeedPopup.Depth = 0;
             btnSpeedPopup.HighEmphasis = true;
             btnSpeedPopup.Icon = Data_Manager.Properties.Resources.speedometer8017074;
-            btnSpeedPopup.Location = new Point(5, 132);
+            btnSpeedPopup.Location = new Point(21, 129);
             btnSpeedPopup.Margin = new Padding(5, 7, 5, 7);
             btnSpeedPopup.MouseState = MaterialSkin.MouseState.HOVER;
             btnSpeedPopup.Name = "btnSpeedPopup";
             btnSpeedPopup.NoAccentTextColor = Color.Empty;
-            btnSpeedPopup.Size = new Size(381, 32);
+            btnSpeedPopup.Size = new Size(456, 32);
             btnSpeedPopup.TabIndex = 16;
             btnSpeedPopup.Text = "배속";
             btnSpeedPopup.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
@@ -790,12 +885,12 @@
             btnPre1F.Depth = 0;
             btnPre1F.HighEmphasis = true;
             btnPre1F.Icon = Data_Manager.Properties.Resources.arrow1_left;
-            btnPre1F.Location = new Point(71, 62);
+            btnPre1F.Location = new Point(105, 59);
             btnPre1F.Margin = new Padding(5, 7, 5, 7);
             btnPre1F.MouseState = MaterialSkin.MouseState.HOVER;
             btnPre1F.Name = "btnPre1F";
             btnPre1F.NoAccentTextColor = Color.Empty;
-            btnPre1F.Size = new Size(62, 57);
+            btnPre1F.Size = new Size(82, 67);
             btnPre1F.TabIndex = 14;
             btnPre1F.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnPre1F.UseAccentColor = false;
@@ -809,12 +904,12 @@
             btnPlayStop.Depth = 0;
             btnPlayStop.HighEmphasis = true;
             btnPlayStop.Icon = Data_Manager.Properties.Resources.PlaySlide4655096;
-            btnPlayStop.Location = new Point(137, 62);
+            btnPlayStop.Location = new Point(190, 59);
             btnPlayStop.Margin = new Padding(5, 7, 5, 7);
             btnPlayStop.MouseState = MaterialSkin.MouseState.HOVER;
             btnPlayStop.Name = "btnPlayStop";
             btnPlayStop.NoAccentTextColor = Color.Empty;
-            btnPlayStop.Size = new Size(117, 57);
+            btnPlayStop.Size = new Size(117, 67);
             btnPlayStop.TabIndex = 13;
             btnPlayStop.Text = "재생";
             btnPlayStop.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
@@ -830,12 +925,12 @@
             btnNxt5F.Depth = 0;
             btnNxt5F.HighEmphasis = true;
             btnNxt5F.Icon = Data_Manager.Properties.Resources.arrow5_right;
-            btnNxt5F.Location = new Point(324, 62);
+            btnNxt5F.Location = new Point(395, 59);
             btnNxt5F.Margin = new Padding(5, 7, 5, 7);
             btnNxt5F.MouseState = MaterialSkin.MouseState.HOVER;
             btnNxt5F.Name = "btnNxt5F";
             btnNxt5F.NoAccentTextColor = Color.Empty;
-            btnNxt5F.Size = new Size(62, 57);
+            btnNxt5F.Size = new Size(82, 67);
             btnNxt5F.TabIndex = 12;
             btnNxt5F.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnNxt5F.UseAccentColor = false;
@@ -850,88 +945,16 @@
             btnNxt1F.HighEmphasis = true;
             btnNxt1F.Icon = Data_Manager.Properties.Resources.arrow1_right;
             btnNxt1F.ImageAlign = ContentAlignment.MiddleRight;
-            btnNxt1F.Location = new Point(258, 62);
+            btnNxt1F.Location = new Point(310, 59);
             btnNxt1F.Margin = new Padding(5, 7, 5, 7);
             btnNxt1F.MouseState = MaterialSkin.MouseState.HOVER;
             btnNxt1F.Name = "btnNxt1F";
             btnNxt1F.NoAccentTextColor = Color.Empty;
-            btnNxt1F.Size = new Size(62, 57);
+            btnNxt1F.Size = new Size(82, 67);
             btnNxt1F.TabIndex = 11;
             btnNxt1F.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
             btnNxt1F.UseAccentColor = false;
             btnNxt1F.UseVisualStyleBackColor = true;
-            // 
-            // pnlSpeedPopup
-            // 
-            pnlSpeedPopup.BackColor = Color.Gray;
-            pnlSpeedPopup.Controls.Add(btnSpeedMinus);
-            pnlSpeedPopup.Controls.Add(btnSpeedPlus);
-            pnlSpeedPopup.Controls.Add(sdrSpeedController);
-            pnlSpeedPopup.Controls.Add(lblSpeedText);
-            pnlSpeedPopup.Location = new Point(503, 768);
-            pnlSpeedPopup.Name = "pnlSpeedPopup";
-            pnlSpeedPopup.Size = new Size(381, 95);
-            pnlSpeedPopup.TabIndex = 15;
-            pnlSpeedPopup.Visible = false;
-            // 
-            // btnSpeedMinus
-            // 
-            btnSpeedMinus.AutoSize = false;
-            btnSpeedMinus.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnSpeedMinus.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
-            btnSpeedMinus.Depth = 0;
-            btnSpeedMinus.HighEmphasis = true;
-            btnSpeedMinus.Icon = null;
-            btnSpeedMinus.Location = new Point(1, 1);
-            btnSpeedMinus.Margin = new Padding(5, 7, 5, 7);
-            btnSpeedMinus.MouseState = MaterialSkin.MouseState.HOVER;
-            btnSpeedMinus.Name = "btnSpeedMinus";
-            btnSpeedMinus.NoAccentTextColor = Color.Empty;
-            btnSpeedMinus.Size = new Size(35, 93);
-            btnSpeedMinus.TabIndex = 2;
-            btnSpeedMinus.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
-            btnSpeedMinus.UseAccentColor = false;
-            btnSpeedMinus.UseVisualStyleBackColor = true;
-            // 
-            // btnSpeedPlus
-            // 
-            btnSpeedPlus.AutoSize = false;
-            btnSpeedPlus.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            btnSpeedPlus.Density = MaterialSkin.Controls.MaterialButton.MaterialButtonDensity.Default;
-            btnSpeedPlus.Depth = 0;
-            btnSpeedPlus.HighEmphasis = true;
-            btnSpeedPlus.Icon = null;
-            btnSpeedPlus.Location = new Point(346, 1);
-            btnSpeedPlus.Margin = new Padding(5, 7, 5, 7);
-            btnSpeedPlus.MouseState = MaterialSkin.MouseState.HOVER;
-            btnSpeedPlus.Name = "btnSpeedPlus";
-            btnSpeedPlus.NoAccentTextColor = Color.Empty;
-            btnSpeedPlus.Size = new Size(35, 93);
-            btnSpeedPlus.TabIndex = 1;
-            btnSpeedPlus.Type = MaterialSkin.Controls.MaterialButton.MaterialButtonType.Contained;
-            btnSpeedPlus.UseAccentColor = false;
-            btnSpeedPlus.UseVisualStyleBackColor = true;
-            // 
-            // sdrSpeedController
-            // 
-            sdrSpeedController.Depth = 0;
-            sdrSpeedController.ForeColor = Color.Gray;
-            sdrSpeedController.Location = new Point(43, 15);
-            sdrSpeedController.MouseState = MaterialSkin.MouseState.HOVER;
-            sdrSpeedController.Name = "sdrSpeedController";
-            sdrSpeedController.ShowValue = false;
-            sdrSpeedController.Size = new Size(296, 40);
-            sdrSpeedController.TabIndex = 0;
-            sdrSpeedController.Text = "";
-            // 
-            // lblSpeedText
-            // 
-            lblSpeedText.ForeColor = Color.Black;
-            lblSpeedText.Location = new Point(159, 55);
-            lblSpeedText.Name = "lblSpeedText";
-            lblSpeedText.Size = new Size(66, 32);
-            lblSpeedText.TabIndex = 3;
-            lblSpeedText.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // btnOpnFolderList2
             // 
@@ -941,21 +964,77 @@
             btnOpnFolderList2.TabIndex = 11;
             btnOpnFolderList2.UseVisualStyleBackColor = true;
             // 
+            // topNavigationTabs
+            // 
+            topNavigationTabs.BackColor = Color.Transparent;
+            topNavigationTabs.Controls.Add(btnTabManager);
+            topNavigationTabs.Controls.Add(btnTabTrainer);
+            topNavigationTabs.Controls.Add(btnTabPilot);
+            topNavigationTabs.Location = new Point(1505, 28);
+            topNavigationTabs.Name = "topNavigationTabs";
+            topNavigationTabs.Size = new Size(308, 36);
+            topNavigationTabs.TabIndex = 22;
+            // 
+            // btnTabManager
+            // 
+            btnTabManager.BackColor = Color.White;
+            btnTabManager.Cursor = Cursors.Hand;
+            btnTabManager.FlatAppearance.BorderColor = Color.White;
+            btnTabManager.FlatStyle = FlatStyle.Flat;
+            btnTabManager.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            btnTabManager.ForeColor = Color.FromArgb(32, 52, 70);
+            btnTabManager.Location = new Point(0, 0);
+            btnTabManager.Name = "btnTabManager";
+            btnTabManager.Size = new Size(100, 32);
+            btnTabManager.TabIndex = 0;
+            btnTabManager.Text = "매니저";
+            btnTabManager.UseVisualStyleBackColor = false;
+            // 
+            // btnTabTrainer
+            // 
+            btnTabTrainer.BackColor = Color.FromArgb(42, 73, 96);
+            btnTabTrainer.Cursor = Cursors.Hand;
+            btnTabTrainer.FlatAppearance.BorderColor = Color.FromArgb(120, 160, 190);
+            btnTabTrainer.FlatStyle = FlatStyle.Flat;
+            btnTabTrainer.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            btnTabTrainer.ForeColor = Color.White;
+            btnTabTrainer.Location = new Point(104, 0);
+            btnTabTrainer.Name = "btnTabTrainer";
+            btnTabTrainer.Size = new Size(100, 32);
+            btnTabTrainer.TabIndex = 1;
+            btnTabTrainer.Text = "트레이너";
+            btnTabTrainer.UseVisualStyleBackColor = false;
+            // 
+            // btnTabPilot
+            // 
+            btnTabPilot.BackColor = Color.FromArgb(42, 73, 96);
+            btnTabPilot.Cursor = Cursors.Hand;
+            btnTabPilot.FlatAppearance.BorderColor = Color.FromArgb(120, 160, 190);
+            btnTabPilot.FlatStyle = FlatStyle.Flat;
+            btnTabPilot.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            btnTabPilot.ForeColor = Color.White;
+            btnTabPilot.Location = new Point(208, 0);
+            btnTabPilot.Name = "btnTabPilot";
+            btnTabPilot.Size = new Size(100, 32);
+            btnTabPilot.TabIndex = 2;
+            btnTabPilot.Text = "파일럿";
+            btnTabPilot.UseVisualStyleBackColor = false;
+            // 
             // frmMain
             // 
             AutoScaleDimensions = new SizeF(8F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
             BackColor = SystemColors.Control;
             ClientSize = new Size(1829, 1020);
+            Controls.Add(pnlColorProperty);
             Controls.Add(pnlContrastProperty);
             Controls.Add(pnlFolderList);
             Controls.Add(pnlVideo);
             Controls.Add(sdrSeekBar);
-            Controls.Add(pnlCtrl);
-            Controls.Add(pnlColorProperty);
-            Controls.Add(pnlROI);
-            Controls.Add(pnlSpeedPopup);
             Controls.Add(pnlProperty);
+            Controls.Add(pnlROI);
+            Controls.Add(pnlCtrl);
+            Controls.Add(topNavigationTabs);
             Font = new Font("맑은 고딕", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 129);
             Name = "frmMain";
             Padding = new Padding(0);
@@ -972,8 +1051,9 @@
             pnlFolderList.ResumeLayout(false);
             pnlFolderList.PerformLayout();
             pnlCtrl.ResumeLayout(false);
-            groupBox2.ResumeLayout(false);
             pnlSpeedPopup.ResumeLayout(false);
+            groupBox2.ResumeLayout(false);
+            topNavigationTabs.ResumeLayout(false);
             ResumeLayout(false);
         }
 
@@ -1031,17 +1111,19 @@
         private Button btnROIR;
         private Button btnROIL;
         private TrackBar trcbrContrastProperty;
-        private TrackBar trackBar3;
-        private TrackBar trackBar2;
-        private TrackBar trackBar1;
         private MaterialSkin.Controls.MaterialButton btnColorCfm;
         private MaterialSkin.Controls.MaterialButton btnColorCancle;
-        private MaterialSkin.Controls.MaterialButton btnMirrorY;
         private Button btnRemove;
         private Button btnSave;
         private GroupBox groupBox1;
         private MaterialSkin.Controls.MaterialButton btnSetInterval;
         private Label lblSetInterval;
         private GroupBox groupBox2;
+        private MaterialSkin.Controls.MaterialButton btnEditCncl;
+        private MaterialSkin.Controls.MaterialButton btnSelctAll;
+        private Panel topNavigationTabs;
+        private Button btnTabManager;
+        private Button btnTabTrainer;
+        private Button btnTabPilot;
     }
 }

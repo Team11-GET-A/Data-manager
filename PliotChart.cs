@@ -8,10 +8,12 @@ using System.Windows.Forms;
 namespace Data_Manager
 {
     // Pilot 화면의 프레임 데이터를 그래프로 보여주는 비교 창입니다.
-    // 위쪽은 angle, 아래쪽은 throttle을 사용자 값과 AI 예측값 두 선으로 그립니다.
+    // 위쪽은 방향, 아래쪽은 쓰로틀의 사람 값과 AI 예측 값을 함께 그립니다.
     public partial class PliotChart : Form
     {
         private readonly List<DonkeyAsyncWorker.PilotFrameData> _frames;
+        private Bitmap? _chartBitmap;
+        private Size _chartBitmapSize;
 
         public PliotChart(
             string modelName,
@@ -28,25 +30,89 @@ namespace Data_Manager
                 : $"{modelName} 그래프";
             lblSummary.Text = BuildSummaryText();
 
-            // A single paint surface draws both value groups, so the chart is created once per form.
             pnlChart.Paint += PnlChart_Paint;
-            pnlChart.Resize += (sender, e) => pnlChart.Invalidate();
+            pnlChart.SizeChanged += (sender, e) =>
+            {
+                ClearChartCache();
+                pnlChart.Invalidate();
+            };
+            FormClosed += (sender, e) => ClearChartCache();
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Escape)
+            {
+                Close();
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         private string BuildSummaryText()
         {
             int total = _frames.Count;
-            int angleAi = _frames.Count(frame => frame.PilotAngle.HasValue);
-            int throttleAi = _frames.Count(frame => frame.PilotThrottle.HasValue);
-            return $"프레임 {total:N0} | AI 방향 {angleAi:N0} | AI 속력 {throttleAi:N0}";
+            double maxAngle =
+                _frames
+                    .Select(frame => frame.PilotAngle)
+                    .Where(value => value.HasValue)
+                    .Select(value => Math.Abs(value!.Value))
+                    .DefaultIfEmpty(0.0)
+                    .Max();
+            double maxThrottle =
+                _frames
+                    .Select(frame => frame.PilotThrottle)
+                    .Where(value => value.HasValue)
+                    .Select(value => Math.Abs(value!.Value))
+                    .DefaultIfEmpty(0.0)
+                    .Max();
+
+            return $"프레임 {total:N0} | AI 방향 최대 {maxAngle:0.###} | AI 쓰로틀 최대 {maxThrottle:0.###}";
         }
 
         private void PnlChart_Paint(object? sender, PaintEventArgs e)
         {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            e.Graphics.Clear(Color.FromArgb(25, 29, 34));
-
             Rectangle bounds = pnlChart.ClientRectangle;
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+            {
+                return;
+            }
+
+            EnsureChartBitmap(bounds.Size);
+            if (_chartBitmap != null)
+            {
+                e.Graphics.DrawImageUnscaled(_chartBitmap, Point.Empty);
+            }
+        }
+
+        private void EnsureChartBitmap(Size size)
+        {
+            if (_chartBitmap != null && _chartBitmapSize == size)
+            {
+                return;
+            }
+
+            ClearChartCache();
+            _chartBitmap = new Bitmap(size.Width, size.Height);
+            _chartBitmapSize = size;
+
+            using Graphics graphics = Graphics.FromImage(_chartBitmap);
+            RenderChart(graphics, new Rectangle(Point.Empty, size));
+        }
+
+        private void ClearChartCache()
+        {
+            _chartBitmap?.Dispose();
+            _chartBitmap = null;
+            _chartBitmapSize = Size.Empty;
+        }
+
+        private void RenderChart(Graphics graphics, Rectangle bounds)
+        {
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            graphics.Clear(Color.FromArgb(25, 29, 34));
+
             if (bounds.Width < 160 || bounds.Height < 180)
             {
                 return;
@@ -65,8 +131,8 @@ namespace Data_Manager
                 bounds.Right - 14,
                 angleBounds.Bottom + gap + chartHeight);
 
-            DrawSeriesChart(e.Graphics, angleBounds, "방향", frame => frame.UserAngle, frame => frame.PilotAngle);
-            DrawSeriesChart(e.Graphics, throttleBounds, "속력", frame => frame.UserThrottle, frame => frame.PilotThrottle);
+            DrawSeriesChart(graphics, angleBounds, "방향", frame => frame.UserAngle, frame => frame.PilotAngle);
+            DrawSeriesChart(graphics, throttleBounds, "쓰로틀", frame => frame.UserThrottle, frame => frame.PilotThrottle);
         }
 
         private void DrawSeriesChart(
@@ -76,7 +142,6 @@ namespace Data_Manager
             Func<DonkeyAsyncWorker.PilotFrameData, double?> userSelector,
             Func<DonkeyAsyncWorker.PilotFrameData, double?> pilotSelector)
         {
-            // 같은 그리기 함수를 angle/throttle에 재사용하기 위해 값 선택 함수를 인자로 받습니다.
             Rectangle plot = Rectangle.FromLTRB(
                 bounds.Left + 58,
                 bounds.Top + 38,
@@ -92,19 +157,14 @@ namespace Data_Manager
             using Pen zeroPen = new Pen(Color.FromArgb(110, Color.White), 1);
             using Pen userPen = new Pen(Color.Lime, 2.4F);
             using Pen pilotPen = new Pen(Color.DeepSkyBlue, 2.4F);
-            double axisLimit =
-                CalculateAxisLimit(
-                    userSelector,
-                    pilotSelector);
+            double axisLimit = CalculateAxisLimit(userSelector, pilotSelector);
 
             graphics.DrawString(title, titleFont, textBrush, bounds.Left + 14, bounds.Top + 11);
             DrawLegend(graphics, bounds, userPen, pilotPen, smallFont, textBrush);
 
             for (int i = 0; i <= 4; i++)
             {
-                double value =
-                    axisLimit - (i * axisLimit / 2.0);
-
+                double value = axisLimit - (i * axisLimit / 2.0);
                 int y = MapY(value, plot, axisLimit);
                 graphics.DrawLine(Math.Abs(value) < double.Epsilon ? zeroPen : gridPen, plot.Left, y, plot.Right, y);
                 graphics.DrawString(value.ToString("0.###"), smallFont, mutedBrush, bounds.Left + 14, y - 8);
@@ -140,12 +200,7 @@ namespace Data_Manager
                     .DefaultIfEmpty(1.0)
                     .Max();
 
-            if (maxValue <= 0.0)
-            {
-                return 1.0;
-            }
-
-            return maxValue;
+            return maxValue <= 0.0 ? 1.0 : maxValue;
         }
 
         private static void DrawLegend(
@@ -160,7 +215,7 @@ namespace Data_Manager
             int y = bounds.Top + 18;
 
             graphics.DrawLine(userPen, x, y + 6, x + 28, y + 6);
-            graphics.DrawString("사용자", font, textBrush, x + 36, y - 3);
+            graphics.DrawString("사람", font, textBrush, x + 36, y - 3);
 
             graphics.DrawLine(pilotPen, x + 92, y + 6, x + 120, y + 6);
             graphics.DrawString("AI", font, textBrush, x + 128, y - 3);
@@ -206,11 +261,7 @@ namespace Data_Manager
 
         private static int MapY(double value, Rectangle plot, double axisLimit)
         {
-            double safeLimit =
-                axisLimit <= 0.0
-                    ? 1.0
-                    : axisLimit;
-
+            double safeLimit = axisLimit <= 0.0 ? 1.0 : axisLimit;
             double clamped = Math.Max(-safeLimit, Math.Min(safeLimit, value));
             double ratio = (safeLimit - clamped) / (safeLimit * 2.0);
             return plot.Top + (int)Math.Round(plot.Height * ratio);

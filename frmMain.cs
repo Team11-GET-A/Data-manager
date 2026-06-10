@@ -7,9 +7,11 @@ using System.ComponentModel;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using AD_AI_LearningData_Editor;
@@ -22,22 +24,26 @@ namespace AD_AI_LearningData_Editor
     // 주행값(angle/throttle) 표시와 Trainer/Pilot 탭 연결을 담당합니다.
     public partial class frmMain : MaterialForm
     {
+        #region Fields
+
         // 현재 화면에서 재생할 이미지 목록과 재생 위치입니다.
         private System.Windows.Forms.Timer videoTimer;
         private DoubleBufferedPictureBox picVideoBox;
         private ctrlAngleDicatoer angleIndicatorControl;
         private ctrlThrottleGauge throttleGaugeControl;
         private List<string> slideImages = new List<string>();
+        private List<string> trashImages = new List<string>();
         private int currentSlideIndex = 0;
+        private int currentTrashIndex = 0;
 
         // 이미지 편집/표시 상태입니다. 사용자가 슬라이더나 팔레트를 조작할 때 중복 이벤트를 막습니다.
-        private ListViewItem lastHighlightedItem = null;
         private bool isUpdatingSlider = false;
-        private FileSystemWatcher trashWatcher;
         private Button activePaletteButton = null;
         private List<Button> paletteButtons = new List<Button>();
         private bool[,] roiState = new bool[3, 3];
         private Dictionary<string, string> gammaBackupPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private bool isColorFilterPreviewActive = false;
+        private HashSet<string> colorFilterPreviewTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private HashSet<string> imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".bit" };
         private string mirrorYBackupFolderName = "MirrorYBackupFile";
 
@@ -61,7 +67,29 @@ namespace AD_AI_LearningData_Editor
         private Dictionary<Control, Rectangle> originalControlBounds = new Dictionary<Control, Rectangle>();
         private Dictionary<Control, float> originalControlFontSizes = new Dictionary<Control, float>();
         private bool isApplyingResponsiveLayout;
+        private HashSet<string> preservedFileListSelection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private HashSet<string> preservedTrashSelection = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private string editCancelBackupFolderName = "EditCancelBackupFile";
+        private bool isEditCancelRestoring = false;
+        private bool isUpdatingListSelection = false;
+        private bool suppressListSelectionSync = false;
+        private int lastPlaybackScrollBucket = -1;
         private DonkeyDataManager.frmNewtrainer trainerForm;
+        private Data_Manager.Pliot pilotForm;
+        private Panel mainTabHost;
+        private Panel managerTabPage;
+        private Panel trainerTabPage;
+        private Panel pilotTabPage;
+        private MainTabKind activeMainTab = MainTabKind.Manager;
+
+        private enum MainTabKind
+        {
+            Manager,
+            Trainer,
+            Pilot
+        }
+
+        #endregion
 
         // 큰 이미지가 많은 화면에서 리사이즈/전환 시 깜빡임을 줄이기 위한 Win32 스타일입니다.
         protected override CreateParams CreateParams
@@ -118,6 +146,50 @@ namespace AD_AI_LearningData_Editor
 
 
 
+
+            IconProperty.SetAutoImageByMargins(
+                btnPalette1,
+                Data_Manager.Properties.Resources.black_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+            IconProperty.SetAutoImageByMargins(
+                btnPalette2,
+                Data_Manager.Properties.Resources.white_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+            IconProperty.SetAutoImageByMargins(
+                btnPalette3,
+                Data_Manager.Properties.Resources.blue_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+            IconProperty.SetAutoImageByMargins(
+                btnPalette4,
+                Data_Manager.Properties.Resources.yellow_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+            IconProperty.SetAutoImageByMargins(
+                btnPalette5,
+                Data_Manager.Properties.Resources.brown_bucket,
+                leftMargin: 5,
+                topMargin: 5,
+                rightMargin: 5,
+                bottomMargin: 5
+            );
+
+
+
             this.AutoScaleMode = AutoScaleMode.None;
 
             var materialSkinManager = MaterialSkinManager.Instance;
@@ -148,13 +220,14 @@ namespace AD_AI_LearningData_Editor
             RegisterIntervalControls();
 
             btnRestoration.Visible = false;
+            btnRemove.Visible = false;
 
             ConfigureListViewNameLabel();
             ConfigureFileListDView();
+            ConfigureTrashListView();
             SetupTabs();
             LoadUploadedFilesToD();
             LoadTrashCanFiles();
-            SetupTrashWatcher();
 
             this.lstviewMain.MouseDoubleClick += lstviewMain_MouseDoubleClick;
 
@@ -164,7 +237,12 @@ namespace AD_AI_LearningData_Editor
             this.KeyPreview = true;
             InitializeSlideHoldButtons();
             InitializeResponsiveLayout();
+            InitializeListViewSelectionPersistence();
+            RegisterEditCancelButton();
+            RegisterSelectAllButton();
         }
+
+        #region Folder And Manifest Helpers
 
         private string GetBinFolder()
         {
@@ -188,6 +266,80 @@ namespace AD_AI_LearningData_Editor
             return folder;
         }
 
+        private string GetUploadedDataFolder()
+        {
+            string folder = Path.Combine(GetUploadedFolder(), "data");
+
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            return folder;
+        }
+
+        private string[] GetFilesSafe(string folder, string searchPattern, SearchOption searchOption)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+                {
+                    return new string[0];
+                }
+
+                return Directory.GetFiles(folder, searchPattern, searchOption);
+            }
+            catch
+            {
+                return new string[0];
+            }
+        }
+
+        private string[] GetDirectoriesSafe(string folder, string searchPattern, SearchOption searchOption)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+                {
+                    return new string[0];
+                }
+
+                return Directory.GetDirectories(folder, searchPattern, searchOption);
+            }
+            catch
+            {
+                return new string[0];
+            }
+        }
+
+        private string GetEditCancelBackupFolder()
+        {
+            string folder = Path.Combine(GetBinFolder(), editCancelBackupFolderName);
+
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            return folder;
+        }
+
+        private void ClearEditCancelBackupFolder()
+        {
+            try
+            {
+                string folder = Path.Combine(GetBinFolder(), editCancelBackupFolderName);
+
+                if (Directory.Exists(folder))
+                {
+                    Directory.Delete(folder, true);
+                }
+            }
+            catch
+            {
+            }
+        }
+
         private string GetTrashFolder()
         {
             string folder = Path.Combine(GetBinFolder(), "TrashCan");
@@ -207,6 +359,366 @@ namespace AD_AI_LearningData_Editor
             string folder = Path.Combine(GetBinFolder(), mirrorYBackupFolderName);
             if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
             return folder;
+        }
+
+        private string FindManifestJsonFile()
+        {
+            string dataFolder = GetUploadedDataFolder();
+
+            if (!Directory.Exists(dataFolder))
+            {
+                return "";
+            }
+
+            string[] jsonFiles = GetFilesSafe(dataFolder, "*.json", SearchOption.AllDirectories);
+
+            string manifestCopy = jsonFiles.FirstOrDefault(path =>
+                Path.GetFileName(path).IndexOf("manifest", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                Path.GetFileName(path).IndexOf("Copy", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (!string.IsNullOrWhiteSpace(manifestCopy))
+            {
+                return manifestCopy;
+            }
+
+            string manifest = jsonFiles.FirstOrDefault(path =>
+                Path.GetFileName(path).IndexOf("manifest", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (!string.IsNullOrWhiteSpace(manifest))
+            {
+                return manifest;
+            }
+
+            return jsonFiles.FirstOrDefault() ?? "";
+        }
+
+        private HashSet<int> ReadDeletedIndexes()
+        {
+            HashSet<int> deletedIndexes = new HashSet<int>();
+            string manifestPath = FindManifestJsonFile();
+
+            if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
+            {
+                return deletedIndexes;
+            }
+
+            try
+            {
+                foreach (string line in File.ReadLines(manifestPath))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    using (JsonDocument document = JsonDocument.Parse(line))
+                    {
+                        JsonElement root = document.RootElement;
+
+                        if (root.ValueKind != JsonValueKind.Object)
+                        {
+                            continue;
+                        }
+
+                        if (!TryGetDeletedIndexesElement(root, out JsonElement deletedElement) ||
+                            deletedElement.ValueKind != JsonValueKind.Array)
+                        {
+                            continue;
+                        }
+
+                        foreach (JsonElement item in deletedElement.EnumerateArray())
+                        {
+                            int index;
+
+                            if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out index))
+                            {
+                                deletedIndexes.Add(index);
+                            }
+                            else if (int.TryParse(item.ToString(), out index))
+                            {
+                                deletedIndexes.Add(index);
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return deletedIndexes;
+        }
+
+        private void WriteDeletedIndexes(HashSet<int> deletedIndexes)
+        {
+            string manifestPath = FindManifestJsonFile();
+
+            if (string.IsNullOrWhiteSpace(manifestPath))
+            {
+                manifestPath = Path.Combine(GetUploadedDataFolder(), "manifest-Copy.json");
+                File.WriteAllText(manifestPath, "{\"deleted_index\":[]}");
+            }
+
+            try
+            {
+                string[] lines = File.Exists(manifestPath)
+                    ? File.ReadAllLines(manifestPath)
+                    : new string[0];
+
+                if (lines.Length == 0)
+                {
+                    lines = new string[] { "{}" };
+                }
+
+                int targetLineIndex = -1;
+                JsonElement targetObject = default(JsonElement);
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    try
+                    {
+                        using (JsonDocument document = JsonDocument.Parse(lines[i]))
+                        {
+                            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                                TryGetDeletedIndexesElement(document.RootElement, out _))
+                            {
+                                targetLineIndex = i;
+                                targetObject = document.RootElement.Clone();
+                                break;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (targetLineIndex < 0)
+                {
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        try
+                        {
+                            using (JsonDocument document = JsonDocument.Parse(lines[i]))
+                            {
+                                if (document.RootElement.ValueKind == JsonValueKind.Object)
+                                {
+                                    targetLineIndex = i;
+                                    targetObject = document.RootElement.Clone();
+                                    break;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+                }
+
+                if (targetLineIndex < 0)
+                {
+                    Array.Resize(ref lines, lines.Length + 1);
+                    targetLineIndex = lines.Length - 1;
+                    lines[targetLineIndex] = "{}";
+
+                    using (JsonDocument document = JsonDocument.Parse(lines[targetLineIndex]))
+                    {
+                        targetObject = document.RootElement.Clone();
+                    }
+                }
+
+                using (MemoryStream memoryStream = new MemoryStream())
+                {
+                    using (Utf8JsonWriter writer = new Utf8JsonWriter(memoryStream, new JsonWriterOptions { Indented = false }))
+                    {
+                        writer.WriteStartObject();
+
+                        foreach (JsonProperty property in targetObject.EnumerateObject())
+                        {
+                            if (IsDeletedIndexesProperty(property.Name))
+                            {
+                                continue;
+                            }
+
+                            writer.WritePropertyName(property.Name);
+                            property.Value.WriteTo(writer);
+                        }
+
+                        writer.WritePropertyName("deleted_index");
+                        writer.WriteStartArray();
+
+                        foreach (int index in deletedIndexes.OrderBy(x => x))
+                        {
+                            writer.WriteNumberValue(index);
+                        }
+
+                        writer.WriteEndArray();
+                        writer.WriteEndObject();
+                    }
+
+                    lines[targetLineIndex] = System.Text.Encoding.UTF8.GetString(memoryStream.ToArray());
+                }
+
+                File.WriteAllLines(manifestPath, lines);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("deleted_index 저장 중 오류가 발생했습니다.\n" + ex.Message);
+            }
+        }
+
+        #endregion
+
+        #region Image List, Deleted Index, And Selection Helpers
+
+        private int ExtractImageIndexFromFileName(string fileNameOrPath)
+        {
+            string normalizedName = NormalizeDrivingImageName(Path.GetFileName(fileNameOrPath));
+            string numberText = ExtractLeadingNumber(normalizedName);
+            int index;
+
+            if (int.TryParse(numberText, out index))
+            {
+                return index;
+            }
+
+            return -1;
+        }
+
+        private bool TryGetDeletedIndexesElement(JsonElement root, out JsonElement deletedElement)
+        {
+            string[] propertyNames =
+            {
+                "deleted_index",
+                "deleted_indexes",
+                "delete_index",
+                "delete_indexes"
+            };
+
+            foreach (string propertyName in propertyNames)
+            {
+                if (root.TryGetProperty(propertyName, out deletedElement))
+                {
+                    return true;
+                }
+            }
+
+            foreach (JsonProperty property in root.EnumerateObject())
+            {
+                if (IsDeletedIndexesProperty(property.Name))
+                {
+                    deletedElement = property.Value;
+                    return true;
+                }
+            }
+
+            deletedElement = default(JsonElement);
+            return false;
+        }
+
+        private bool IsDeletedIndexesProperty(string propertyName)
+        {
+            return string.Equals(propertyName, "deleted_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_index", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "deleted_index", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool IsDeletedByManifest(string path, HashSet<int> deletedIndexes)
+        {
+            int index = ExtractImageIndexFromFileName(path);
+            return index >= 0 && deletedIndexes.Contains(index);
+        }
+
+        private bool IsTemporaryOrBackupImageFile(string path)
+        {
+            string fileName = Path.GetFileName(path);
+
+            if (fileName.EndsWith(".gback", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase)) return true;
+            if (fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) return true;
+            if (Path.GetFileNameWithoutExtension(fileName).EndsWith("-Temp", StringComparison.OrdinalIgnoreCase)) return true;
+
+            return false;
+        }
+
+        private List<string> GetVisibleImageFiles()
+        {
+            string dataFolder = GetUploadedDataFolder();
+
+            if (!Directory.Exists(dataFolder))
+            {
+                return new List<string>();
+            }
+
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
+
+            return GetFilesSafe(dataFolder, "*.*", SearchOption.AllDirectories)
+                .Where(path => IsImageFile(path))
+                .Where(path => !IsTemporaryOrBackupImageFile(path))
+                .Where(path => !IsDeletedByManifest(path, deletedIndexes))
+                .OrderBy(path => GetSlideImageSortNumber(Path.GetFileName(path)))
+                .ThenBy(path => GetUploadedRelativePath(path), new NaturalFileNameComparer())
+                .ThenBy(path => NormalizeDrivingImageName(Path.GetFileName(path)), new NaturalFileNameComparer())
+                .ThenBy(path => Path.GetFileName(path), new NaturalFileNameComparer())
+                .ToList();
+        }
+
+        private List<string> GetDeletedImageFiles()
+        {
+            string dataFolder = GetUploadedDataFolder();
+
+            if (!Directory.Exists(dataFolder))
+            {
+                return new List<string>();
+            }
+
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
+
+            return GetFilesSafe(dataFolder, "*.*", SearchOption.AllDirectories)
+                .Where(path => IsImageFile(path))
+                .Where(path => !IsTemporaryOrBackupImageFile(path))
+                .Where(path => IsDeletedByManifest(path, deletedIndexes))
+                .OrderBy(path => GetSlideImageSortNumber(Path.GetFileName(path)))
+                .ThenBy(path => GetUploadedRelativePath(path), new NaturalFileNameComparer())
+                .ThenBy(path => NormalizeDrivingImageName(Path.GetFileName(path)), new NaturalFileNameComparer())
+                .ThenBy(path => Path.GetFileName(path), new NaturalFileNameComparer())
+                .ToList();
+        }
+
+        private void AddDeletedIndexes(IEnumerable<string> imagePaths)
+        {
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
+
+            foreach (string path in imagePaths)
+            {
+                int index = ExtractImageIndexFromFileName(path);
+
+                if (index >= 0)
+                {
+                    deletedIndexes.Add(index);
+                }
+            }
+
+            WriteDeletedIndexes(deletedIndexes);
+        }
+
+        private void RemoveDeletedIndexes(IEnumerable<string> imageNamesOrPaths)
+        {
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
+
+            foreach (string path in imageNamesOrPaths)
+            {
+                int index = ExtractImageIndexFromFileName(path);
+
+                if (index >= 0)
+                {
+                    deletedIndexes.Remove(index);
+                }
+            }
+
+            WriteDeletedIndexes(deletedIndexes);
         }
 
         private void ConfigureListViewNameLabel()
@@ -238,6 +750,28 @@ namespace AD_AI_LearningData_Editor
             };
         }
 
+        private void ConfigureTrashListView()
+        {
+            lstviewTrash.BeginUpdate();
+            lstviewTrash.View = View.Details;
+            lstviewTrash.HeaderStyle = ColumnHeaderStyle.None;
+            lstviewTrash.FullRowSelect = true;
+            lstviewTrash.MultiSelect = true;
+            lstviewTrash.Scrollable = true;
+            lstviewTrash.HideSelection = false;
+            lstviewTrash.Columns.Clear();
+            lstviewTrash.Columns.Add("FileName", Math.Max(1, lstviewTrash.ClientSize.Width - 4));
+            lstviewTrash.EndUpdate();
+
+            lstviewTrash.Resize += (s, e) =>
+            {
+                if (lstviewTrash.Columns.Count > 0)
+                {
+                    lstviewTrash.Columns[0].Width = Math.Max(1, lstviewTrash.ClientSize.Width - 4);
+                }
+            };
+        }
+
         private void SetListViewName(string text)
         {
             lblLstVwName.Text = text;
@@ -260,7 +794,8 @@ namespace AD_AI_LearningData_Editor
 
         private void btnSetInterval_Click(object sender, EventArgs e)
         {
-            if (slideImages.Count == 0)
+            List<string> activeImages = GetActiveImageList();
+            if (activeImages.Count == 0)
             {
                 ResetSelectedInterval();
                 return;
@@ -271,11 +806,15 @@ namespace AD_AI_LearningData_Editor
                 ResetSelectedInterval();
             }
 
-            intervalPointIndices.Add(currentSlideIndex);
+            int selectedIndex = Math.Max(
+                0,
+                Math.Min(sdrSeekBar.Value, activeImages.Count - 1));
+
+            intervalPointIndices.Add(selectedIndex);
 
             if (intervalPointIndices.Count == 1)
             {
-                int displayIndex = currentSlideIndex + 1;
+                int displayIndex = GetDisplayIndexAt(activeImages, selectedIndex);
                 SetIntervalLabelText($"({displayIndex}~ )");
                 return;
             }
@@ -286,15 +825,16 @@ namespace AD_AI_LearningData_Editor
             selectedIntervalStartIndex = Math.Min(first, second);
             selectedIntervalEndIndex = Math.Max(first, second);
 
-            SetIntervalLabelText($"({selectedIntervalStartIndex + 1}~{selectedIntervalEndIndex + 1})");
+            SetIntervalLabelText($"({GetDisplayIndexAt(activeImages, selectedIntervalStartIndex)}~{GetDisplayIndexAt(activeImages, selectedIntervalEndIndex)})");
             SelectIntervalItemsInListView();
         }
 
         private bool HasSelectedInterval()
         {
+            List<string> activeImages = GetActiveImageList();
             return selectedIntervalStartIndex >= 0 &&
                    selectedIntervalEndIndex >= selectedIntervalStartIndex &&
-                   selectedIntervalStartIndex < slideImages.Count;
+                   selectedIntervalStartIndex < activeImages.Count;
         }
 
         private void ResetSelectedInterval()
@@ -352,6 +892,7 @@ namespace AD_AI_LearningData_Editor
         private List<string> GetIntervalImageFiles()
         {
             List<string> targets = new List<string>();
+            List<string> activeImages = GetActiveImageList();
 
             if (!HasSelectedInterval())
             {
@@ -359,11 +900,11 @@ namespace AD_AI_LearningData_Editor
             }
 
             int start = Math.Max(0, selectedIntervalStartIndex);
-            int end = Math.Min(slideImages.Count - 1, selectedIntervalEndIndex);
+            int end = Math.Min(activeImages.Count - 1, selectedIntervalEndIndex);
 
             for (int i = start; i <= end; i++)
             {
-                string path = slideImages[i];
+                string path = activeImages[i];
 
                 if (File.Exists(path) && IsImageFile(path))
                 {
@@ -377,7 +918,7 @@ namespace AD_AI_LearningData_Editor
         private List<string> GetSelectedListViewImageFiles()
         {
             List<string> targets = new List<string>();
-            string uploadFolder = GetUploadedFolder();
+            string dataFolder = GetUploadedDataFolder();
 
             if (lstviewFileListD.SelectedItems.Count == 0)
             {
@@ -386,8 +927,12 @@ namespace AD_AI_LearningData_Editor
 
             foreach (ListViewItem item in lstviewFileListD.SelectedItems)
             {
-                string name = item.Text.Replace("[폴더] ", "");
-                string path = Path.Combine(uploadFolder, name);
+                string path = item.Tag as string;
+
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    path = Path.Combine(dataFolder, item.Text);
+                }
 
                 if (File.Exists(path) && IsImageFile(path))
                 {
@@ -400,17 +945,9 @@ namespace AD_AI_LearningData_Editor
                 .ToList();
         }
 
+
         private List<string> GetTargetImageFilesForEdit()
         {
-            // 편집 대상 우선순위:
-            // 1) btnSetInterval로 두 지점을 찍어 만든 구간 전체
-            // 2) btnSetInterval로 한 지점만 찍은 경우 그 한 장
-            // 3) lstviewFileListD에서 사용자가 선택한 이미지
-            // 4) 아무 범위/선택이 없으면 현재 슬라이드 한 장
-            //
-            // 기존처럼 UploadedFile 전체를 기본 대상으로 삼지 않습니다.
-            // 수천~수만 장을 실수로 한 번에 편집해서 프로그램이 멈추는 문제를 막기 위한 처리입니다.
-
             List<string> intervalTargets = GetIntervalImageFiles();
 
             if (intervalTargets.Count > 0)
@@ -418,11 +955,11 @@ namespace AD_AI_LearningData_Editor
                 return intervalTargets;
             }
 
-            List<string> singleIntervalPointTargets = GetSingleIntervalPointImageFiles();
+            List<string> singlePointTargets = GetSingleIntervalPointImageFiles();
 
-            if (singleIntervalPointTargets.Count > 0)
+            if (singlePointTargets.Count > 0)
             {
-                return singleIntervalPointTargets;
+                return singlePointTargets;
             }
 
             List<string> selectedTargets = GetSelectedListViewImageFiles();
@@ -438,6 +975,7 @@ namespace AD_AI_LearningData_Editor
         private List<string> GetSingleIntervalPointImageFiles()
         {
             List<string> targets = new List<string>();
+            List<string> activeImages = GetActiveImageList();
 
             if (HasSelectedInterval())
             {
@@ -451,12 +989,12 @@ namespace AD_AI_LearningData_Editor
 
             int index = intervalPointIndices[0];
 
-            if (index < 0 || index >= slideImages.Count)
+            if (index < 0 || index >= activeImages.Count)
             {
                 return targets;
             }
 
-            string path = slideImages[index];
+            string path = activeImages[index];
 
             if (File.Exists(path) && IsImageFile(path))
             {
@@ -490,6 +1028,7 @@ namespace AD_AI_LearningData_Editor
             return targets;
         }
 
+
         private void SelectIntervalItemsInListView()
         {
             if (!HasSelectedInterval())
@@ -497,20 +1036,336 @@ namespace AD_AI_LearningData_Editor
                 return;
             }
 
-            HashSet<string> selectedNames = new HashSet<string>(
-                GetIntervalImageFiles().Select(path => Path.GetFileName(path)),
+            ListView activeListView = IsTrashListMode() ? lstviewTrash : lstviewFileListD;
+            HashSet<string> selectedPaths = new HashSet<string>(
+                GetIntervalImageFiles().Select(path => Path.GetFullPath(path)),
                 StringComparer.OrdinalIgnoreCase
             );
 
-            lstviewFileListD.BeginUpdate();
+            activeListView.BeginUpdate();
+            isUpdatingListSelection = true;
 
-            foreach (ListViewItem item in lstviewFileListD.Items)
+            foreach (ListViewItem item in activeListView.Items)
             {
-                item.Selected = selectedNames.Contains(item.Text);
+                string path = item.Tag as string;
+                item.Selected = !string.IsNullOrWhiteSpace(path) &&
+                    selectedPaths.Contains(Path.GetFullPath(path));
             }
 
-            lstviewFileListD.EndUpdate();
+            isUpdatingListSelection = false;
+            activeListView.EndUpdate();
         }
+
+        private List<string> GetActiveImageList()
+        {
+            return IsTrashListMode() ? trashImages : slideImages;
+        }
+
+        private int GetDisplayIndexAt(List<string> images, int listIndex)
+        {
+            if (images == null || listIndex < 0 || listIndex >= images.Count)
+            {
+                return listIndex;
+            }
+
+            int imageIndex = ExtractImageIndexFromFileName(images[listIndex]);
+            return imageIndex >= 0 ? imageIndex : listIndex;
+        }
+
+        private void InitializeListViewSelectionPersistence()
+        {
+            if (lstviewFileListD != null)
+            {
+                lstviewFileListD.HideSelection = false;
+                lstviewFileListD.MouseDown -= lstviewFileListD_MouseDown;
+                lstviewFileListD.MouseDown += lstviewFileListD_MouseDown;
+                lstviewFileListD.SelectedIndexChanged += lstviewFileListD_SelectedIndexChangedForPersistence;
+            }
+
+            if (lstviewTrash != null)
+            {
+                lstviewTrash.HideSelection = false;
+                lstviewTrash.MouseDown -= lstviewTrash_MouseDown;
+                lstviewTrash.MouseDown += lstviewTrash_MouseDown;
+                lstviewTrash.SelectedIndexChanged += lstviewTrash_SelectedIndexChangedForPersistence;
+            }
+        }
+
+        private void lstviewFileListD_MouseDown(object sender, MouseEventArgs e)
+        {
+            PrepareManualListSelection(lstviewFileListD, preservedFileListSelection);
+        }
+
+        private void lstviewTrash_MouseDown(object sender, MouseEventArgs e)
+        {
+            PrepareManualListSelection(lstviewTrash, preservedTrashSelection);
+        }
+
+        private void PrepareManualListSelection(ListView listView, HashSet<string> preservedSelection)
+        {
+            if (listView == null || (!HasSelectedInterval() && intervalPointIndices.Count == 0))
+            {
+                return;
+            }
+
+            try
+            {
+                isUpdatingListSelection = true;
+                ResetSelectedInterval();
+                preservedSelection?.Clear();
+                listView.SelectedItems.Clear();
+            }
+            finally
+            {
+                isUpdatingListSelection = false;
+            }
+        }
+
+        private void lstviewFileListD_SelectedIndexChangedForPersistence(object sender, EventArgs e)
+        {
+            if (isUpdatingListSelection)
+            {
+                return;
+            }
+
+            ClearIntervalForManualListSelection(lstviewFileListD);
+            SaveListViewSelection(lstviewFileListD, preservedFileListSelection);
+            UpdateIntervalLabelFromListViewSelection(lstviewFileListD);
+            MoveToUploadedSelection();
+        }
+
+        private void lstviewTrash_SelectedIndexChangedForPersistence(object sender, EventArgs e)
+        {
+            if (isUpdatingListSelection)
+            {
+                return;
+            }
+
+            ClearIntervalForManualListSelection(lstviewTrash);
+            SaveListViewSelection(lstviewTrash, preservedTrashSelection);
+            UpdateIntervalLabelFromListViewSelection(lstviewTrash);
+            MoveToTrashSelection();
+        }
+
+        private void ClearIntervalForManualListSelection(ListView listView)
+        {
+            if (listView == null || listView.SelectedItems.Count == 0)
+            {
+                return;
+            }
+
+            if (HasSelectedInterval() || intervalPointIndices.Count > 0)
+            {
+                ResetSelectedInterval();
+            }
+        }
+
+        private void SaveListViewSelection(ListView listView, HashSet<string> storage)
+        {
+            if (listView == null || storage == null)
+            {
+                return;
+            }
+
+            storage.Clear();
+
+            foreach (ListViewItem item in listView.SelectedItems)
+            {
+                storage.Add(item.Text);
+            }
+        }
+
+        private void RestoreListViewSelection(ListView listView, HashSet<string> storage)
+        {
+            if (listView == null || storage == null || storage.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                isUpdatingListSelection = true;
+
+                foreach (ListViewItem item in listView.Items)
+                {
+                    item.Selected = storage.Contains(item.Text);
+                }
+            }
+            finally
+            {
+                isUpdatingListSelection = false;
+            }
+        }
+
+        private void ClearAllListViewSelections()
+        {
+            preservedFileListSelection.Clear();
+            preservedTrashSelection.Clear();
+
+            if (lstviewFileListD != null)
+            {
+                lstviewFileListD.SelectedItems.Clear();
+            }
+
+            if (lstviewTrash != null)
+            {
+                lstviewTrash.SelectedItems.Clear();
+            }
+        }
+
+        private void MoveToUploadedSelection()
+        {
+            if (lstviewFileListD == null || lstviewFileListD.SelectedItems.Count == 0 || slideImages.Count == 0)
+            {
+                return;
+            }
+
+            string selectedPath = lstviewFileListD.SelectedItems[0].Tag as string;
+            int index = FindImageIndexInList(slideImages, selectedPath);
+
+            if (index < 0)
+            {
+                return;
+            }
+
+            currentSlideIndex = index;
+            try
+            {
+                suppressListSelectionSync = true;
+                UpdateSlideDisplay();
+            }
+            finally
+            {
+                suppressListSelectionSync = false;
+            }
+        }
+
+        private void MoveToTrashSelection()
+        {
+            if (lstviewTrash == null || lstviewTrash.SelectedItems.Count == 0 || trashImages.Count == 0)
+            {
+                return;
+            }
+
+            string selectedPath = lstviewTrash.SelectedItems[0].Tag as string;
+            int index = FindImageIndexInList(trashImages, selectedPath);
+
+            if (index < 0)
+            {
+                return;
+            }
+
+            currentTrashIndex = index;
+            UpdateTrashDisplay();
+        }
+
+        private int FindImageIndexInList(List<string> images, string selectedPath)
+        {
+            if (images == null || string.IsNullOrWhiteSpace(selectedPath))
+            {
+                return -1;
+            }
+
+            string fullSelectedPath = Path.GetFullPath(selectedPath);
+
+            for (int i = 0; i < images.Count; i++)
+            {
+                try
+                {
+                    if (string.Equals(Path.GetFullPath(images[i]), fullSelectedPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return i;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return -1;
+        }
+
+        private void SelectListViewItemByPath(ListView listView, string imagePath)
+        {
+            SelectListViewItemByPath(listView, imagePath, true);
+        }
+
+        private void SelectListViewItemByPath(ListView listView, string imagePath, bool ensureVisible)
+        {
+            if (listView == null || string.IsNullOrWhiteSpace(imagePath))
+            {
+                return;
+            }
+
+            string fullImagePath = Path.GetFullPath(imagePath);
+
+            try
+            {
+                isUpdatingListSelection = true;
+
+                foreach (ListViewItem item in listView.Items)
+                {
+                    string itemPath = item.Tag as string;
+                    bool selected = !string.IsNullOrWhiteSpace(itemPath) &&
+                        string.Equals(Path.GetFullPath(itemPath), fullImagePath, StringComparison.OrdinalIgnoreCase);
+
+                    item.Selected = selected;
+                    if (selected)
+                    {
+                        item.Focused = true;
+                        if (ensureVisible)
+                        {
+                            item.EnsureVisible();
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                isUpdatingListSelection = false;
+            }
+        }
+
+        private void UpdateIntervalLabelFromListViewSelection(ListView listView)
+        {
+            if (listView == null || listView.SelectedItems.Count == 0)
+            {
+                return;
+            }
+
+            List<int> indexes = new List<int>();
+
+            foreach (ListViewItem item in listView.SelectedItems)
+            {
+                int index = ExtractImageIndexFromFileName(item.Text);
+
+                if (index >= 0)
+                {
+                    indexes.Add(index);
+                }
+            }
+
+            if (indexes.Count == 0)
+            {
+                return;
+            }
+
+            int min = indexes.Min();
+            int max = indexes.Max();
+
+            if (min == max)
+            {
+                SetIntervalLabelText("(" + min.ToString() + ")");
+            }
+            else
+            {
+                SetIntervalLabelText("(" + min.ToString() + "~" + max.ToString() + ")");
+            }
+        }
+
+        #endregion
+
+        #region Playback Speed And Image Editing
 
         private void InitializeSpeedController()
         {
@@ -580,8 +1435,15 @@ namespace AD_AI_LearningData_Editor
 
             if (speed > 0 && videoTimer != null)
             {
-                videoTimer.Interval = Math.Max(1, (int)(33 / speed));
+                videoTimer.Interval = GetPlaybackIntervalForSpeed(speed);
             }
+        }
+
+        internal static int GetPlaybackIntervalForSpeed(double speed)
+        {
+            return speed > 0
+                ? Math.Max(1, (int)(67 / speed))
+                : 67;
         }
 
         private void InitializeImageEditor()
@@ -601,7 +1463,6 @@ namespace AD_AI_LearningData_Editor
 
             btnNoise.Click += btnNoise_Click;
             btnMirror.Click += btnMirror_Click;
-            btnMirrorY.Click += btnMirrorY_Click;
 
             btnROILU.Click += (s, e) => ApplyROIBlackoutToAllImages(0, 0);
             btnROIU.Click += (s, e) => ApplyROIBlackoutToAllImages(0, 1);
@@ -633,6 +1494,12 @@ namespace AD_AI_LearningData_Editor
 
         private void ShowPropertyPanel(Control activeControl)
         {
+            if (pnlColorProperty.Visible && activeControl != pnlColorProperty)
+            {
+                CommitColorFilterPreview();
+                ResetPaletteStatus();
+            }
+
             pnlContrastProperty.Visible = activeControl == pnlContrastProperty;
             pnlROI.Visible = activeControl == pnlROI;
             pnlColorProperty.Visible = activeControl == pnlColorProperty;
@@ -642,6 +1509,12 @@ namespace AD_AI_LearningData_Editor
 
         private void HidePropertyPanels()
         {
+            if (pnlColorProperty.Visible)
+            {
+                CommitColorFilterPreview();
+                ResetPaletteStatus();
+            }
+
             pnlContrastProperty.Visible = false;
             pnlROI.Visible = false;
             pnlColorProperty.Visible = false;
@@ -650,17 +1523,9 @@ namespace AD_AI_LearningData_Editor
 
         private List<string> GetUploadedImageFiles()
         {
-            string uploadFolder = GetUploadedFolder();
-            if (!Directory.Exists(uploadFolder)) return new List<string>();
-
-            return Directory.GetFiles(uploadFolder)
-                .Where(path => imageExtensions.Contains(Path.GetExtension(path)))
-                .Where(path => !path.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !path.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !Path.GetFileNameWithoutExtension(path).EndsWith("-Temp", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(path => File.GetCreationTime(path))
-                .ToList();
+            return GetVisibleImageFiles();
         }
+
 
         private bool IsImageFile(string path)
         {
@@ -721,6 +1586,7 @@ namespace AD_AI_LearningData_Editor
                 Bitmap targetBitmap = null;
                 try
                 {
+                    EnsureEditCancelBackupForFile(targetPath);
                     targetBitmap = LoadBitmapWithoutLock(targetPath);
                     modifyAction(targetBitmap, targetPath);
                     SaveBitmapToPath(targetBitmap, targetPath);
@@ -807,10 +1673,174 @@ namespace AD_AI_LearningData_Editor
 
         private void btnMirror_Click(object sender, EventArgs e)
         {
-            ModifyAllUploadedImages((bmp, path) =>
+            List<string> targets = GetTargetImageFilesForEdit();
+            if (targets.Count == 0) return;
+
+            int restoreIndex = GetFirstTargetSlideIndex(targets);
+
+            ReleaseCurrentImage();
+
+            foreach (string targetPath in targets)
             {
-                bmp.RotateFlip(RotateFlipType.RotateNoneFlipX);
-            });
+                Bitmap targetBitmap = null;
+                try
+                {
+                    EnsureEditCancelBackupForFile(targetPath);
+                    targetBitmap = LoadBitmapWithoutLock(targetPath);
+                    targetBitmap.RotateFlip(RotateFlipType.RotateNoneFlipX);
+                    SaveBitmapToPath(targetBitmap, targetPath);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"좌우 반전 중 오류가 발생했습니다.\n{Path.GetFileName(targetPath)}\n{ex.Message}");
+                }
+                finally
+                {
+                    if (targetBitmap != null) targetBitmap.Dispose();
+                }
+            }
+
+            FlipCatalogAngleSignsForImages(targets);
+
+            LoadUploadedFilesToD();
+            MoveToSlideIndexAfterEdit(restoreIndex);
+            SelectIntervalItemsInListView();
+        }
+
+        private void FlipCatalogAngleSignsForImages(List<string> targetImagePaths)
+        {
+            if (targetImagePaths == null || targetImagePaths.Count == 0)
+            {
+                return;
+            }
+
+            string dataFolder = GetUploadedDataFolder();
+            if (!Directory.Exists(dataFolder))
+            {
+                return;
+            }
+
+            HashSet<string> targetNames = new HashSet<string>(
+                targetImagePaths.Select(path => NormalizeDrivingImageName(Path.GetFileName(path))),
+                StringComparer.OrdinalIgnoreCase);
+
+            HashSet<string> targetIndexes = new HashSet<string>(
+                targetImagePaths
+                    .Select(path => ExtractLeadingNumber(NormalizeDrivingImageName(Path.GetFileName(path))))
+                    .Where(index => !string.IsNullOrWhiteSpace(index)),
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (string catalogFile in GetFilesSafe(dataFolder, "catalog_*.catalog", SearchOption.AllDirectories))
+            {
+                bool changed = false;
+                string[] lines;
+
+                try
+                {
+                    lines = File.ReadAllLines(catalogFile);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string updatedLine = TryFlipCatalogAngleLine(lines[i], targetNames, targetIndexes);
+
+                    if (!string.Equals(updatedLine, lines[i], StringComparison.Ordinal))
+                    {
+                        lines[i] = updatedLine;
+                        changed = true;
+                    }
+                }
+
+                if (!changed)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    EnsureEditCancelBackupForFile(catalogFile);
+                    File.WriteAllLines(catalogFile, lines);
+                }
+                catch
+                {
+                }
+            }
+
+            drivingInfoCache.Clear();
+            drivingInfoCacheSignature = "";
+            drivingInfoCacheTime = DateTime.MinValue;
+        }
+
+        private string TryFlipCatalogAngleLine(
+            string line,
+            HashSet<string> targetNames,
+            HashSet<string> targetIndexes)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                return line;
+            }
+
+            try
+            {
+                JsonNode node = JsonNode.Parse(line);
+                if (node is not JsonObject obj)
+                {
+                    return line;
+                }
+
+                string imageName = "";
+                if (obj.TryGetPropertyValue("cam/image_array", out JsonNode imageNode) && imageNode != null)
+                {
+                    imageName = NormalizeDrivingImageName(Path.GetFileName(imageNode.ToString().Replace("\\", "/")));
+                }
+
+                string index = "";
+                if (obj.TryGetPropertyValue("_index", out JsonNode indexNode) && indexNode != null)
+                {
+                    index = indexNode.ToString();
+                }
+
+                bool matchesTarget =
+                    (!string.IsNullOrWhiteSpace(imageName) && targetNames.Contains(imageName)) ||
+                    (!string.IsNullOrWhiteSpace(index) && targetIndexes.Contains(index));
+
+                if (!matchesTarget)
+                {
+                    return line;
+                }
+
+                if (!obj.TryGetPropertyValue("user/angle", out JsonNode angleNode) || angleNode == null)
+                {
+                    return line;
+                }
+
+                if (!double.TryParse(angleNode.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double angle))
+                {
+                    return line;
+                }
+
+                double flippedAngle = -angle;
+
+                if (angleNode is JsonValue && angleNode.GetValueKind() == JsonValueKind.String)
+                {
+                    obj["user/angle"] = flippedAngle.ToString("G17", CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    obj["user/angle"] = flippedAngle;
+                }
+
+                return obj.ToJsonString();
+            }
+            catch
+            {
+                return line;
+            }
         }
 
         private void btnMirrorY_Click(object sender, EventArgs e)
@@ -833,6 +1863,7 @@ namespace AD_AI_LearningData_Editor
                 {
                     foreach (string targetPath in targets)
                     {
+                        EnsureEditCancelBackupForFile(targetPath);
                         string backupPath = Path.Combine(backupFolder, Path.GetFileName(targetPath));
 
                         if (!File.Exists(backupPath))
@@ -904,6 +1935,7 @@ namespace AD_AI_LearningData_Editor
 
             foreach (string targetPath in targets)
             {
+                EnsureEditCancelBackupForFile(targetPath);
                 string backupPath = targetPath + ".roiback";
                 Bitmap compositeBmp = null;
 
@@ -968,6 +2000,8 @@ namespace AD_AI_LearningData_Editor
             {
                 try
                 {
+                    EnsureEditCancelBackupForFile(targetPath);
+
                     if (!gammaBackupPaths.ContainsKey(targetPath) || !File.Exists(gammaBackupPaths[targetPath]))
                     {
                         string backupPath = targetPath + ".gback";
@@ -1030,6 +2064,19 @@ namespace AD_AI_LearningData_Editor
 
         private void HandlePaletteClick(int filterType, Button targetButton)
         {
+            List<string> targets = GetTargetImageFilesForEdit();
+            if (targets.Count == 0)
+            {
+                return;
+            }
+
+            if (isColorFilterPreviewActive)
+            {
+                RestoreColorFilterPreview(deletePreviewFiles: false);
+            }
+
+            CreateColorFilterPreviewBackups(targets);
+
             activePaletteButton = targetButton;
             ResetPaletteStatus();
             activePaletteButton = targetButton;
@@ -1116,14 +2163,33 @@ namespace AD_AI_LearningData_Editor
 
         private void btnColorCfm_Click(object sender, EventArgs e)
         {
+            CommitColorFilterPreview();
             ResetPaletteStatus();
-            LoadUploadedFilesToD();
+            RefreshUploadedFilesPreservingCurrentSlide();
+            ClosePropertyPanelsWithoutColorDecision();
         }
 
         private void btnColorCancle_Click(object sender, EventArgs e)
         {
+            CancelColorFilterPreviewForCurrentSelection();
             ResetPaletteStatus();
+            RefreshUploadedFilesPreservingCurrentSlide();
+            ClosePropertyPanelsWithoutColorDecision();
+        }
+
+        private void RefreshUploadedFilesPreservingCurrentSlide()
+        {
+            int restoreIndex = Math.Max(0, currentSlideIndex);
             LoadUploadedFilesToD();
+            MoveToSlideIndexAfterEdit(restoreIndex);
+        }
+
+        private void ClosePropertyPanelsWithoutColorDecision()
+        {
+            pnlContrastProperty.Visible = false;
+            pnlROI.Visible = false;
+            pnlColorProperty.Visible = false;
+            crdProperty.Visible = true;
         }
 
         private void ResetPaletteStatus()
@@ -1134,6 +2200,408 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        private void CreateColorFilterPreviewBackups(List<string> targets)
+        {
+            string dataFolder = GetUploadedDataFolder();
+            string tempFolder = GetColorTempFolder();
+
+            foreach (string targetPath in targets)
+            {
+                if (string.IsNullOrWhiteSpace(targetPath) || !File.Exists(targetPath))
+                {
+                    continue;
+                }
+
+                string relativePath = GetRelativePathFromBase(dataFolder, targetPath);
+                string backupPath = Path.Combine(tempFolder, relativePath);
+                string backupDirectory = Path.GetDirectoryName(backupPath);
+                if (!string.IsNullOrWhiteSpace(backupDirectory))
+                {
+                    Directory.CreateDirectory(backupDirectory);
+                }
+
+                File.Copy(targetPath, backupPath, true);
+                colorFilterPreviewTargets.Add(targetPath);
+            }
+
+            isColorFilterPreviewActive = colorFilterPreviewTargets.Count > 0;
+        }
+
+        private void RestoreColorFilterPreview(bool deletePreviewFiles)
+        {
+            RestoreColorFilterPreview(deletePreviewFiles, colorFilterPreviewTargets);
+        }
+
+        private void RestoreColorFilterPreview(bool deletePreviewFiles, IEnumerable<string> restoreTargets)
+        {
+            if (!isColorFilterPreviewActive && colorFilterPreviewTargets.Count == 0)
+            {
+                return;
+            }
+
+            string dataFolder = GetUploadedDataFolder();
+            string tempFolder = GetColorTempFolder();
+            HashSet<string> restoreSet = new HashSet<string>(
+                (restoreTargets ?? Enumerable.Empty<string>())
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => Path.GetFullPath(path)),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (restoreSet.Count == 0)
+            {
+                restoreSet.UnionWith(
+                    colorFilterPreviewTargets
+                        .Where(path => !string.IsNullOrWhiteSpace(path))
+                        .Select(path => Path.GetFullPath(path)));
+            }
+
+            ReleaseCurrentImage();
+
+            foreach (string targetPath in colorFilterPreviewTargets.ToList())
+            {
+                try
+                {
+                    if (!restoreSet.Contains(Path.GetFullPath(targetPath)))
+                    {
+                        continue;
+                    }
+
+                    string relativePath = GetRelativePathFromBase(dataFolder, targetPath);
+                    string backupPath = Path.Combine(tempFolder, relativePath);
+                    if (File.Exists(backupPath))
+                    {
+                        File.Copy(backupPath, targetPath, true);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            if (deletePreviewFiles)
+            {
+                ClearColorFilterPreviewState();
+            }
+        }
+
+        private void CommitColorFilterPreview()
+        {
+            ClearColorFilterPreviewState();
+        }
+
+        private void CancelColorFilterPreview()
+        {
+            RestoreColorFilterPreview(deletePreviewFiles: true);
+            ResetPaletteStatus();
+        }
+
+        private void CancelColorFilterPreviewForCurrentSelection()
+        {
+            List<string> currentTargets = GetTargetImageFilesForEdit();
+            HashSet<string> previewTargets = new HashSet<string>(
+                colorFilterPreviewTargets
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => Path.GetFullPath(path)),
+                StringComparer.OrdinalIgnoreCase);
+
+            List<string> selectedPreviewTargets = currentTargets
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Where(path => previewTargets.Contains(Path.GetFullPath(path)))
+                .ToList();
+
+            if (selectedPreviewTargets.Count > 0)
+            {
+                RestoreColorFilterPreview(deletePreviewFiles: true, selectedPreviewTargets);
+            }
+            else
+            {
+                ClearColorFilterPreviewState();
+            }
+
+            ResetPaletteStatus();
+        }
+
+        private void ClearColorFilterPreviewState()
+        {
+            try
+            {
+                string tempFolder = GetColorTempFolder();
+                if (Directory.Exists(tempFolder))
+                {
+                    Directory.Delete(tempFolder, true);
+                }
+            }
+            catch
+            {
+            }
+
+            colorFilterPreviewTargets.Clear();
+            isColorFilterPreviewActive = false;
+        }
+
+        #endregion
+
+        #region Bulk Selection And Edit Rollback
+
+
+        private void RegisterSelectAllButton()
+        {
+            Control button = this.Controls.Find("btnSelctAll", true).FirstOrDefault();
+
+            if (button != null)
+            {
+                button.Click -= btnSelctAll_Click;
+                button.Click += btnSelctAll_Click;
+            }
+        }
+
+        private void btnSelctAll_Click(object sender, EventArgs e)
+        {
+            SelectAllUploadedSlideImages();
+        }
+
+        private void SelectAllUploadedSlideImages()
+        {
+            if (slideImages == null || slideImages.Count == 0)
+            {
+                ResetSelectedInterval();
+                return;
+            }
+
+            intervalPointIndices.Clear();
+            intervalPointIndices.Add(0);
+            intervalPointIndices.Add(slideImages.Count - 1);
+
+            selectedIntervalStartIndex = 0;
+            selectedIntervalEndIndex = slideImages.Count - 1;
+
+            int firstDisplayIndex = GetDisplayIndexAt(slideImages, 0);
+            int lastDisplayIndex = GetDisplayIndexAt(slideImages, slideImages.Count - 1);
+
+            SetIntervalLabelText("(" + firstDisplayIndex.ToString() + "~" + lastDisplayIndex.ToString() + ")");
+
+            preservedFileListSelection.Clear();
+
+            if (lstviewFileListD != null)
+            {
+                try
+                {
+                    isUpdatingListSelection = true;
+                    lstviewFileListD.BeginUpdate();
+                    lstviewFileListD.SelectedItems.Clear();
+                }
+                finally
+                {
+                    lstviewFileListD.EndUpdate();
+                    isUpdatingListSelection = false;
+                }
+            }
+        }
+
+        private void RegisterEditCancelButton()
+        {
+            Control button = this.Controls.Find("btnEditCncl", true).FirstOrDefault();
+
+            if (button != null)
+            {
+                button.Click -= btnEditCncl_Click;
+                button.Click += btnEditCncl_Click;
+            }
+        }
+
+        private void EnsureEditCancelBackupForFile(string targetPath)
+        {
+            if (string.IsNullOrWhiteSpace(targetPath) || !File.Exists(targetPath) || isEditCancelRestoring)
+            {
+                return;
+            }
+
+            try
+            {
+                string backupFolder = GetEditCancelBackupFolder();
+                string relativePath = GetRelativePathFromBase(GetUploadedDataFolder(), targetPath);
+                string backupPath = Path.Combine(backupFolder, relativePath);
+                string backupDirectory = Path.GetDirectoryName(backupPath);
+
+                if (!Directory.Exists(backupDirectory))
+                {
+                    Directory.CreateDirectory(backupDirectory);
+                }
+
+                if (!File.Exists(backupPath))
+                {
+                    File.Copy(targetPath, backupPath, true);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+
+        private void RestoreEditCancelBackups()
+        {
+            string backupFolder = Path.Combine(GetBinFolder(), editCancelBackupFolderName);
+
+            if (!Directory.Exists(backupFolder))
+            {
+                MessageBox.Show("취소할 이미지 편집 내용이 없습니다.");
+                return;
+            }
+
+            List<string> targets = GetTargetImageFilesForEdit();
+
+            if (targets == null || targets.Count == 0)
+            {
+                MessageBox.Show("편집을 취소할 선택 이미지가 없습니다.");
+                return;
+            }
+
+            string dataFolder = GetUploadedDataFolder();
+            int restoredCount = 0;
+
+            try
+            {
+                isEditCancelRestoring = true;
+                ReleaseCurrentImage();
+
+                foreach (string targetPath in targets)
+                {
+                    string relativePath = GetRelativePathFromBase(dataFolder, targetPath);
+                    string backupPath = Path.Combine(backupFolder, relativePath);
+
+                    if (!File.Exists(backupPath))
+                    {
+                        // 이전 버전 백업은 파일 이름만으로 저장되어 있을 수 있으므로 한 번 더 확인합니다.
+                        backupPath = Path.Combine(backupFolder, Path.GetFileName(targetPath));
+                    }
+
+                    if (!File.Exists(backupPath))
+                    {
+                        continue;
+                    }
+
+                    File.Copy(backupPath, targetPath, true);
+                    restoredCount++;
+
+                    try
+                    {
+                        File.Delete(backupPath);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                RestoreNonImageEditBackupsIfAny(backupFolder, dataFolder);
+
+                DeleteEmptyDirectories(backupFolder);
+
+                if (Directory.Exists(backupFolder) &&
+                    Directory.GetFiles(backupFolder, "*.*", SearchOption.AllDirectories).Length == 0)
+                {
+                    Directory.Delete(backupFolder, true);
+                }
+
+                gammaBackupPaths.Clear();
+                trcbrContrastProperty.Value = 0;
+                CancelColorFilterPreview();
+                Array.Clear(roiState, 0, roiState.Length);
+
+                int restoreIndex = currentSlideIndex;
+                LoadUploadedFilesToD();
+                MoveToSlideIndexAfterEdit(restoreIndex);
+                LoadTrashCanFiles();
+
+                if (restoredCount == 0)
+                {
+                    MessageBox.Show("선택된 이미지에 대해 취소할 편집 백업이 없습니다.");
+                }
+                else
+                {
+                    MessageBox.Show("선택된 이미지의 편집 변경사항을 취소했습니다.\n삭제 제외 인덱스는 유지됩니다.");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("편집 취소 중 오류가 발생했습니다.\n" + ex.Message);
+            }
+            finally
+            {
+                isEditCancelRestoring = false;
+            }
+        }
+
+        private void RestoreNonImageEditBackupsIfAny(string backupFolder, string dataFolder)
+        {
+            try
+            {
+                foreach (string backupPath in Directory.GetFiles(backupFolder, "*.*", SearchOption.AllDirectories))
+                {
+                    if (IsImageFile(backupPath))
+                    {
+                        continue;
+                    }
+
+                    string relativePath = GetRelativePathFromBase(backupFolder, backupPath);
+                    string targetPath = Path.Combine(dataFolder, relativePath);
+                    string targetDirectory = Path.GetDirectoryName(targetPath);
+
+                    if (!Directory.Exists(targetDirectory))
+                    {
+                        Directory.CreateDirectory(targetDirectory);
+                    }
+
+                    File.Copy(backupPath, targetPath, true);
+
+                    try
+                    {
+                        File.Delete(backupPath);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void DeleteEmptyDirectories(string rootFolder)
+        {
+            if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder))
+            {
+                return;
+            }
+
+            foreach (string directory in Directory.GetDirectories(rootFolder, "*", SearchOption.AllDirectories)
+                .OrderByDescending(path => path.Length))
+            {
+                try
+                {
+                    if (Directory.Exists(directory) &&
+                        Directory.GetFiles(directory).Length == 0 &&
+                        Directory.GetDirectories(directory).Length == 0)
+                    {
+                        Directory.Delete(directory);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+
+        private void btnEditCncl_Click(object sender, EventArgs e)
+        {
+            RestoreEditCancelBackups();
+        }
+
+        #endregion
+
+        #region Tooltips And Driving Value Overlay
 
         private void InitializeToolTips()
         {
@@ -1146,7 +2614,9 @@ namespace AD_AI_LearningData_Editor
 
             SetToolTipByName("btnDel", "단축키 : Del 또는 백 스페이스");
             SetToolTipByName("btnSetInterval", "현재 프레임을 구간으로 지정, 단축키 : Ctrl");
+            SetToolTipByName("btnSelctAll", "전체 프레임 선택");
             SetToolTipByName("btnSave", "변경내용 저장");
+            SetToolTipByName("btnEditCncl", "이미지 편집 변경사항 취소");
 
             SetToolTipByName("btnContrastProperty", "명암 조절");
             SetToolTipByName("btnColorProperty", "색상 필터");
@@ -1308,6 +2778,10 @@ namespace AD_AI_LearningData_Editor
             return null;
         }
 
+        #endregion
+
+        #region Uploaded Data Loading And Display
+
         private void InitializeVideoPlayer()
         {
             picVideoBox = new DoubleBufferedPictureBox();
@@ -1324,32 +2798,8 @@ namespace AD_AI_LearningData_Editor
             }
 
             videoTimer = new System.Windows.Forms.Timer();
-            videoTimer.Interval = 33;
+            videoTimer.Interval = 67;
             videoTimer.Tick += VideoTimer_Tick;
-        }
-
-        private void SetupTrashWatcher()
-        {
-            string trashFolder = GetTrashFolder();
-
-            trashWatcher = new FileSystemWatcher(trashFolder);
-            trashWatcher.EnableRaisingEvents = true;
-
-            trashWatcher.Created += TrashWatcher_Changed;
-            trashWatcher.Deleted += TrashWatcher_Changed;
-            trashWatcher.Renamed += TrashWatcher_Changed;
-        }
-
-        private void TrashWatcher_Changed(object sender, FileSystemEventArgs e)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new Action(LoadTrashCanFiles));
-            }
-            else
-            {
-                LoadTrashCanFiles();
-            }
         }
 
         public void LoadUploadedFilesToD()
@@ -1366,52 +2816,41 @@ namespace AD_AI_LearningData_Editor
             slideImages.Clear();
             currentSlideIndex = 0;
 
-            // 카탈로그/JSON 파일이 바뀌었거나 새 데이터셋을 다시 불러온 경우를 대비해
-            // angle/throttle 캐시를 비웁니다.
             drivingInfoCache.Clear();
             drivingInfoCacheSignature = "";
             drivingInfoCacheTime = DateTime.MinValue;
 
-            string targetFolder = GetUploadedFolder();
-            DirectoryInfo di = new DirectoryInfo(targetFolder);
+            string dataFolder = GetUploadedDataFolder();
+            HashSet<int> deletedIndexes = ReadDeletedIndexes();
 
-            var folders = di.GetDirectories()
-                .OrderBy(d => d.Name, new NaturalFileNameComparer())
-                .ToList();
+            FileInfo[] files = GetFilesSafe(dataFolder, "*.*", SearchOption.AllDirectories)
+                .Select(path => new FileInfo(path))
+                .Where(f => !IsTemporaryOrBackupImageFile(f.FullName))
+                .ToArray();
 
-            var files = di.GetFiles("*.*", SearchOption.AllDirectories)
-                .Where(f => !f.Name.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !f.Name.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
-                .Where(f => !f.Name.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase))
+            List<FileInfo> filesForListView = files
+                .Where(f => !IsImageFile(f.FullName) || !IsDeletedByManifest(f.FullName, deletedIndexes))
                 .Where(f => !f.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            var filesForListView = files
-                .OrderBy(f => IsImageFile(f.FullName) ? 0 : 1)
-                .ThenBy(f => GetSlideImageSortNumber(f.Name))
+                .OrderBy(f => GetSlideImageSortNumber(f.Name))
                 .ThenBy(f => GetUploadedRelativePath(f.FullName), new NaturalFileNameComparer())
                 .ToList();
 
-            foreach (var file in filesForListView)
+            foreach (FileInfo file in filesForListView)
             {
                 ListViewItem item = new ListViewItem(GetUploadedRelativePath(file.FullName));
                 item.Tag = file.FullName;
                 lstviewFileListD.Items.Add(item);
             }
 
-            foreach (var folder in folders)
-            {
-                ListViewItem item = new ListViewItem("[폴더] " + folder.Name);
-                item.Tag = "추가된파일";
-                lstviewFileListD.Items.Add(item);
-            }
-
             slideImages = files
                 .Where(f => IsImageFile(f.FullName))
+                .Where(f => !IsDeletedByManifest(f.FullName, deletedIndexes))
                 .OrderBy(f => GetSlideImageSortNumber(f.Name))
                 .ThenBy(f => GetUploadedRelativePath(f.FullName), new NaturalFileNameComparer())
                 .Select(f => f.FullName)
                 .ToList();
+
+            RestoreListViewSelection(lstviewFileListD, preservedFileListSelection);
 
             lstviewFileListD.EndUpdate();
 
@@ -1434,6 +2873,7 @@ namespace AD_AI_LearningData_Editor
             UpdatePlayStopButtonState();
         }
 
+
         private int GetSlideImageSortNumber(string fileName)
         {
             string normalizedName = NormalizeDrivingImageName(fileName);
@@ -1449,41 +2889,62 @@ namespace AD_AI_LearningData_Editor
 
         private string GetUploadedRelativePath(string path)
         {
+            return GetRelativePathFromBase(GetUploadedFolder(), path);
+        }
+
+        private string GetRelativePathFromBase(string baseFolder, string targetPath)
+        {
             try
             {
-                string uploadFolder = GetUploadedFolder();
-                string relativePath = Path.GetRelativePath(uploadFolder, path);
-                return relativePath.Replace(Path.DirectorySeparatorChar, '\\');
+                if (string.IsNullOrWhiteSpace(baseFolder) || string.IsNullOrWhiteSpace(targetPath))
+                {
+                    return Path.GetFileName(targetPath);
+                }
+
+                string fullBase = Path.GetFullPath(baseFolder)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+                string fullTarget = Path.GetFullPath(targetPath);
+
+                Uri baseUri = new Uri(fullBase);
+                Uri targetUri = new Uri(fullTarget);
+
+                string relative = Uri.UnescapeDataString(baseUri.MakeRelativeUri(targetUri).ToString());
+                relative = relative.Replace('/', Path.DirectorySeparatorChar);
+
+                if (string.IsNullOrWhiteSpace(relative) || relative.StartsWith(".."))
+                {
+                    return Path.GetFileName(targetPath);
+                }
+
+                return relative;
             }
             catch
             {
-                return Path.GetFileName(path);
+                return Path.GetFileName(targetPath);
             }
         }
 
+
         private void LoadTrashCanFiles()
         {
+            lstviewTrash.BeginUpdate();
             lstviewTrash.Items.Clear();
+            trashImages = GetDeletedImageFiles();
 
-            string trashFolder = GetTrashFolder();
-            if (!Directory.Exists(trashFolder)) return;
-
-            DirectoryInfo di = new DirectoryInfo(trashFolder);
-
-            var folders = di.GetDirectories().OrderBy(d => d.CreationTime).ToList();
-            foreach (var folder in folders)
+            foreach (string path in trashImages)
             {
-                ListViewItem item = new ListViewItem("[폴더] " + folder.Name);
-                item.Tag = "휴지통파일";
+                ListViewItem item = new ListViewItem(GetUploadedRelativePath(path));
+                item.Tag = path;
                 lstviewTrash.Items.Add(item);
             }
 
-            var files = di.GetFiles().OrderBy(f => f.CreationTime).ToList();
-            foreach (var file in files)
+            RestoreListViewSelection(lstviewTrash, preservedTrashSelection);
+            lstviewTrash.EndUpdate();
+
+            if (currentTrashIndex >= trashImages.Count)
             {
-                ListViewItem item = new ListViewItem(file.Name);
-                item.Tag = "휴지통파일";
-                lstviewTrash.Items.Add(item);
+                currentTrashIndex = Math.Max(0, trashImages.Count - 1);
             }
         }
 
@@ -1586,11 +3047,9 @@ namespace AD_AI_LearningData_Editor
 
         private void BuildDrivingInfoCacheIfNeeded()
         {
-            // 이미지명, catalog row, record JSON 형식이 섞여 들어올 수 있어 여러 포맷을 순차 파싱합니다.
-            // 파일 목록이 바뀌지 않았다면 기존 캐시를 재사용합니다.
-            string uploadFolder = GetUploadedFolder();
+            string dataFolder = GetUploadedDataFolder();
 
-            if (!Directory.Exists(uploadFolder))
+            if (!Directory.Exists(dataFolder))
             {
                 drivingInfoCache.Clear();
                 drivingInfoCacheSignature = "";
@@ -1598,7 +3057,7 @@ namespace AD_AI_LearningData_Editor
                 return;
             }
 
-            List<string> dataFiles = Directory.GetFiles(uploadFolder, "*.*", SearchOption.AllDirectories)
+            List<string> dataFiles = GetFilesSafe(dataFolder, "*.*", SearchOption.AllDirectories)
                 .Where(path =>
                     string.Equals(Path.GetExtension(path), ".json", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(Path.GetExtension(path), ".catalog", StringComparison.OrdinalIgnoreCase))
@@ -2313,10 +3772,69 @@ namespace AD_AI_LearningData_Editor
             if (currentSlideIndex >= slideImages.Count) currentSlideIndex = slideImages.Count - 1;
 
             string currentImagePath = slideImages[currentSlideIndex];
+            int currentImageIndex = GetSlideDisplayIndexAt(currentSlideIndex);
+            int maxImageIndex = GetMaxImageIndex(slideImages);
 
             isUpdatingSlider = true;
+            sdrSeekBar.RangeMin = 0;
+            sdrSeekBar.RangeMax = Math.Max(0, slideImages.Count - 1);
             sdrSeekBar.Value = currentSlideIndex;
-            sdrSeekBar.Text = $"{currentSlideIndex + 1}/{slideImages.Count}";
+            sdrSeekBar.Text = $"{currentImageIndex}/{maxImageIndex}";
+            isUpdatingSlider = false;
+
+            if (!IsTrashListMode() && !suppressListSelectionSync)
+            {
+                SelectListViewItemByPath(lstviewFileListD, currentImagePath, ShouldEnsureListItemVisible(currentSlideIndex));
+            }
+
+            if (!File.Exists(currentImagePath))
+            {
+                ReleaseCurrentImage();
+                SetTempDrivingInfoText("", "");
+                return;
+            }
+
+            ReleaseCurrentImage();
+
+            try
+            {
+                picVideoBox.Image = LoadBitmapWithoutLock(currentImagePath);
+            }
+            catch
+            {
+                SetTempDrivingInfoText("", "");
+                return;
+            }
+
+            UpdateCurrentDrivingInfo(currentImagePath);
+            UpdatePlayStopButtonState();
+        }
+
+        private void UpdateTrashDisplay()
+        {
+            if (trashImages.Count == 0)
+            {
+                ReleaseCurrentImage();
+                sdrSeekBar.RangeMin = 0;
+                sdrSeekBar.RangeMax = 0;
+                sdrSeekBar.Value = 0;
+                sdrSeekBar.Text = "휴지통 0";
+                SetTempDrivingInfoText("", "");
+                UpdatePlayStopButtonState();
+                return;
+            }
+
+            if (currentTrashIndex < 0) currentTrashIndex = 0;
+            if (currentTrashIndex >= trashImages.Count) currentTrashIndex = trashImages.Count - 1;
+
+            string currentImagePath = trashImages[currentTrashIndex];
+
+            isUpdatingSlider = true;
+            sdrSeekBar.RangeMin = 0;
+            sdrSeekBar.RangeMax = Math.Max(0, trashImages.Count - 1);
+            sdrSeekBar.Value = currentTrashIndex;
+            int displayIndex = ExtractImageIndexFromFileName(currentImagePath);
+            sdrSeekBar.Text = $"휴지통 {(displayIndex >= 0 ? displayIndex : currentTrashIndex)}";
             isUpdatingSlider = false;
 
             if (!File.Exists(currentImagePath))
@@ -2340,6 +3858,75 @@ namespace AD_AI_LearningData_Editor
 
             UpdateCurrentDrivingInfo(currentImagePath);
             UpdatePlayStopButtonState();
+        }
+
+        private int GetSlideDisplayIndexAt(int slidePosition)
+        {
+            if (slideImages == null || slidePosition < 0 || slidePosition >= slideImages.Count)
+            {
+                return Math.Max(0, slidePosition);
+            }
+
+            int imageIndex = ExtractImageIndexFromFileName(slideImages[slidePosition]);
+
+            if (imageIndex >= 0)
+            {
+                return imageIndex;
+            }
+
+            return slidePosition;
+        }
+
+        private int GetMaxImageIndex(List<string> images)
+        {
+            if (images == null || images.Count == 0)
+            {
+                return 0;
+            }
+
+            int max = 0;
+            for (int i = 0; i < images.Count; i++)
+            {
+                int imageIndex = ExtractImageIndexFromFileName(images[i]);
+                max = Math.Max(max, imageIndex >= 0 ? imageIndex : i);
+            }
+
+            return max;
+        }
+
+        private int FindImagePositionByDisplayedIndex(List<string> images, int displayedIndex)
+        {
+            if (images == null || images.Count == 0)
+            {
+                return -1;
+            }
+
+            int fallback = -1;
+            int bestDistance = int.MaxValue;
+
+            for (int i = 0; i < images.Count; i++)
+            {
+                int imageIndex = ExtractImageIndexFromFileName(images[i]);
+                if (imageIndex < 0)
+                {
+                    imageIndex = i;
+                }
+
+                if (imageIndex == displayedIndex)
+                {
+                    return i;
+                }
+
+                int distance = Math.Abs(imageIndex - displayedIndex);
+                if (distance < bestDistance ||
+                    (distance == bestDistance && imageIndex > displayedIndex && fallback >= 0))
+                {
+                    bestDistance = distance;
+                    fallback = i;
+                }
+            }
+
+            return fallback;
         }
 
 
@@ -2380,7 +3967,7 @@ namespace AD_AI_LearningData_Editor
             if (picVideoBox != null)
             {
                 picVideoBox.OverlayIcon = GetResourceImageByName("PlaySlide4655096");
-                picVideoBox.ShowOverlayIcon = !isPlaying && slideImages.Count > 0;
+                picVideoBox.ShowOverlayIcon = !isPlaying && GetActiveImageCount() > 0;
                 picVideoBox.Invalidate();
             }
         }
@@ -2441,6 +4028,10 @@ namespace AD_AI_LearningData_Editor
 
             return null;
         }
+
+        #endregion
+
+        #region Hold Buttons, Responsive Layout, And Shortcuts
 
         private void InitializeSlideHoldButtons()
         {
@@ -2569,6 +4160,22 @@ namespace AD_AI_LearningData_Editor
 
             foreach (Control control in parent.Controls)
             {
+                if (IsTopNavigationControl(control))
+                {
+                    continue;
+                }
+
+                if (IsMainTabHostControl(control))
+                {
+                    CaptureOriginalControlLayout(control);
+                    continue;
+                }
+
+                if (IsEmbeddedTabForm(control))
+                {
+                    continue;
+                }
+
                 if (!originalControlBounds.ContainsKey(control))
                 {
                     originalControlBounds.Add(control, control.Bounds);
@@ -2624,6 +4231,13 @@ namespace AD_AI_LearningData_Editor
                 }
 
                 ConfigureDrivingVisualControlLayout();
+                PositionMainTabHost();
+                PositionTopNavigationTabs();
+
+                if (topNavigationTabs != null && !topNavigationTabs.IsDisposed)
+                {
+                    topNavigationTabs.BringToFront();
+                }
             }
             finally
             {
@@ -2636,6 +4250,30 @@ namespace AD_AI_LearningData_Editor
         {
             if (control == null || control.IsDisposed)
             {
+                return;
+            }
+
+            if (IsTopNavigationControl(control))
+            {
+                PositionTopNavigationTabs();
+                return;
+            }
+
+            if (IsMainTabHostControl(control))
+            {
+                PositionMainTabHost();
+
+                foreach (Control child in control.Controls)
+                {
+                    ApplyResponsiveLayoutToControl(child, scaleX, scaleY, fontScale);
+                }
+
+                return;
+            }
+
+            if (IsEmbeddedTabForm(control))
+            {
+                control.Dock = DockStyle.Fill;
                 return;
             }
 
@@ -2673,9 +4311,36 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        private bool IsEmbeddedTabForm(Control control)
+        {
+            return control is Form form &&
+                !ReferenceEquals(form, this) &&
+                form.TopLevel == false;
+        }
+
+        private bool IsTopNavigationControl(Control control)
+        {
+            return control == topNavigationTabs ||
+                control == btnTabManager ||
+                control == btnTabTrainer ||
+                control == btnTabPilot ||
+                string.Equals(control?.Name, "topNavigationTabs", StringComparison.Ordinal);
+        }
+
+        private bool IsMainTabHostControl(Control control)
+        {
+            return control == mainTabHost ||
+                string.Equals(control?.Name, "mainTabHost", StringComparison.Ordinal);
+        }
+
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
             Keys keyCode = keyData & Keys.KeyCode;
+
+            if (activeMainTab != MainTabKind.Manager)
+            {
+                return base.ProcessCmdKey(ref msg, keyData);
+            }
 
             if (IsTextInputFocused())
             {
@@ -2759,7 +4424,8 @@ namespace AD_AI_LearningData_Editor
 
         private void btnPlayStop_Click(object sender, EventArgs e)
         {
-            if (slideImages.Count == 0)
+            int activeCount = GetActiveImageCount();
+            if (activeCount == 0)
             {
                 if (videoTimer != null && videoTimer.Enabled)
                 {
@@ -2776,7 +4442,17 @@ namespace AD_AI_LearningData_Editor
             }
             else
             {
-                if (currentSlideIndex >= slideImages.Count - 1)
+                lastPlaybackScrollBucket = -1;
+
+                if (IsTrashListMode())
+                {
+                    if (currentTrashIndex >= trashImages.Count - 1)
+                    {
+                        currentTrashIndex = 0;
+                        UpdateTrashDisplay();
+                    }
+                }
+                else if (currentSlideIndex >= slideImages.Count - 1)
                 {
                     currentSlideIndex = 0;
                     UpdateSlideDisplay();
@@ -2790,7 +4466,22 @@ namespace AD_AI_LearningData_Editor
 
         private void VideoTimer_Tick(object sender, EventArgs e)
         {
-            if (currentSlideIndex >= slideImages.Count - 1)
+            if (IsTrashListMode())
+            {
+                if (trashImages.Count == 0 || currentTrashIndex >= trashImages.Count - 1)
+                {
+                    videoTimer.Stop();
+                    UpdatePlayStopButtonState();
+                    return;
+                }
+
+                currentTrashIndex++;
+                SelectListViewItemByPath(lstviewTrash, trashImages[currentTrashIndex], ShouldEnsureListItemVisible(currentTrashIndex));
+                UpdateTrashDisplay();
+                return;
+            }
+
+            if (slideImages.Count == 0 || currentSlideIndex >= slideImages.Count - 1)
             {
                 videoTimer.Stop();
                 UpdatePlayStopButtonState();
@@ -2803,13 +4494,48 @@ namespace AD_AI_LearningData_Editor
 
         private void SdrSeekBar_onValueChanged(object sender, int newValue)
         {
-            if (isUpdatingSlider || slideImages.Count == 0) return;
-            currentSlideIndex = newValue;
+            if (isUpdatingSlider) return;
+
+            if (IsTrashListMode())
+            {
+                if (trashImages.Count == 0) return;
+
+                currentTrashIndex = newValue;
+                if (currentTrashIndex < 0) currentTrashIndex = 0;
+                if (currentTrashIndex >= trashImages.Count) currentTrashIndex = trashImages.Count - 1;
+
+                SelectListViewItemByPath(lstviewTrash, trashImages[currentTrashIndex]);
+                UpdateTrashDisplay();
+                return;
+            }
+
+            if (slideImages.Count == 0) return;
+            currentSlideIndex = Math.Max(0, Math.Min(newValue, slideImages.Count - 1));
             UpdateSlideDisplay();
+        }
+
+        private bool IsTrashListMode()
+        {
+            return lstviewTrash != null && lstviewTrash.Visible &&
+                   (lstviewFileListD == null || !lstviewFileListD.Visible);
         }
 
         private void MoveSlide(int frames)
         {
+            if (IsTrashListMode())
+            {
+                if (trashImages.Count == 0) return;
+
+                currentTrashIndex += frames;
+
+                if (currentTrashIndex < 0) currentTrashIndex = 0;
+                if (currentTrashIndex >= trashImages.Count) currentTrashIndex = trashImages.Count - 1;
+
+                SelectListViewItemByPath(lstviewTrash, trashImages[currentTrashIndex]);
+                UpdateTrashDisplay();
+                return;
+            }
+
             if (slideImages.Count == 0) return;
 
             currentSlideIndex += frames;
@@ -2820,15 +4546,39 @@ namespace AD_AI_LearningData_Editor
             UpdateSlideDisplay();
         }
 
+        private int GetActiveImageCount()
+        {
+            return IsTrashListMode() ? trashImages.Count : slideImages.Count;
+        }
+
+        private bool ShouldEnsureListItemVisible(int itemIndex)
+        {
+            if (videoTimer == null || !videoTimer.Enabled)
+            {
+                return true;
+            }
+
+            int bucket = Math.Max(0, itemIndex) / 5;
+            if (bucket == lastPlaybackScrollBucket)
+            {
+                return false;
+            }
+
+            lastPlaybackScrollBucket = bucket;
+            return true;
+        }
+
         private void btnNxt1F_Click(object sender, EventArgs e) { MoveSlide(1); }
         private void btnNxt5F_Click(object sender, EventArgs e) { MoveSlide(5); }
         private void btnPre1F_Click(object sender, EventArgs e) { MoveSlide(-1); }
         private void btnPre5F_Click(object sender, EventArgs e) { MoveSlide(-5); }
 
+        #endregion
+
+        #region Delete, Restore, Save, And Tabs
+
         private void btnDel_Click(object sender, EventArgs e)
         {
-            string trashFolder = GetTrashFolder();
-            string uploadFolder = GetUploadedFolder();
             List<string> targets = new List<string>();
 
             List<string> intervalTargets = GetIntervalImageFiles();
@@ -2837,62 +4587,48 @@ namespace AD_AI_LearningData_Editor
             {
                 targets.AddRange(intervalTargets);
             }
-            else if (lstviewFileListD.SelectedItems.Count > 0)
+            else if (slideImages.Count > 0 && currentSlideIndex >= 0 && currentSlideIndex < slideImages.Count)
             {
-                foreach (ListViewItem item in lstviewFileListD.SelectedItems)
-                {
-                    if (item.Tag is string fullPath &&
-                        !string.Equals(fullPath, "추가된파일", StringComparison.OrdinalIgnoreCase) &&
-                        !string.Equals(fullPath, "휴지통파일", StringComparison.OrdinalIgnoreCase))
-                    {
-                        targets.Add(fullPath);
-                    }
-                    else
-                    {
-                        string name = item.Text.Replace("[폴더] ", "");
-                        targets.Add(Path.Combine(uploadFolder, name));
-                    }
-                }
-            }
-            else
-            {
-                if (slideImages.Count > 0 && currentSlideIndex >= 0 && currentSlideIndex < slideImages.Count)
-                {
-                    targets.Add(slideImages[currentSlideIndex]);
-                }
+                targets.Add(slideImages[currentSlideIndex]);
             }
 
             targets = targets
-                .Where(path => File.Exists(path) || Directory.Exists(path))
+                .Where(path => File.Exists(path) && IsImageFile(path))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            if (targets.Count == 0) return;
+            if (targets.Count == 0)
+            {
+                return;
+            }
 
-            if (videoTimer.Enabled) videoTimer.Stop();
+            if (videoTimer != null && videoTimer.Enabled)
+            {
+                videoTimer.Stop();
+            }
+
             UpdatePlayStopButtonState();
-            ReleaseCurrentImage();
+
+            int firstTargetVisibleIndex = GetFirstTargetSlideIndex(targets);
+            int restoreIndex = Math.Max(0, firstTargetVisibleIndex - 1);
+
+            AddDeletedIndexes(targets);
 
             foreach (string target in targets)
             {
-                try
-                {
-                    string dest = GetNonConflictingPath(Path.Combine(trashFolder, Path.GetFileName(target)));
-                    if (Directory.Exists(target))
-                    {
-                        Directory.Move(target, dest);
-                    }
-                    else if (File.Exists(target))
-                    {
-                        File.Move(target, dest);
-                    }
-                }
-                catch { }
+                preservedFileListSelection.Remove(Path.GetFileName(target));
             }
 
-            ResetSelectedInterval();
+            ReleaseCurrentImage();
             LoadUploadedFilesToD();
+            LoadTrashCanFiles();
+
+            if (slideImages.Count > 0)
+            {
+                MoveToSlideIndexAfterEdit(Math.Min(restoreIndex, slideImages.Count - 1));
+            }
         }
+
 
         private string GetNonConflictingPath(string path)
         {
@@ -2911,9 +4647,39 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
+        private bool IsTrainerDataFolder(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                return false;
+            }
+
+            return GetFilesSafe(folderPath, "catalog_*.catalog", SearchOption.TopDirectoryOnly).Length > 0;
+        }
+
+        private string FindTrainerDataFolderForSavedFolder(string savedFolder)
+        {
+            if (IsTrainerDataFolder(savedFolder))
+            {
+                return savedFolder;
+            }
+
+            try
+            {
+                return GetDirectoriesSafe(savedFolder, "*", SearchOption.AllDirectories)
+                    .Where(IsTrainerDataFolder)
+                    .OrderBy(path => Path.GetFileName(path), new NaturalFileNameComparer())
+                    .FirstOrDefault();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private void btnSave_Click(object sender, EventArgs e)
         {
-            string uploadFolder = GetUploadedFolder();
+            string uploadFolder = GetUploadedDataFolder();
 
             if (!Directory.Exists(uploadFolder)) Directory.CreateDirectory(uploadFolder);
 
@@ -2960,12 +4726,21 @@ namespace AD_AI_LearningData_Editor
                     return;
                 }
 
+                string normalizedSelectedFolder = selectedFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string normalizedUploadFolder = uploadFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                if (normalizedSelectedFolder.StartsWith(normalizedUploadFolder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    MessageBox.Show("UploadedFile\\data 내부에는 저장할 수 없습니다.");
+                    return;
+                }
+
                 try
                 {
                     Directory.CreateDirectory(selectedFolder);
                     ReleaseCurrentImage();
 
-                    string[] files = Directory.GetFiles(uploadFolder)
+                    string[] files = GetFilesSafe(uploadFolder, "*.*", SearchOption.TopDirectoryOnly)
                         .Where(path => !path.EndsWith(".gback", StringComparison.OrdinalIgnoreCase))
                         .Where(path => !path.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase))
                         .Where(path => !path.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase))
@@ -2977,7 +4752,13 @@ namespace AD_AI_LearningData_Editor
                         File.Move(file, dest);
                     }
 
-                    foreach (string backupFile in Directory.GetFiles(uploadFolder).Where(path => path.EndsWith(".gback", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase)).ToArray())
+                    foreach (string folder in GetDirectoriesSafe(uploadFolder, "*", SearchOption.TopDirectoryOnly).ToArray())
+                    {
+                        string dest = GetNonConflictingPath(Path.Combine(selectedFolder, Path.GetFileName(folder)));
+                        Directory.Move(folder, dest);
+                    }
+
+                    foreach (string backupFile in GetFilesSafe(uploadFolder, "*.*", SearchOption.TopDirectoryOnly).Where(path => path.EndsWith(".gback", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".roiback", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".editingtmp", StringComparison.OrdinalIgnoreCase)).ToArray())
                     {
                         try { File.Delete(backupFile); } catch { }
                     }
@@ -2988,10 +4769,18 @@ namespace AD_AI_LearningData_Editor
                         try { Directory.Delete(mirrorBackupFolder, true); } catch { }
                     }
 
+                    ClearEditCancelBackupFolder();
                     gammaBackupPaths.Clear();
                     Array.Clear(roiState, 0, roiState.Length);
                     LoadUploadedFilesToD();
-                    MessageBox.Show("입력한 이름의 폴더를 만들고 UploadedFile 안의 파일을 이동했습니다.");
+                    string trainerFolder = FindTrainerDataFolderForSavedFolder(selectedFolder);
+
+                    if (!string.IsNullOrWhiteSpace(trainerFolder))
+                    {
+                        LoadTrainerDataFolder(trainerFolder);
+                    }
+
+                    MessageBox.Show("입력한 이름의 폴더를 만들고 UploadedFile\\data 안의 파일을 이동했습니다.");
                 }
                 catch (Exception ex)
                 {
@@ -3008,80 +4797,348 @@ namespace AD_AI_LearningData_Editor
 
         private void btnRestoration_Click(object sender, EventArgs e)
         {
-            if (lstviewTrash.SelectedItems.Count == 0) return;
+            List<string> intervalTargets = GetIntervalImageFiles();
 
-            string trashFolder = GetTrashFolder();
-            string uploadFolder = GetUploadedFolder();
+            if (intervalTargets.Count > 0)
+            {
+                RestoreDeletedImages(intervalTargets);
+                return;
+            }
 
-            ReleaseCurrentImage();
+            if (lstviewTrash.SelectedItems.Count == 0)
+            {
+                return;
+            }
+
+            List<string> selectedPaths = new List<string>();
+            List<string> selectedNames = new List<string>();
 
             foreach (ListViewItem item in lstviewTrash.SelectedItems)
             {
-                string fileName = item.Text.Replace("[폴더] ", "");
-                string sourcePath = Path.Combine(trashFolder, fileName);
-                string destPath = GetNonConflictingPath(Path.Combine(uploadFolder, fileName));
-
-                try
+                selectedNames.Add(item.Text);
+                string path = item.Tag as string;
+                if (!string.IsNullOrWhiteSpace(path))
                 {
-                    if (Directory.Exists(sourcePath))
-                    {
-                        Directory.Move(sourcePath, destPath);
-                    }
-                    else if (File.Exists(sourcePath))
-                    {
-                        File.Move(sourcePath, destPath);
-                    }
+                    selectedPaths.Add(path);
                 }
-                catch { }
             }
+
+            if (selectedNames.Count == 0 && selectedPaths.Count == 0)
+            {
+                return;
+            }
+
+            RestoreDeletedImages(selectedPaths.Count > 0 ? selectedPaths : selectedNames);
+        }
+
+        private void RestoreDeletedImages(IEnumerable<string> selectedNamesOrPaths)
+        {
+            List<string> selectedValues = selectedNamesOrPaths
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (selectedValues.Count == 0)
+            {
+                return;
+            }
+
+            RemoveDeletedIndexes(selectedValues);
+
+            foreach (string name in selectedValues.Select(Path.GetFileName))
+            {
+                preservedTrashSelection.Remove(name);
+                preservedFileListSelection.Add(name);
+            }
+
+            int restoreIndex = currentSlideIndex;
 
             LoadUploadedFilesToD();
             LoadTrashCanFiles();
+
+            List<int> restoredIndexes = selectedValues
+                .Select(name => ExtractImageIndexFromFileName(name))
+                .Where(index => index >= 0)
+                .ToList();
+
+            if (restoredIndexes.Count > 0)
+            {
+                int minRestoredIndex = restoredIndexes.Min();
+                int visibleIndex = slideImages.FindIndex(path => ExtractImageIndexFromFileName(path) == minRestoredIndex);
+
+                if (visibleIndex >= 0)
+                {
+                    restoreIndex = visibleIndex;
+                }
+            }
+
+            MoveToSlideIndexAfterEdit(restoreIndex);
+            ResetSelectedInterval();
+        }
+
+
+        private void ShowTrashModeButtons(bool isTrashMode)
+        {
+            btnRemove.Visible = isTrashMode;
+            btnRestoration.Visible = isTrashMode;
         }
 
         private void SetupTabs()
         {
-            MaterialTabControl tabControl = new MaterialTabControl();
-            tabControl.Dock = DockStyle.Fill;
+            DrawerTabControl = null;
 
-            TabPage tabManager = new TabPage("매니저");
-            TabPage tabTrainer = new TabPage("트레이너");
-            TabPage tabPilot = new TabPage("파일럿");
-
-            tabControl.Controls.Add(tabManager);
-            tabControl.Controls.Add(tabTrainer);
-            tabControl.Controls.Add(tabPilot);
-
-            var controlsToMove = new System.Collections.Generic.List<Control>();
-            foreach (Control c in this.Controls)
+            mainTabHost = new Panel
             {
-                if (c != tabControl && c.Name != "DrawerTabControl")
+                Name = "mainTabHost",
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                BackColor = BackColor
+            };
+
+            managerTabPage = CreateMainTabPage("managerTabPage");
+            trainerTabPage = CreateMainTabPage("trainerTabPage");
+            pilotTabPage = CreateMainTabPage("pilotTabPage");
+
+            List<Control> controlsToMove = new List<Control>();
+            foreach (Control control in Controls)
+            {
+                if (!IsTopNavigationControl(control))
                 {
-                    controlsToMove.Add(c);
+                    controlsToMove.Add(control);
                 }
             }
-            foreach (Control c in controlsToMove)
+
+            foreach (Control control in controlsToMove)
             {
-                tabManager.Controls.Add(c);
+                managerTabPage.Controls.Add(control);
             }
 
-            this.Controls.Add(tabControl);
+            mainTabHost.Controls.Add(managerTabPage);
+            mainTabHost.Controls.Add(trainerTabPage);
+            mainTabHost.Controls.Add(pilotTabPage);
+            Controls.Add(mainTabHost);
+            PositionMainTabHost();
 
-            trainerForm = new DonkeyDataManager.frmNewtrainer();
-            trainerForm.TopLevel = false;
-            trainerForm.FormBorderStyle = FormBorderStyle.None;
-            trainerForm.Dock = DockStyle.Fill;
-            tabTrainer.Controls.Add(trainerForm);
+            trainerForm = new DonkeyDataManager.frmNewtrainer
+            {
+                TopLevel = false,
+                FormBorderStyle = FormBorderStyle.None,
+                Dock = DockStyle.Fill
+            };
+            trainerTabPage.Controls.Add(trainerForm);
             trainerForm.Show();
 
-            Data_Manager.Pliot form2 = new Data_Manager.Pliot();
-            form2.TopLevel = false;
-            form2.FormBorderStyle = FormBorderStyle.None;
-            form2.Dock = DockStyle.Fill;
-            tabPilot.Controls.Add(form2);
-            form2.Show();
+            pilotForm = new Data_Manager.Pliot
+            {
+                TopLevel = false,
+                FormBorderStyle = FormBorderStyle.None,
+                Dock = DockStyle.Fill
+            };
+            pilotTabPage.Controls.Add(pilotForm);
+            pilotForm.Show();
 
-            this.DrawerTabControl = tabControl;
+            CreateTopNavigationTabs();
+            ActivateMainTab(MainTabKind.Manager);
+        }
+
+        private Panel CreateMainTabPage(string name)
+        {
+            return new Panel
+            {
+                Name = name,
+                Dock = DockStyle.Fill,
+                BackColor = BackColor
+            };
+        }
+
+        private void PositionMainTabHost()
+        {
+            if (mainTabHost == null || mainTabHost.IsDisposed)
+            {
+                return;
+            }
+
+            int materialHeaderHeight = 64;
+            mainTabHost.Bounds = new Rectangle(
+                0,
+                materialHeaderHeight,
+                Math.Max(1, ClientSize.Width),
+                Math.Max(1, ClientSize.Height - materialHeaderHeight));
+        }
+
+        private void CreateTopNavigationTabs()
+        {
+            if (topNavigationTabs == null || topNavigationTabs.IsDisposed)
+            {
+                topNavigationTabs = new Panel
+                {
+                    Name = "topNavigationTabs",
+                    Height = 38,
+                    BackColor = Color.Transparent
+                };
+            }
+
+            btnTabManager = EnsureNavigationTabButton(btnTabManager, "매니저", MainTabKind.Manager);
+            btnTabTrainer = EnsureNavigationTabButton(btnTabTrainer, "트레이너", MainTabKind.Trainer);
+            btnTabPilot = EnsureNavigationTabButton(btnTabPilot, "파일럿", MainTabKind.Pilot);
+
+            EnsureNavigationButtonParent(btnTabManager);
+            EnsureNavigationButtonParent(btnTabTrainer);
+            EnsureNavigationButtonParent(btnTabPilot);
+
+            if (!Controls.Contains(topNavigationTabs))
+            {
+                Controls.Add(topNavigationTabs);
+            }
+
+            PositionTopNavigationTabs();
+            topNavigationTabs.BringToFront();
+        }
+
+        private Button EnsureNavigationTabButton(Button button, string text, MainTabKind tabKind)
+        {
+            if (button == null || button.IsDisposed)
+            {
+                button = new Button();
+            }
+
+            button.Text = text;
+            button.Tag = tabKind;
+            button.Width = 96;
+            button.Height = 34;
+            button.FlatStyle = FlatStyle.Flat;
+            button.BackColor = Color.FromArgb(42, 73, 96);
+            button.ForeColor = Color.White;
+            button.Font = new Font("맑은 고딕", 10F, FontStyle.Bold);
+            button.Cursor = Cursors.Hand;
+            button.UseVisualStyleBackColor = false;
+
+            button.FlatAppearance.BorderSize = 1;
+            button.FlatAppearance.BorderColor = Color.FromArgb(120, 160, 190);
+            button.Click -= btnMainTab_Click;
+            button.Click += btnMainTab_Click;
+            return button;
+        }
+
+        private void EnsureNavigationButtonParent(Button button)
+        {
+            if (button == null || topNavigationTabs == null)
+            {
+                return;
+            }
+
+            if (button.Parent != topNavigationTabs)
+            {
+                topNavigationTabs.Controls.Add(button);
+            }
+        }
+
+        private void btnMainTab_Click(object sender, EventArgs e)
+        {
+            if (sender is Button button && button.Tag is MainTabKind tabKind)
+            {
+                ActivateMainTab(tabKind);
+            }
+        }
+
+        private void PositionTopNavigationTabs()
+        {
+            if (topNavigationTabs == null || topNavigationTabs.IsDisposed)
+            {
+                return;
+            }
+
+            int gap = 4;
+            int buttonWidth = Math.Max(84, Math.Min(110, ClientSize.Width / 11));
+            int buttonHeight = 32;
+            int totalWidth = buttonWidth * 3 + gap * 2;
+
+            topNavigationTabs.SuspendLayout();
+            try
+            {
+                topNavigationTabs.Width = totalWidth;
+                topNavigationTabs.Height = buttonHeight + 4;
+                int rightMargin = 16;
+                int titleReserveWidth = 180;
+                topNavigationTabs.Left = Math.Max(titleReserveWidth, ClientSize.Width - totalWidth - rightMargin);
+                topNavigationTabs.Top = 28;
+
+                Button[] buttons = new[] { btnTabManager, btnTabTrainer, btnTabPilot };
+                for (int i = 0; i < buttons.Length; i++)
+                {
+                    if (buttons[i] == null)
+                    {
+                        continue;
+                    }
+
+                    buttons[i].Bounds = new Rectangle(i * (buttonWidth + gap), 0, buttonWidth, buttonHeight);
+                }
+            }
+            finally
+            {
+                topNavigationTabs.ResumeLayout(true);
+            }
+        }
+
+        private void ActivateMainTab(MainTabKind tabKind)
+        {
+            activeMainTab = tabKind;
+
+            if (videoTimer != null && videoTimer.Enabled && tabKind != MainTabKind.Manager)
+            {
+                videoTimer.Stop();
+                UpdatePlayStopButtonState();
+            }
+
+            SetMainTabVisible(managerTabPage, tabKind == MainTabKind.Manager);
+            SetMainTabVisible(trainerTabPage, tabKind == MainTabKind.Trainer);
+            SetMainTabVisible(pilotTabPage, tabKind == MainTabKind.Pilot);
+
+            UpdateNavigationTabStyles();
+
+            if (topNavigationTabs != null)
+            {
+                topNavigationTabs.BringToFront();
+            }
+        }
+
+        private void SetMainTabVisible(Control tabPage, bool visible)
+        {
+            if (tabPage == null)
+            {
+                return;
+            }
+
+            tabPage.Visible = visible;
+            if (visible)
+            {
+                tabPage.BringToFront();
+            }
+        }
+
+        private void UpdateNavigationTabStyles()
+        {
+            UpdateNavigationTabStyle(btnTabManager, MainTabKind.Manager);
+            UpdateNavigationTabStyle(btnTabTrainer, MainTabKind.Trainer);
+            UpdateNavigationTabStyle(btnTabPilot, MainTabKind.Pilot);
+        }
+
+        private void UpdateNavigationTabStyle(Button button, MainTabKind tabKind)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            bool selected = activeMainTab == tabKind;
+            button.BackColor = selected
+                ? Color.White
+                : Color.FromArgb(42, 73, 96);
+            button.ForeColor = selected
+                ? Color.FromArgb(32, 52, 70)
+                : Color.White;
+            button.FlatAppearance.BorderColor = selected
+                ? Color.White
+                : Color.FromArgb(120, 160, 190);
         }
 
         public void LoadTrainerDataFolder(string folderPath)
@@ -3092,15 +5149,12 @@ namespace AD_AI_LearningData_Editor
             }
 
             trainerForm.LoadDataFolder(folderPath);
+            ActivateMainTab(MainTabKind.Trainer);
         }
-
-        private void materialSlider1_Click(object sender, EventArgs e) { }
-        private void materialButton2_Click(object sender, EventArgs e) { }
-        private void listView1_SelectedIndexChanged(object sender, EventArgs e) { }
-        private void listView1_SelectedIndexChanged_1(object sender, EventArgs e) { }
 
         private void btnOpnFolderList1_Click(object sender, EventArgs e)
         {
+            ShowTrashModeButtons(false);
             lstviewFileListD.Visible = false;
             lstviewTrash.Visible = false;
             lstviewMain.Visible = true;
@@ -3125,7 +5179,11 @@ namespace AD_AI_LearningData_Editor
                 lstviewTrash.Visible = false;
 
                 SetListViewName("[파일목록]");
-                btnRestoration.Visible = false;
+                ShowTrashModeButtons(false);
+                if (slideImages.Count > 0)
+                {
+                    MoveToSlideIndexAfterEdit(currentSlideIndex);
+                }
             }
             else if (itemTag == "휴지통")
             {
@@ -3134,9 +5192,10 @@ namespace AD_AI_LearningData_Editor
                 lstviewTrash.Visible = true;
 
                 SetListViewName("[휴지통]");
-                btnRestoration.Visible = true;
+                ShowTrashModeButtons(true);
 
                 LoadTrashCanFiles();
+                UpdateTrashDisplay();
             }
             else if (itemTag == "파일추가")
             {
@@ -3145,11 +5204,6 @@ namespace AD_AI_LearningData_Editor
             }
         }
 
-        private void trackBar1_Scroll(object sender, EventArgs e) { }
-        private void pnlContrastProperty_Paint(object sender, PaintEventArgs e) { }
-        private void pnlCloseProperty_Paint(object sender, PaintEventArgs e) { }
-        private void GBPalete_Enter(object sender, EventArgs e) { }
-        private void ColorTrackBar_Scroll(object sender, EventArgs e) { }
         private class NaturalFileNameComparer : IComparer<string>
         {
             public int Compare(string x, string y)
@@ -3240,13 +5294,12 @@ namespace AD_AI_LearningData_Editor
 
         private void lstviewFileListD_SelectedIndexChanged(object sender, EventArgs e)
         {
-
+            // Designer compatibility hook.
+            // 실제 선택 동기화는 InitializeListViewSelectionPersistence에서 연결한
+            // lstviewFileListD_SelectedIndexChangedForPersistence가 담당합니다.
         }
 
-        private void groupBox2_Enter(object sender, EventArgs e)
-        {
-
-        }
+        #endregion
     }
 
     public class ClickOutsideFilter : IMessageFilter

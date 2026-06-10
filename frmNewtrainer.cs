@@ -6,9 +6,11 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Threading;
 using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text;
+using System.Linq;
 using Data_Manager;
 
 namespace DonkeyDataManager
@@ -54,16 +56,25 @@ namespace DonkeyDataManager
 
         // 사용자가 학습 대상으로 선택한 tub 폴더의 Windows 경로입니다.
         private string selectedDataPath = "";
+        private List<string> selectedTubFolders =
+            new List<string>();
 
         // 선택한 tub의 catalog 내용을 UI 목록과 프레임 재생에 쓰기 위해 메모리에 보관합니다.
         private List<CatalogRecord> integratedCatalogList =
             new List<CatalogRecord>();
+        private List<CatalogListRow> catalogDisplayRows =
+            new List<CatalogListRow>();
+        private HashSet<int> deletedCatalogIndexes =
+            new HashSet<int>();
+        private string currentPreviewImagePath = "";
+        private Size currentPreviewRenderSize = Size.Empty;
 
         private System.Windows.Forms.Timer playbackTimer =
             new System.Windows.Forms.Timer();
 
         private Process wslProcess = null;
         private Process browserProcess = null;
+        private int trainingProcessWslPid;
 
         private System.Windows.Forms.Timer browserMonitorTimer =
             new System.Windows.Forms.Timer();
@@ -82,13 +93,77 @@ namespace DonkeyDataManager
                 "DonkeyDataManager",
                 "models.json");
         private readonly object trainingLogLock = new object();
+        private readonly Dictionary<Control, Rectangle> originalControlBounds =
+            new Dictionary<Control, Rectangle>();
+        private readonly Dictionary<Control, float> originalControlFontSizes =
+            new Dictionary<Control, float>();
+        private Size responsiveBaseClientSize =
+            new Size(1600, 900);
+        private bool isApplyingResponsiveLayout;
 
         // =====================================================
-        // ⭐ 모델 자동 로드 추가
+        // 모델 목록 동기화 상태
         // =====================================================
 
         private System.Windows.Forms.Timer modelRefreshTimer =
             new System.Windows.Forms.Timer();
+        private System.Windows.Forms.Timer responsiveResizeTimer =
+            new System.Windows.Forms.Timer();
+        private bool isLoadingModels;
+        private string lastModelListSignature = "";
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Delete && lstModels.ContainsFocus)
+            {
+                BtnModelDlt_Click(this, EventArgs.Empty);
+                return true;
+            }
+
+            if (keyData == Keys.Space && !cmbSpeed.ContainsFocus)
+            {
+                ToggleCatalogPlayback();
+                return true;
+            }
+
+            if (keyData == Keys.Left && !cmbSpeed.ContainsFocus)
+            {
+                MoveCatalogSelection(-1);
+                return true;
+            }
+
+            if (keyData == Keys.Right && !cmbSpeed.ContainsFocus)
+            {
+                MoveCatalogSelection(1);
+                return true;
+            }
+
+            if (keyData == Keys.Enter && lstTubFolders.ContainsFocus)
+            {
+                BtnTrain_Click(this, EventArgs.Empty);
+                return true;
+            }
+
+            if (keyData == (Keys.Control | Keys.N) && lstModels.ContainsFocus)
+            {
+                BtnNameCh_Click(this, EventArgs.Empty);
+                return true;
+            }
+
+            if (keyData == (Keys.Control | Keys.D) && lstCatalogRows.ContainsFocus)
+            {
+                BtnCleanData_Click(this, EventArgs.Empty);
+                return true;
+            }
+
+            if (keyData == (Keys.Control | Keys.R) && lstCatalogRows.ContainsFocus)
+            {
+                BtnRestoreData_Click(this, EventArgs.Empty);
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
 
         // =====================================================
         // 데이터 구조
@@ -116,6 +191,15 @@ namespace DonkeyDataManager
 
         }
 
+        private class CatalogListRow
+        {
+            public bool IsHeader { get; set; }
+
+            public string Text { get; set; } = "";
+
+            public CatalogRecord Record { get; set; }
+        }
+
         public class ModelRegistryEntry
         {
             // 학습된 모델 파일과 그 모델이 어떤 tub에서 만들어졌는지 기록하는 항목입니다.
@@ -132,6 +216,8 @@ namespace DonkeyDataManager
 
             public DateTime CreatedAt { get; set; }
 
+            public bool IsDeleted { get; set; }
+
             public override string ToString()
             {
                 return Name;
@@ -145,8 +231,13 @@ namespace DonkeyDataManager
         public frmNewtrainer()
         {
             InitializeComponent();
+            ClientSize = new Size(1600, 900);
 
             WireUiEvents();
+            InitializeCatalogListDrawing();
+            EnableDoubleBuffering(lstModels);
+            EnableDoubleBuffering(lstCatalogRows);
+            EnableDoubleBuffering(lstTubFolders);
 
             InitializePlaybackTimer();
 
@@ -154,10 +245,13 @@ namespace DonkeyDataManager
 
             InitializeWSLPaths();
 
-            // ⭐ 추가
+            InitializeTrainerButtonStyles();
+            InitializeResponsiveLayout();
+
+            // 모델 폴더와 registry를 주기적으로 동기화합니다.
             InitializeModelRefreshTimer();
 
-            // ⭐ 추가
+            // 시작 시 mycar/models 내부 모델만 표시합니다.
             LoadModelsToList();
 
             SharedModelRegistry.ModelsChanged +=
@@ -192,44 +286,61 @@ namespace DonkeyDataManager
         {
             SharedModelRegistry.ModelsChanged -=
                 SharedModelRegistry_ModelsChanged;
+            modelRefreshTimer.Stop();
+            modelRefreshTimer.Dispose();
+            responsiveResizeTimer.Stop();
+            responsiveResizeTimer.Dispose();
+            playbackTimer.Stop();
+            playbackTimer.Dispose();
+            browserMonitorTimer.Stop();
+            browserMonitorTimer.Dispose();
         }
 
         // =====================================================
-        // ⭐ 모델 감시 타이머
+        // 모델 목록 로드와 registry 동기화
         // =====================================================
 
         private void InitializeModelRefreshTimer()
         {
-            modelRefreshTimer.Interval = 5000;
+            modelRefreshTimer.Interval = 30000;
 
             modelRefreshTimer.Tick += (s, e) =>
             {
+                if (!Visible || WindowState == FormWindowState.Minimized)
+                {
+                    return;
+                }
+
                 LoadModelsToList();
             };
 
             modelRefreshTimer.Start();
         }
 
-        // =====================================================
-        // ⭐ 모델 리스트 로드
-        // =====================================================
-
         private void LoadModelsToList()
         {
             try
             {
-                if (lstModels == null)
+                if (lstModels == null || isLoadingModels)
                     return;
 
-                List<ModelRegistryEntry> entries =
-                    LoadModelRegistry()
-                        .Where(IsValidModelRegistryEntry)
-                        .ToList();
+                isLoadingModels = true;
 
                 string modelFolder =
                     Path.Combine(
                         wslBasePath,
                         ModelDirectoryName);
+
+                bool registryChanged = false;
+
+                List<ModelRegistryEntry> entries =
+                    LoadModelRegistry()
+                        .Where(IsValidModelRegistryEntry)
+                        .Where(entry =>
+                            ModelImportService.IsPathInsideDirectory(
+                                entry.WindowsPath,
+                                modelFolder))
+                        .ToList();
 
                 if (Directory.Exists(modelFolder))
                 {
@@ -263,33 +374,114 @@ namespace DonkeyDataManager
                                 WindowsPath = file,
                                 WslPath = GetModelWslPath(name),
                                 CreatedAt =
-                                    File.GetCreationTime(file)
+                                    File.GetCreationTime(file),
+                                IsDeleted = false
                             });
+
+                        registryChanged = true;
                     }
                 }
 
-                entries.Sort(
-                    (left, right) =>
-                        string.Compare(
-                            left.Name,
-                            right.Name,
-                            StringComparison.OrdinalIgnoreCase));
+                List<ModelRegistryEntry> displayEntries =
+                    entries
+                        .OrderBy(entry => entry.IsDeleted ? 1 : 0)
+                        .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
 
-                lstModels.Items.Clear();
+                string newSignature =
+                    BuildModelListSignature(entries);
 
-                for (int i = 0; i < entries.Count; i++)
+                if (string.Equals(
+                    lastModelListSignature,
+                    newSignature,
+                    StringComparison.Ordinal))
                 {
-                    lstModels.Items.Add(
-                        CreateModelListItem(
-                            entries[i],
-                            i + 1));
+                    return;
                 }
 
-                SaveModelRegistry(entries);
+                lastModelListSignature = newSignature;
+
+                lstModels.BeginUpdate();
+                try
+                {
+                    lstModels.Items.Clear();
+
+                    for (int i = 0; i < displayEntries.Count; i++)
+                    {
+                        lstModels.Items.Add(
+                            CreateModelListItem(
+                                displayEntries[i],
+                                i + 1));
+                    }
+                }
+                finally
+                {
+                    lstModels.EndUpdate();
+                }
+
+                if (registryChanged)
+                {
+                    SaveModelRegistry(entries);
+                }
             }
             catch
             {
 
+            }
+            finally
+            {
+                isLoadingModels = false;
+            }
+        }
+
+        private string BuildModelListSignature(List<ModelRegistryEntry> entries)
+        {
+            if (entries == null || entries.Count == 0)
+            {
+                return "";
+            }
+
+            return string.Join(
+                "|",
+                entries
+                    .OrderBy(entry => entry.WindowsPath, StringComparer.OrdinalIgnoreCase)
+                    .Select(entry =>
+                        entry.Name +
+                        ":" +
+                        entry.WindowsPath +
+                        ":" +
+                        entry.IsDeleted));
+        }
+
+        private void LoadModelTrashToList(List<ModelRegistryEntry> allEntries)
+        {
+            if (lstModelTrash == null)
+            {
+                return;
+            }
+
+            List<ModelRegistryEntry> deletedEntries =
+                (allEntries ?? new List<ModelRegistryEntry>())
+                    .Where(entry => entry.IsDeleted && IsValidModelRegistryEntry(entry))
+                    .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+            lstModelTrash.BeginUpdate();
+            try
+            {
+                lstModelTrash.Items.Clear();
+
+                for (int i = 0; i < deletedEntries.Count; i++)
+                {
+                    lstModelTrash.Items.Add(
+                        CreateModelListItem(
+                            deletedEntries[i],
+                            i + 1));
+                }
+            }
+            finally
+            {
+                lstModelTrash.EndUpdate();
             }
         }
 
@@ -320,7 +512,7 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // 타이머 초기화
+        // UI 이벤트와 반응형 배치 초기화
         // =====================================================
 
         private void InitializePlaybackTimer()
@@ -330,29 +522,258 @@ namespace DonkeyDataManager
             playbackTimer.Tick += PlaybackTimer_Tick;
         }
 
+        private void EnableDoubleBuffering(Control control)
+        {
+            try
+            {
+                typeof(Control)
+                    .GetProperty(
+                        "DoubleBuffered",
+                        BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.SetValue(control, true, null);
+            }
+            catch
+            {
+            }
+        }
+
         private void WireUiEvents()
         {
-            btnPlay.Click += (s, e) => playbackTimer.Start();
+            btnPlay.Click -= BtnPlay_Click;
+            btnPlay.Click += BtnPlay_Click;
 
-            btnPause.Click += (s, e) => playbackTimer.Stop();
+            btnLeft.Click -= BtnLeft_Click;
+            btnLeft.Click += BtnLeft_Click;
 
-            btnStop.Click += BtnStop_Click;
+            btnRight.Click -= BtnRight_Click;
+            btnRight.Click += BtnRight_Click;
 
+            lstCatalogRows.SelectedIndexChanged -=
+                LstCatalogRows_SelectedIndexChanged;
             lstCatalogRows.SelectedIndexChanged +=
                 LstCatalogRows_SelectedIndexChanged;
 
+            lstTubFolders.SelectedIndexChanged -=
+                LstTubFolders_SelectedIndexChanged;
+            lstTubFolders.SelectedIndexChanged +=
+                LstTubFolders_SelectedIndexChanged;
+            lstTubFolders.ItemCheck -=
+                LstTubFolders_ItemCheck;
+            lstTubFolders.ItemCheck +=
+                LstTubFolders_ItemCheck;
+
+            btnAddTubFolder.Click -= BtnAddTubFolder_Click;
+            btnAddTubFolder.Click += BtnAddTubFolder_Click;
+
+            btnRemoveTubFolder.Click -= BtnRemoveTubFolder_Click;
+            btnRemoveTubFolder.Click += BtnRemoveTubFolder_Click;
+
+            cmbSpeed.SelectedIndexChanged -=
+                CmbSpeed_SelectedIndexChanged;
             cmbSpeed.SelectedIndexChanged +=
                 CmbSpeed_SelectedIndexChanged;
 
+            btnCleanData.Click -= BtnCleanData_Click;
             btnCleanData.Click += BtnCleanData_Click;
 
+            btnRestoreData.Click -= BtnRestoreData_Click;
             btnRestoreData.Click += BtnRestoreData_Click;
 
             btnModelDlt.Click += BtnModelDlt_Click;
 
             btnNameCh.Click += BtnNameCh_Click;
 
+            btnModelRestore.Click += BtnModelRestore_Click;
+
+            btnImportModel.Click += BtnImportModel_Click;
+
+            lstModels.SelectedIndexChanged += LstModels_SelectedIndexChanged;
+            lstModelTrash.SelectedIndexChanged += LstModelTrash_SelectedIndexChanged;
+
+            picDriveImage.Resize += (s, e) =>
+            {
+                currentPreviewRenderSize = Size.Empty;
+            };
+
             cmbSpeed.SelectedIndex = 1;
+        }
+
+        private void InitializeCatalogListDrawing()
+        {
+            lstCatalogRows.SelectionMode = SelectionMode.MultiExtended;
+            lstCatalogRows.DrawMode = DrawMode.OwnerDrawFixed;
+            lstCatalogRows.DrawItem += LstCatalogRows_DrawItem;
+        }
+
+        private void InitializeResponsiveLayout()
+        {
+            CaptureResponsiveSnapshot();
+
+            MinimumSize = new Size(1000, 650);
+            responsiveResizeTimer.Interval = 80;
+            responsiveResizeTimer.Tick += (s, e) =>
+            {
+                responsiveResizeTimer.Stop();
+                ApplyResponsiveLayout();
+            };
+            Resize -= FrmNewtrainer_Resize;
+            Resize += FrmNewtrainer_Resize;
+        }
+
+        private void CaptureResponsiveSnapshot()
+        {
+            responsiveBaseClientSize =
+                ClientSize.Width > 0 && ClientSize.Height > 0
+                    ? ClientSize
+                    : new Size(1600, 900);
+
+            originalControlBounds.Clear();
+            originalControlFontSizes.Clear();
+            CaptureResponsiveControl(this);
+        }
+
+        private void CaptureResponsiveControl(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                originalControlBounds[control] = control.Bounds;
+                originalControlFontSizes[control] = control.Font.Size;
+
+                if (control.HasChildren)
+                {
+                    CaptureResponsiveControl(control);
+                }
+            }
+        }
+
+        private void FrmNewtrainer_Resize(object sender, EventArgs e)
+        {
+            if (WindowState == FormWindowState.Minimized)
+            {
+                return;
+            }
+
+            responsiveResizeTimer.Stop();
+            responsiveResizeTimer.Start();
+        }
+
+        private void ApplyResponsiveLayout()
+        {
+            if (isApplyingResponsiveLayout ||
+                WindowState == FormWindowState.Minimized ||
+                responsiveBaseClientSize.Width <= 0 ||
+                responsiveBaseClientSize.Height <= 0)
+            {
+                return;
+            }
+
+            try
+            {
+                isApplyingResponsiveLayout = true;
+                SuspendResponsiveLayout(this);
+
+                float scaleX = ClientSize.Width / (float)responsiveBaseClientSize.Width;
+                float scaleY = ClientSize.Height / (float)responsiveBaseClientSize.Height;
+                float fontScale = Math.Max(0.75f, Math.Min(1.35f, Math.Min(scaleX, scaleY)));
+
+                ApplyResponsiveControl(this, scaleX, scaleY, fontScale);
+                UpdatePlaybackButtonIcons();
+                ResizeModelColumns();
+            }
+            finally
+            {
+                ResumeResponsiveLayout(this);
+                isApplyingResponsiveLayout = false;
+            }
+        }
+
+        private void SuspendResponsiveLayout(Control parent)
+        {
+            parent.SuspendLayout();
+
+            foreach (Control control in parent.Controls)
+            {
+                if (control.HasChildren)
+                {
+                    SuspendResponsiveLayout(control);
+                }
+            }
+        }
+
+        private void ResumeResponsiveLayout(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                if (control.HasChildren)
+                {
+                    ResumeResponsiveLayout(control);
+                }
+            }
+
+            parent.ResumeLayout(false);
+        }
+
+        private void ApplyResponsiveControl(Control parent, float scaleX, float scaleY, float fontScale)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                if (originalControlBounds.TryGetValue(control, out Rectangle bounds))
+                {
+                    Rectangle scaledBounds = new Rectangle(
+                        (int)Math.Round(bounds.X * scaleX),
+                        (int)Math.Round(bounds.Y * scaleY),
+                        Math.Max(1, (int)Math.Round(bounds.Width * scaleX)),
+                        Math.Max(1, (int)Math.Round(bounds.Height * scaleY)));
+
+                    if (control.Dock == DockStyle.Top || control.Dock == DockStyle.Bottom)
+                    {
+                        control.Height = scaledBounds.Height;
+                    }
+                    else if (control.Dock == DockStyle.Left || control.Dock == DockStyle.Right)
+                    {
+                        control.Width = scaledBounds.Width;
+                    }
+                    else if (control.Dock == DockStyle.None)
+                    {
+                        control.Bounds = scaledBounds;
+                    }
+                }
+
+                if (originalControlFontSizes.TryGetValue(control, out float fontSize))
+                {
+                    float scaledFont = Math.Max(6f, fontSize * fontScale);
+                    if (Math.Abs(control.Font.Size - scaledFont) > 0.1f)
+                    {
+                        control.Font = new Font(control.Font.FontFamily, scaledFont, control.Font.Style);
+                    }
+                }
+
+                if (control.HasChildren)
+                {
+                    ApplyResponsiveControl(control, scaleX, scaleY, fontScale);
+                }
+            }
+        }
+
+        private void ResizeModelColumns()
+        {
+            if (lstModels == null || lstModels.Columns.Count < 3)
+            {
+                return;
+            }
+
+            int width = Math.Max(320, lstModels.ClientSize.Width);
+            colModelNo.Width = Math.Max(45, (int)Math.Round(width * 0.11));
+            colModelName.Width = Math.Max(120, (int)Math.Round(width * 0.34));
+            colModelPath.Width = Math.Max(150, width - colModelNo.Width - colModelName.Width - 8);
+
+            if (lstModelTrash != null && lstModelTrash.Columns.Count >= 3)
+            {
+                int trashWidth = Math.Max(320, lstModelTrash.ClientSize.Width);
+                colTrashNo.Width = Math.Max(45, (int)Math.Round(trashWidth * 0.11));
+                colTrashName.Width = Math.Max(120, (int)Math.Round(trashWidth * 0.34));
+                colTrashPath.Width = Math.Max(150, trashWidth - colTrashNo.Width - colTrashName.Width - 8);
+            }
         }
 
         // =====================================================
@@ -375,7 +796,7 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // WSL PATH
+        // WSL/mycar 경로 탐색
         // =====================================================
 
         private void InitializeWSLPaths()
@@ -1147,14 +1568,181 @@ namespace DonkeyDataManager
                 LoadModelRegistry()
                     .FirstOrDefault(
                         entry =>
-                            string.Equals(
-                                entry.Name,
-                                selectedModel,
-                                StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(
-                                entry.Name,
-                                selectedModel + ".h5",
-                                StringComparison.OrdinalIgnoreCase));
+                            !entry.IsDeleted &&
+                            (string.Equals(
+                                    entry.Name,
+                                    selectedModel,
+                                    StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(
+                                    entry.Name,
+                            selectedModel + ".h5",
+                            StringComparison.OrdinalIgnoreCase)));
+        }
+
+        private List<ModelRegistryEntry> GetSelectedModelEntries()
+        {
+            if (lstModels.SelectedItems.Count == 0)
+            {
+                return new List<ModelRegistryEntry>();
+            }
+
+            return lstModels.SelectedItems
+                .Cast<ListViewItem>()
+                .Select(item => item.Tag as ModelRegistryEntry)
+                .Where(entry => entry != null)
+                .Cast<ModelRegistryEntry>()
+                .ToList();
+        }
+
+        private void InitializeTrainerButtonStyles()
+        {
+            StyleTrainerButton(btnAddTubFolder, Color.FromArgb(56, 118, 198), Color.White);
+            StyleTrainerButton(btnRemoveTubFolder, Color.FromArgb(83, 105, 136), Color.White);
+            StyleTrainerButton(btnCleanData, Color.FromArgb(204, 91, 84), Color.White);
+            StyleTrainerButton(btnRestoreData, Color.FromArgb(75, 143, 112), Color.White);
+            StyleTrainerButton(btnTrain, Color.FromArgb(56, 118, 198), Color.White);
+            StyleTrainerButton(btnDrive, Color.FromArgb(75, 143, 112), Color.White);
+            StyleTrainerButton(btnImportModel, Color.FromArgb(56, 118, 198), Color.White);
+            StyleTrainerButton(btnNameCh, Color.FromArgb(75, 143, 112), Color.White);
+            StyleTrainerButton(btnModelDlt, Color.FromArgb(204, 91, 84), Color.White);
+            StyleTrainerButton(btnModelRestore, Color.FromArgb(56, 118, 198), Color.White);
+
+            StylePlaybackButton(btnLeft);
+            StylePlaybackButton(btnPlay);
+            StylePlaybackButton(btnRight);
+
+            btnLeft.Text = "";
+            btnPlay.Text = "";
+            btnRight.Text = "";
+
+            btnLeft.Resize += (s, e) => UpdatePlaybackButtonIcons();
+            btnPlay.Resize += (s, e) => UpdatePlaybackButtonIcons();
+            btnRight.Resize += (s, e) => UpdatePlaybackButtonIcons();
+
+            UpdatePlaybackButtonIcons();
+        }
+
+        private void StyleTrainerButton(Button button, Color backColor, Color foreColor)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 0;
+            button.BackColor = backColor;
+            button.ForeColor = foreColor;
+            button.Cursor = Cursors.Hand;
+            button.Font = new Font(button.Font.FontFamily, button.Font.Size, FontStyle.Bold);
+        }
+
+        private void StylePlaybackButton(Button button)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 0;
+            button.BackColor = Color.FromArgb(232, 238, 247);
+            button.ForeColor = Color.FromArgb(26, 54, 93);
+            button.Cursor = Cursors.Hand;
+            button.ImageAlign = ContentAlignment.MiddleCenter;
+        }
+
+        private void UpdatePlaybackButtonIcons()
+        {
+            if (btnLeft == null || btnPlay == null || btnRight == null)
+            {
+                return;
+            }
+
+            SetPlaybackButtonImage(
+                btnLeft,
+                Data_Manager.Properties.Resources.arrow1_left);
+
+            SetPlaybackButtonImage(
+                btnPlay,
+                playbackTimer != null && playbackTimer.Enabled
+                    ? Data_Manager.Properties.Resources.pause
+                    : Data_Manager.Properties.Resources.PlaySlide4655096);
+
+            SetPlaybackButtonImage(
+                btnRight,
+                Data_Manager.Properties.Resources.arrow1_right);
+        }
+
+        private void SetPlaybackButtonImage(Button button, Image image)
+        {
+            if (button == null || image == null)
+            {
+                return;
+            }
+
+            int imageSize =
+                Math.Max(
+                    12,
+                    Math.Min(button.Width - 18, button.Height - 12));
+
+            Image oldImage = button.Image;
+            button.Image =
+                AD_AI_LearningData_Editor.IconProperty.ResizeImage(
+                    image,
+                    imageSize,
+                    imageSize);
+
+            if (oldImage != null &&
+                !ReferenceEquals(oldImage, button.Image))
+            {
+                oldImage.Dispose();
+            }
+
+            button.ImageAlign = ContentAlignment.MiddleCenter;
+        }
+
+        private ModelRegistryEntry GetSelectedTrashModelEntry()
+        {
+            if (
+                lstModelTrash.SelectedItems.Count > 0 &&
+                lstModelTrash.SelectedItems[0].Tag is ModelRegistryEntry entry)
+            {
+                return entry;
+            }
+
+            return null;
+        }
+
+        private List<ModelRegistryEntry> GetSelectedTrashModelEntries()
+        {
+            if (lstModelTrash.SelectedItems.Count == 0)
+            {
+                return new List<ModelRegistryEntry>();
+            }
+
+            return lstModelTrash.SelectedItems
+                .Cast<ListViewItem>()
+                .Select(item => item.Tag as ModelRegistryEntry)
+                .Where(entry => entry != null)
+                .Cast<ModelRegistryEntry>()
+                .ToList();
+        }
+
+        private void LstModels_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (lstModels.SelectedItems.Count > 0 && lstModelTrash != null)
+            {
+                lstModelTrash.SelectedItems.Clear();
+            }
+        }
+
+        private void LstModelTrash_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (lstModelTrash.SelectedItems.Count > 0 && lstModels != null)
+            {
+                lstModels.SelectedItems.Clear();
+            }
         }
 
         private ListViewItem CreateModelListItem(
@@ -1168,6 +1756,12 @@ namespace DonkeyDataManager
                 Path.GetFileNameWithoutExtension(entry.Name));
             item.SubItems.Add(entry.WindowsPath);
             item.Tag = entry;
+
+            if (entry.IsDeleted)
+            {
+                item.ForeColor = Color.FromArgb(190, 52, 52);
+                item.BackColor = Color.FromArgb(255, 244, 244);
+            }
 
             return item;
         }
@@ -1237,6 +1831,8 @@ namespace DonkeyDataManager
         private void UpsertModelRegistry(
             ModelRegistryEntry model)
         {
+            model.IsDeleted = false;
+
             List<ModelRegistryEntry> entries =
                 LoadModelRegistry();
 
@@ -1366,7 +1962,7 @@ namespace DonkeyDataManager
         }
 
         // =====================================================
-        // DATA LOAD
+        // tub 폴더 선택과 catalog 로드
         // =====================================================
 
         private void BtnLoadData_Click(
@@ -1383,17 +1979,221 @@ namespace DonkeyDataManager
                     fbd.ShowDialog() ==
                     DialogResult.OK)
                 {
-                    selectedDataPath =
-                        fbd.SelectedPath;
-
-                    LoadDataFolder(selectedDataPath, showMessage: true);
+                    LoadTubFolderSelection(fbd.SelectedPath, replaceExisting: true);
                 }
             }
         }
 
+        private void BtnAddTubFolder_Click(object sender, EventArgs e)
+        {
+            using (FolderBrowserDialog fbd = new FolderBrowserDialog())
+            {
+                fbd.Description = "추가할 tub 폴더 또는 tub들이 들어 있는 폴더 선택";
+
+                if (fbd.ShowDialog() == DialogResult.OK)
+                {
+                    LoadTubFolderSelection(fbd.SelectedPath, replaceExisting: false);
+                }
+            }
+        }
+
+        private void BtnRemoveTubFolder_Click(object sender, EventArgs e)
+        {
+            if (lstTubFolders.SelectedIndex < 0 || lstTubFolders.SelectedIndex >= selectedTubFolders.Count)
+            {
+                return;
+            }
+
+            int removeIndex = lstTubFolders.SelectedIndex;
+            selectedTubFolders.RemoveAt(removeIndex);
+            RefreshTubFolderList();
+
+            if (selectedTubFolders.Count == 0)
+            {
+                selectedDataPath = "";
+                integratedCatalogList.Clear();
+                catalogDisplayRows.Clear();
+                deletedCatalogIndexes.Clear();
+                lstCatalogRows.Items.Clear();
+                ReleasePreviewImage();
+                return;
+            }
+
+            lstTubFolders.SelectedIndex = Math.Min(removeIndex, selectedTubFolders.Count - 1);
+            LoadCheckedTubCatalogRows(showMessage: false);
+        }
+
+        private void LstTubFolders_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (lstTubFolders.SelectedIndex < 0 || lstTubFolders.SelectedIndex >= selectedTubFolders.Count)
+            {
+                return;
+            }
+
+            selectedDataPath = selectedTubFolders[lstTubFolders.SelectedIndex];
+            SelectFirstCatalogRowForTub(selectedDataPath);
+        }
+
+        private void LstTubFolders_ItemCheck(object sender, ItemCheckEventArgs e)
+        {
+            BeginInvoke(
+                new Action(
+                    () => LoadCheckedTubCatalogRows(showMessage: false)));
+        }
+
+        private void LoadTubFolderSelection(string folderPath, bool replaceExisting)
+        {
+            List<string> tubFolders = FindTubFolders(folderPath);
+
+            if (tubFolders.Count == 0)
+            {
+                MessageBox.Show("선택한 폴더에서 tub 데이터를 찾지 못했습니다.");
+                return;
+            }
+
+            if (replaceExisting)
+            {
+                selectedTubFolders.Clear();
+            }
+
+            foreach (string tubFolder in tubFolders)
+            {
+                if (!selectedTubFolders.Any(path => string.Equals(path, tubFolder, StringComparison.OrdinalIgnoreCase)))
+                {
+                    selectedTubFolders.Add(tubFolder);
+                }
+            }
+
+            selectedTubFolders = selectedTubFolders
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            RefreshTubFolderList();
+
+            if (selectedTubFolders.Count > 0)
+            {
+                lstTubFolders.SelectedIndex = 0;
+            }
+
+            LoadCheckedTubCatalogRows(showMessage: false);
+        }
+
+        private List<string> FindTubFolders(string folderPath)
+        {
+            List<string> result = new List<string>();
+
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                return result;
+            }
+
+            void Search(string path)
+            {
+                if (IsTubDataFolder(path))
+                {
+                    result.Add(Path.GetFullPath(path));
+                    return;
+                }
+
+                foreach (string child in Directory.GetDirectories(path))
+                {
+                    Search(child);
+                }
+            }
+
+            Search(folderPath);
+
+            return result
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private bool IsTubDataFolder(string folderPath)
+        {
+            return !string.IsNullOrWhiteSpace(folderPath) &&
+                Directory.Exists(folderPath) &&
+                !IsUploadedFileDataFolder(folderPath) &&
+                Directory.GetFiles(folderPath, "catalog_*.catalog", SearchOption.TopDirectoryOnly).Length > 0 &&
+                File.Exists(Path.Combine(folderPath, "manifest.json"));
+        }
+
+        private bool IsUploadedFileDataFolder(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                return false;
+            }
+
+            try
+            {
+                string uploadedDataPath = Path.GetFullPath(
+                    Path.Combine(
+                        AppDomain.CurrentDomain.BaseDirectory,
+                        "UploadedFile",
+                        "data")).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                string candidatePath = Path.GetFullPath(folderPath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                return string.Equals(candidatePath, uploadedDataPath, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void RefreshTubFolderList()
+        {
+            lstTubFolders.BeginUpdate();
+            try
+            {
+                lstTubFolders.Items.Clear();
+
+                foreach (string tubFolder in selectedTubFolders)
+                {
+                    lstTubFolders.Items.Add(tubFolder, true);
+                }
+            }
+            finally
+            {
+                lstTubFolders.EndUpdate();
+            }
+        }
+
+        private List<string> GetCheckedTubFolders()
+        {
+            return lstTubFolders.CheckedItems
+                .Cast<object>()
+                .Select(item => item?.ToString() ?? "")
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Where(IsTubDataFolder)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         public void LoadDataFolder(string folderPath)
         {
-            LoadDataFolder(folderPath, showMessage: false);
+            string fullFolderPath = Path.GetFullPath(folderPath);
+
+            if (IsTubDataFolder(folderPath) &&
+                !selectedTubFolders.Any(path => string.Equals(path, fullFolderPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                selectedTubFolders.Add(fullFolderPath);
+                selectedTubFolders = selectedTubFolders
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                RefreshTubFolderList();
+            }
+
+            int listIndex = selectedTubFolders.FindIndex(path => string.Equals(path, fullFolderPath, StringComparison.OrdinalIgnoreCase));
+            if (listIndex >= 0 && lstTubFolders.SelectedIndex != listIndex)
+            {
+                lstTubFolders.SelectedIndex = listIndex;
+            }
+
+            LoadCheckedTubCatalogRows(showMessage: false);
         }
 
         private void LoadDataFolder(string folderPath, bool showMessage)
@@ -1408,13 +2208,118 @@ namespace DonkeyDataManager
                 return;
             }
 
-            selectedDataPath = folderPath;
-            integratedCatalogList.Clear();
-            lstCatalogRows.Items.Clear();
+            selectedDataPath = Path.GetFullPath(folderPath);
+            LoadSingleTubCatalogRows(selectedDataPath, showMessage);
+        }
+
+        private void LoadCheckedTubCatalogRows(bool showMessage)
+        {
+            List<string> checkedTubFolders = GetCheckedTubFolders();
+
+            if (checkedTubFolders.Count == 0)
+            {
+                integratedCatalogList.Clear();
+                catalogDisplayRows.Clear();
+                lstCatalogRows.BeginUpdate();
+                try
+                {
+                    lstCatalogRows.Items.Clear();
+                }
+                finally
+                {
+                    lstCatalogRows.EndUpdate();
+                }
+                ReleasePreviewImage();
+                return;
+            }
+
+            int tubNumber = 1;
+            int loadedCount = 0;
+
+            lstCatalogRows.BeginUpdate();
+            try
+            {
+                integratedCatalogList.Clear();
+                catalogDisplayRows.Clear();
+                lstCatalogRows.Items.Clear();
+
+                foreach (string tubFolder in checkedTubFolders)
+                {
+                    AddTubHeaderRow(tubNumber, checkedTubFolders.Count, tubFolder);
+                    loadedCount += LoadTubCatalogRecords(tubFolder);
+                    tubNumber++;
+                }
+            }
+            finally
+            {
+                lstCatalogRows.EndUpdate();
+            }
+
+            if (integratedCatalogList.Count > 0)
+            {
+                SelectFirstCatalogRecordRow();
+            }
+
+            if (showMessage)
+            {
+                MessageBox.Show(
+                    $"총 {checkedTubFolders.Count}개 tub, {loadedCount}개 프레임 로드 완료");
+            }
+        }
+
+        private void LoadSingleTubCatalogRows(string folderPath, bool showMessage)
+        {
+            int loadedCount = 0;
+
+            lstCatalogRows.BeginUpdate();
+            try
+            {
+                integratedCatalogList.Clear();
+                catalogDisplayRows.Clear();
+                lstCatalogRows.Items.Clear();
+
+                AddTubHeaderRow(1, 1, folderPath);
+                loadedCount = LoadTubCatalogRecords(folderPath);
+            }
+            finally
+            {
+                lstCatalogRows.EndUpdate();
+            }
+
+            if (integratedCatalogList.Count > 0)
+            {
+                SelectFirstCatalogRecordRow();
+            }
+
+            if (showMessage)
+            {
+                MessageBox.Show(
+                    $"총 {loadedCount}개 프레임 로드 완료");
+            }
+        }
+
+        private void AddTubHeaderRow(int tubNumber, int totalTubCount, string tubFolder)
+        {
+            string text = $"[{tubNumber}/{totalTubCount}] TUB: {tubFolder}";
+
+            catalogDisplayRows.Add(
+                new CatalogListRow
+                {
+                    IsHeader = true,
+                    Text = text
+                });
+
+            lstCatalogRows.Items.Add(text);
+        }
+
+        private int LoadTubCatalogRecords(string tubFolder)
+        {
+            HashSet<int> tubDeletedIndexes = ReadDeletedIndexesFromTubFolder(tubFolder);
+            int loadedCount = 0;
 
             string[] catalogFiles =
                 Directory.GetFiles(
-                    selectedDataPath,
+                    tubFolder,
                     "catalog_*.catalog",
                     SearchOption.TopDirectoryOnly);
 
@@ -1422,14 +2327,12 @@ namespace DonkeyDataManager
 
             foreach (string catalogPath in catalogFiles)
             {
-                string[] lines = File.ReadAllLines(catalogPath);
-
-                for (int i = 0; i < lines.Length; i++)
+                int i = 0;
+                foreach (string line in File.ReadLines(catalogPath))
                 {
-                    string line = lines[i];
-
                     if (string.IsNullOrWhiteSpace(line))
                     {
+                        i++;
                         continue;
                     }
 
@@ -1457,26 +2360,112 @@ namespace DonkeyDataManager
                                     "_index")
                         };
 
+                    int recordIndex = GetRecordIndex(record, i);
+                    record.IsDeleted = tubDeletedIndexes.Contains(recordIndex);
+
                     integratedCatalogList.Add(record);
                     UpdateListBoxItem(record);
+                    loadedCount++;
+                    i++;
                 }
             }
 
-            if (integratedCatalogList.Count > 0)
-            {
-                lstCatalogRows.SelectedIndex = 0;
-            }
-
-            if (showMessage)
-            {
-                MessageBox.Show(
-                    $"총 {integratedCatalogList.Count}개 프레임 로드 완료");
-            }
+            return loadedCount;
         }
 
         // =====================================================
         // LIST UPDATE
         // =====================================================
+
+        private HashSet<int> ReadDeletedIndexesFromTubFolder(string folderPath)
+        {
+            HashSet<int> deletedIndexes = new HashSet<int>();
+
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                return deletedIndexes;
+            }
+
+            string[] manifestCandidates =
+            {
+                Path.Combine(folderPath, "manifest.json"),
+                Path.Combine(folderPath, "catalog_manifest.json")
+            };
+
+            foreach (string manifestPath in manifestCandidates)
+            {
+                if (!File.Exists(manifestPath))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    foreach (string line in File.ReadLines(manifestPath))
+                    {
+                        if (string.IsNullOrWhiteSpace(line))
+                        {
+                            continue;
+                        }
+
+                        using JsonDocument document = JsonDocument.Parse(line);
+
+                        if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                            !TryGetDeletedIndexesElement(document.RootElement, out JsonElement deletedElement) ||
+                            deletedElement.ValueKind != JsonValueKind.Array)
+                        {
+                            continue;
+                        }
+
+                        foreach (JsonElement item in deletedElement.EnumerateArray())
+                        {
+                            if (item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out int number))
+                            {
+                                deletedIndexes.Add(number);
+                            }
+                            else if (int.TryParse(item.ToString(), out number))
+                            {
+                                deletedIndexes.Add(number);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return deletedIndexes;
+        }
+
+        private bool TryGetDeletedIndexesElement(JsonElement root, out JsonElement deletedElement)
+        {
+            if (root.TryGetProperty("deleted_index", out deletedElement))
+            {
+                return true;
+            }
+
+            deletedElement = default;
+            return false;
+        }
+
+        private bool IsDeletedIndexesProperty(string propertyName)
+        {
+            return string.Equals(propertyName, "deleted_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_index", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "delete_indexes", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(propertyName, "deleted_index", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private int GetRecordIndex(CatalogRecord record, int fallbackIndex)
+        {
+            if (record != null && int.TryParse(record.Index, out int index))
+            {
+                return index;
+            }
+
+            return fallbackIndex;
+        }
 
         private void UpdateListBoxItem(
             CatalogRecord record)
@@ -1491,7 +2480,127 @@ namespace DonkeyDataManager
                 $"A:{record.Angle} | " +
                 $"T:{record.Throttle}";
 
+            catalogDisplayRows.Add(
+                new CatalogListRow
+                {
+                    IsHeader = false,
+                    Text = text,
+                    Record = record
+                });
+
             lstCatalogRows.Items.Add(text);
+        }
+
+        private CatalogListRow GetCatalogListRow(int listIndex)
+        {
+            if (listIndex < 0 || listIndex >= catalogDisplayRows.Count)
+            {
+                return null;
+            }
+
+            return catalogDisplayRows[listIndex];
+        }
+
+        private bool IsCatalogHeaderRow(int listIndex)
+        {
+            CatalogListRow row = GetCatalogListRow(listIndex);
+            return row != null && row.IsHeader;
+        }
+
+        private CatalogRecord GetCatalogRecordAtListIndex(int listIndex)
+        {
+            CatalogListRow row = GetCatalogListRow(listIndex);
+            return row == null || row.IsHeader ? null : row.Record;
+        }
+
+        private void SelectFirstCatalogRecordRow()
+        {
+            for (int i = 0; i < catalogDisplayRows.Count; i++)
+            {
+                if (!catalogDisplayRows[i].IsHeader)
+                {
+                    lstCatalogRows.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        private void SelectFirstCatalogRowForTub(string tubFolder)
+        {
+            if (string.IsNullOrWhiteSpace(tubFolder))
+            {
+                return;
+            }
+
+            string fullTubFolder = Path.GetFullPath(tubFolder);
+
+            for (int i = 0; i < catalogDisplayRows.Count; i++)
+            {
+                CatalogRecord record = GetCatalogRecordAtListIndex(i);
+                if (record == null)
+                {
+                    continue;
+                }
+
+                string recordFolder = Path.GetDirectoryName(record.SourceFilePath) ?? "";
+                if (string.Equals(Path.GetFullPath(recordFolder), fullTubFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    lstCatalogRows.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        private void LstCatalogRows_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0 || e.Index >= lstCatalogRows.Items.Count)
+            {
+                return;
+            }
+
+            e.DrawBackground();
+
+            CatalogListRow row = GetCatalogListRow(e.Index);
+
+            bool isHeader =
+                row != null &&
+                row.IsHeader;
+
+            bool isDeleted =
+                row != null &&
+                row.Record != null &&
+                row.Record.IsDeleted;
+
+            Color textColor;
+
+            if (isHeader)
+            {
+                textColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
+                    ? Color.White
+                    : Color.Purple;
+            }
+            else if (isDeleted)
+            {
+                textColor = Color.Red;
+            }
+            else
+            {
+                textColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected
+                    ? SystemColors.HighlightText
+                    : lstCatalogRows.ForeColor;
+            }
+
+            TextRenderer.DrawText(
+                e.Graphics,
+                lstCatalogRows.Items[e.Index]?.ToString() ?? string.Empty,
+                e.Font,
+                e.Bounds,
+                textColor,
+                TextFormatFlags.Left |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPrefix);
+
+            e.DrawFocusRectangle();
         }
 
         // =====================================================
@@ -1502,56 +2611,150 @@ namespace DonkeyDataManager
             object sender,
             EventArgs e)
         {
-            if (
-                lstCatalogRows.Items.Count == 0)
-                return;
-
-            int next =
-                lstCatalogRows.SelectedIndex + 1;
-
-            if (
-                next >=
-                lstCatalogRows.Items.Count)
+            if (!MoveCatalogSelection(1))
             {
-                playbackTimer.Stop();
-
-                return;
+                StopCatalogPlayback();
             }
-
-            lstCatalogRows.SelectedIndex =
-                next;
         }
 
-        private void BtnStop_Click(
+        private void BtnPlay_Click(
             object sender,
             EventArgs e)
         {
+            ToggleCatalogPlayback();
+        }
+
+        private void BtnLeft_Click(
+            object sender,
+            EventArgs e)
+        {
+            StopCatalogPlayback();
+            MoveCatalogSelection(-1);
+        }
+
+        private void BtnRight_Click(
+            object sender,
+            EventArgs e)
+        {
+            StopCatalogPlayback();
+            MoveCatalogSelection(1);
+        }
+
+        private void ToggleCatalogPlayback()
+        {
+            if (playbackTimer.Enabled)
+            {
+                StopCatalogPlayback();
+                return;
+            }
+
+            if (lstCatalogRows.Items.Count == 0)
+            {
+                return;
+            }
+
+            playbackTimer.Interval = GetTrainerPlaybackInterval();
+            playbackTimer.Start();
+            UpdatePlaybackButtonIcons();
+        }
+
+        private void StopCatalogPlayback()
+        {
             playbackTimer.Stop();
+            UpdatePlaybackButtonIcons();
+        }
+
+        private bool MoveCatalogSelection(int delta)
+        {
+            if (lstCatalogRows.Items.Count == 0 || delta == 0)
+            {
+                return false;
+            }
+
+            int next = GetCurrentCatalogSelectionIndex(delta);
+
+            if (next < 0)
+            {
+                next = delta > 0 ? -1 : lstCatalogRows.Items.Count;
+            }
+
+            do
+            {
+                next += delta;
+
+                if (next < 0 || next >= lstCatalogRows.Items.Count)
+                {
+                    return false;
+                }
+            }
+            while (IsCatalogHeaderRow(next));
+
+            SelectCatalogRow(next);
+            return true;
+        }
+
+        private int GetCurrentCatalogSelectionIndex(int delta)
+        {
+            if (lstCatalogRows.SelectedIndices.Count == 0)
+            {
+                return lstCatalogRows.SelectedIndex;
+            }
+
+            return delta >= 0
+                ? lstCatalogRows.SelectedIndices
+                    .Cast<int>()
+                    .DefaultIfEmpty(lstCatalogRows.SelectedIndex)
+                    .Max()
+                : lstCatalogRows.SelectedIndices
+                    .Cast<int>()
+                    .DefaultIfEmpty(lstCatalogRows.SelectedIndex)
+                    .Min();
+        }
+
+        private void SelectCatalogRow(int index)
+        {
+            if (index < 0 || index >= lstCatalogRows.Items.Count)
+            {
+                return;
+            }
+
+            lstCatalogRows.BeginUpdate();
+            try
+            {
+                lstCatalogRows.ClearSelected();
+                lstCatalogRows.SelectedIndex = index;
+
+                int visiblePadding = 4;
+                int topIndex = Math.Max(0, index - visiblePadding);
+                if (lstCatalogRows.TopIndex != topIndex)
+                {
+                    lstCatalogRows.TopIndex = topIndex;
+                }
+            }
+            finally
+            {
+                lstCatalogRows.EndUpdate();
+            }
         }
 
         private void CmbSpeed_SelectedIndexChanged(
             object sender,
             EventArgs e)
         {
-            switch (
-                cmbSpeed.SelectedIndex)
+            playbackTimer.Interval = GetTrainerPlaybackInterval();
+        }
+
+        private int GetTrainerPlaybackInterval()
+        {
+            string selected = cmbSpeed.SelectedItem?.ToString() ?? "1.0x";
+            string numeric = selected.Replace("x", string.Empty);
+
+            if (!double.TryParse(numeric, out double speed))
             {
-                case 0:
-                    playbackTimer.Interval = 200;
-                    break;
-
-                case 1:
-                    playbackTimer.Interval = 100;
-                    break;
-
-                case 2:
-                    playbackTimer.Interval = 50;
-                    break;
-
-                case 3:
-                    playbackTimer.Interval = 20;
-                    break;
+                speed = 1.0;
             }
+
+            return AD_AI_LearningData_Editor.frmMain.GetPlaybackIntervalForSpeed(speed);
         }
 
         // =====================================================
@@ -1567,34 +2770,34 @@ namespace DonkeyDataManager
 
             if (
                 idx < 0 ||
-                idx >= integratedCatalogList.Count)
+                idx >= catalogDisplayRows.Count ||
+                IsCatalogHeaderRow(idx))
             {
                 return;
             }
 
             CatalogRecord record =
-                integratedCatalogList[idx];
+                catalogDisplayRows[idx].Record;
 
             string imgPath =
                 ResolveCatalogImagePath(record);
 
+            if (string.Equals(currentPreviewImagePath, imgPath, StringComparison.OrdinalIgnoreCase) &&
+                currentPreviewRenderSize != Size.Empty &&
+                picDriveImage.Image != null)
+            {
+                return;
+            }
+
             if (!File.Exists(imgPath))
             {
-                picDriveImage.Image = null;
+                ReleasePreviewImage();
 
                 return;
             }
 
             try
             {
-                if (
-                    picDriveImage.Image != null)
-                {
-                    picDriveImage.Image.Dispose();
-
-                    picDriveImage.Image = null;
-                }
-
                 using (
                     FileStream fs =
                     new FileStream(
@@ -1607,15 +2810,59 @@ namespace DonkeyDataManager
                         Image temp =
                         Image.FromStream(fs))
                     {
-                        picDriveImage.Image =
-                            new Bitmap(temp);
+                        Size targetSize =
+                            GetPreviewImageRenderSize(temp.Size);
+                        Bitmap bitmap =
+                            targetSize.Width > 0 && targetSize.Height > 0
+                                ? new Bitmap(temp, targetSize)
+                                : new Bitmap(temp);
+
+                        ReleasePreviewImage();
+                        picDriveImage.Image = bitmap;
+                        currentPreviewImagePath = imgPath;
+                        currentPreviewRenderSize = targetSize;
                     }
                 }
             }
             catch
             {
+                ReleasePreviewImage();
+            }
+        }
+
+        private void ReleasePreviewImage()
+        {
+            if (picDriveImage.Image != null)
+            {
+                picDriveImage.Image.Dispose();
                 picDriveImage.Image = null;
             }
+
+            currentPreviewImagePath = "";
+            currentPreviewRenderSize = Size.Empty;
+        }
+
+        private Size GetPreviewImageRenderSize(Size sourceSize)
+        {
+            if (sourceSize.Width <= 0 || sourceSize.Height <= 0)
+            {
+                return Size.Empty;
+            }
+
+            int maxWidth = Math.Max(1, picDriveImage.ClientSize.Width);
+            int maxHeight = Math.Max(1, picDriveImage.ClientSize.Height);
+            double scale = Math.Min(
+                maxWidth / (double)sourceSize.Width,
+                maxHeight / (double)sourceSize.Height);
+
+            if (scale >= 1.0)
+            {
+                return sourceSize;
+            }
+
+            return new Size(
+                Math.Max(1, (int)Math.Round(sourceSize.Width * scale)),
+                Math.Max(1, (int)Math.Round(sourceSize.Height * scale)));
         }
 
         private string ResolveCatalogImagePath(CatalogRecord record)
@@ -1666,8 +2913,7 @@ namespace DonkeyDataManager
             object sender,
             EventArgs e)
         {
-            MessageBox.Show(
-                "프레임 제외 완료");
+            UpdateSelectedDeletedIndexes(markDeleted: true);
         }
 
         // =====================================================
@@ -1678,12 +2924,661 @@ namespace DonkeyDataManager
             object sender,
             EventArgs e)
         {
-            MessageBox.Show(
-                "프레임 복원 완료");
+            UpdateSelectedDeletedIndexes(markDeleted: false);
+        }
+
+        private bool UpdateSelectedDeletedIndexes(bool markDeleted)
+        {
+            if (lstCatalogRows.SelectedIndices.Count == 0)
+            {
+                MessageBox.Show("프레임을 선택하세요.");
+                return false;
+            }
+
+            Dictionary<string, HashSet<int>> selectedIndexesByTub =
+                new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (int selectedIndex in lstCatalogRows.SelectedIndices)
+            {
+                CatalogRecord record = GetCatalogRecordAtListIndex(selectedIndex);
+                if (record == null)
+                {
+                    continue;
+                }
+
+                string tubFolder = Path.GetDirectoryName(record.SourceFilePath) ?? "";
+                if (string.IsNullOrWhiteSpace(tubFolder))
+                {
+                    continue;
+                }
+
+                if (!selectedIndexesByTub.TryGetValue(tubFolder, out HashSet<int> indexes))
+                {
+                    indexes = new HashSet<int>();
+                    selectedIndexesByTub[tubFolder] = indexes;
+                }
+
+                indexes.Add(GetRecordIndex(record, record.LineIndex));
+            }
+
+            if (selectedIndexesByTub.Count == 0)
+            {
+                MessageBox.Show("선택한 프레임의 인덱스를 확인하지 못했습니다.");
+                return false;
+            }
+
+            foreach (var item in selectedIndexesByTub)
+            {
+                HashSet<int> tubDeletedIndexes = ReadDeletedIndexesFromTubFolder(item.Key);
+
+                if (markDeleted)
+                {
+                    tubDeletedIndexes.UnionWith(item.Value);
+                }
+                else
+                {
+                    tubDeletedIndexes.ExceptWith(item.Value);
+                }
+
+                if (!WriteDeletedIndexesToTubManifest(item.Key, tubDeletedIndexes))
+                {
+                    MessageBox.Show("deleted_index 저장 중 오류가 발생했습니다.");
+                    return false;
+                }
+            }
+
+            foreach (CatalogRecord record in integratedCatalogList)
+            {
+                string tubFolder = Path.GetDirectoryName(record.SourceFilePath) ?? "";
+                HashSet<int> tubDeletedIndexes = ReadDeletedIndexesFromTubFolder(tubFolder);
+                int recordIndex = GetRecordIndex(record, record.LineIndex);
+                record.IsDeleted = tubDeletedIndexes.Contains(recordIndex);
+            }
+
+            lstCatalogRows.Invalidate();
+            return true;
+        }
+
+        private bool WriteDeletedIndexesToTubManifest(string folderPath, HashSet<int> deletedIndexes)
+        {
+            try
+            {
+                UpdateTubManifestDeletedIndexOnly(folderPath, deletedIndexes, refreshCatalogState: false);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool EnsureTubV2ManifestForTraining(string folderPath, out string errorMessage)
+        {
+            errorMessage = "";
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+                {
+                    errorMessage = "데이터 폴더를 찾을 수 없습니다.";
+                    return false;
+                }
+
+                if (Directory.GetFiles(folderPath, "catalog_*.catalog", SearchOption.TopDirectoryOnly).Length == 0)
+                {
+                    errorMessage = "catalog_*.catalog 파일을 찾을 수 없습니다.";
+                    return false;
+                }
+
+                UpdateTubManifestDeletedIndexOnly(
+                    folderPath,
+                    ReadDeletedIndexesFromTubFolder(folderPath),
+                    refreshCatalogState: false);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+                return false;
+            }
+        }
+
+        private void UpdateTubManifestDeletedIndexOnly(
+            string folderPath,
+            HashSet<int> deletedIndexes,
+            bool refreshCatalogState)
+        {
+            string manifestPath = Path.Combine(folderPath, "manifest.json");
+            List<string> lines = File.Exists(manifestPath)
+                ? File.ReadAllLines(manifestPath).ToList()
+                : new List<string>();
+
+            bool hasTubV2Header =
+                lines.Count >= 2 &&
+                IsJsonArrayLine(lines[0]) &&
+                IsJsonArrayLine(lines[1]);
+
+            if (!hasTubV2Header)
+            {
+                lines = CreateDefaultTubV2ManifestLines();
+                refreshCatalogState = true;
+            }
+
+            while (lines.Count < 5)
+            {
+                lines.Add("{}");
+            }
+
+            int stateLineIndex = FindTubManifestStateLineIndex(lines);
+            if (stateLineIndex < 0)
+            {
+                stateLineIndex = 4;
+            }
+
+            JsonObject state = TryParseJsonObject(lines[stateLineIndex]) ?? new JsonObject();
+            RemoveDeletedIndexProperties(state);
+
+            JsonArray deletedArray = new JsonArray();
+            foreach (int index in deletedIndexes.OrderBy(index => index))
+            {
+                deletedArray.Add(index);
+            }
+
+            if (refreshCatalogState)
+            {
+                JsonArray paths = new JsonArray();
+                foreach (string catalogFile in Directory.GetFiles(folderPath, "catalog_*.catalog", SearchOption.TopDirectoryOnly)
+                    .OrderBy(ExtractCatalogNumberFromPath)
+                    .ThenBy(path => path, StringComparer.OrdinalIgnoreCase))
+                {
+                    paths.Add(Path.GetFileName(catalogFile));
+                }
+
+                state["paths"] = paths;
+                state["current_index"] = GetNextCatalogIndex(folderPath);
+                state["max_len"] = ReadCatalogMaxLen(folderPath);
+            }
+
+            state["deleted_index"] = deletedArray;
+            lines[stateLineIndex] = state.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+
+            File.WriteAllText(
+                manifestPath,
+                string.Join("\n", lines) + "\n",
+                new UTF8Encoding(false));
+        }
+
+        private List<string> CreateDefaultTubV2ManifestLines()
+        {
+            return new List<string>
+            {
+                "[\"cam/image_array\", \"user/angle\", \"user/throttle\", \"user/mode\"]",
+                "[\"image_array\", \"float\", \"float\", \"str\"]",
+                "{}",
+                CreateTubSessionLine(),
+                "{}"
+            };
+        }
+
+        private int FindTubManifestStateLineIndex(List<string> lines)
+        {
+            for (int i = lines.Count - 1; i >= 0; i--)
+            {
+                JsonObject obj = TryParseJsonObject(lines[i]);
+                if (obj == null)
+                {
+                    continue;
+                }
+
+                if (obj.ContainsKey("paths") ||
+                    obj.ContainsKey("current_index") ||
+                    obj.ContainsKey("max_len") ||
+                    obj.Any(property => IsDeletedIndexesProperty(property.Key)))
+                {
+                    return i;
+                }
+            }
+
+            return lines.Count > 4 && IsJsonObjectLine(lines[4])
+                ? 4
+                : -1;
+        }
+
+        private JsonObject TryParseJsonObject(string line)
+        {
+            try
+            {
+                return JsonNode.Parse(line) as JsonObject;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void NormalizeCatalogFilesForTraining(string folderPath)
+        {
+            UTF8Encoding utf8NoBom = new UTF8Encoding(false);
+            int maxLen = ReadCatalogMaxLen(folderPath);
+
+            foreach (string catalogFile in Directory.GetFiles(folderPath, "catalog_*.catalog", SearchOption.TopDirectoryOnly)
+                .OrderBy(ExtractCatalogNumberFromPath)
+                .ThenBy(path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                List<string> lines = File.ReadAllLines(catalogFile)
+                    .Where(line => !string.IsNullOrWhiteSpace(line))
+                    .ToList();
+
+                File.WriteAllText(
+                    catalogFile,
+                    string.Join("\n", lines) + "\n",
+                    utf8NoBom);
+
+                int catalogNumber = ExtractCatalogNumberFromPath(catalogFile);
+                int startIndex = ReadCatalogManifestStartIndex(catalogFile + "_manifest");
+                if (startIndex < 0 && catalogNumber != int.MaxValue)
+                {
+                    startIndex = catalogNumber * maxLen;
+                }
+
+                JsonObject catalogManifest = new JsonObject
+                {
+                    ["created_at"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0,
+                    ["line_lengths"] = new JsonArray(lines.Select(line => JsonValue.Create(utf8NoBom.GetByteCount(line) + 1)).ToArray<JsonNode>()),
+                    ["path"] = Path.GetFileName(catalogFile) + "_manifest",
+                    ["start_index"] = Math.Max(0, startIndex)
+                };
+
+                File.WriteAllText(
+                    catalogFile + "_manifest",
+                    catalogManifest.ToJsonString(new JsonSerializerOptions { WriteIndented = false }) + "\n",
+                    utf8NoBom);
+            }
+        }
+
+        private string CreateFilteredTrainingTubFolder(string sourceFolder, HashSet<int> excludedIndexes)
+        {
+            string tempRoot = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "TrainingTemp");
+            string tempFolder = Path.Combine(
+                tempRoot,
+                "tub_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + Guid.NewGuid().ToString("N"));
+
+            Directory.CreateDirectory(tempFolder);
+            CopyDirectoryContents(sourceFolder, tempFolder);
+
+            int remainingRows = FilterCatalogRowsForTraining(tempFolder, excludedIndexes);
+            if (remainingRows <= 0)
+            {
+                throw new InvalidOperationException("제외되지 않은 학습 데이터가 없습니다.");
+            }
+
+            NormalizeCatalogFilesForTraining(tempFolder);
+            UpdateTrainingTubManifestDeletedIndexes(tempFolder, new HashSet<int>(), refreshCatalogState: true);
+            return tempFolder;
+        }
+
+        private void UpdateTrainingTubManifestDeletedIndexes(
+            string folderPath,
+            HashSet<int> deletedIndexes,
+            bool refreshCatalogState)
+        {
+            string manifestPath = Path.Combine(folderPath, "manifest.json");
+            List<string> lines = File.Exists(manifestPath)
+                ? File.ReadAllLines(manifestPath).ToList()
+                : new List<string>();
+
+            bool hasTubV2Header =
+                lines.Count >= 2 &&
+                IsJsonArrayLine(lines[0]) &&
+                IsJsonArrayLine(lines[1]);
+
+            if (!hasTubV2Header)
+            {
+                lines = CreateDefaultTubV2ManifestLines();
+                refreshCatalogState = true;
+            }
+
+            while (lines.Count < 5)
+            {
+                lines.Add("{}");
+            }
+
+            int stateLineIndex = FindTubManifestStateLineIndex(lines);
+            if (stateLineIndex < 0)
+            {
+                stateLineIndex = 4;
+            }
+
+            JsonObject state = TryParseJsonObject(lines[stateLineIndex]) ?? new JsonObject();
+            RemoveDeletedIndexProperties(state);
+
+            JsonArray deletedArray = new JsonArray();
+            foreach (int index in deletedIndexes.OrderBy(index => index))
+            {
+                deletedArray.Add(index);
+            }
+
+            if (refreshCatalogState)
+            {
+                JsonArray paths = new JsonArray();
+                foreach (string catalogFile in Directory.GetFiles(folderPath, "catalog_*.catalog", SearchOption.TopDirectoryOnly)
+                    .OrderBy(ExtractCatalogNumberFromPath)
+                    .ThenBy(path => path, StringComparer.OrdinalIgnoreCase))
+                {
+                    paths.Add(Path.GetFileName(catalogFile));
+                }
+
+                state["paths"] = paths;
+                state["current_index"] = GetNextCatalogIndex(folderPath);
+                state["max_len"] = ReadCatalogMaxLen(folderPath);
+            }
+
+            state["deleted_indexes"] = deletedArray;
+            lines[stateLineIndex] = state.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+
+            File.WriteAllText(
+                manifestPath,
+                string.Join("\n", lines) + "\n",
+                new UTF8Encoding(false));
+        }
+
+        private int FilterCatalogRowsForTraining(string tubFolder, HashSet<int> excludedIndexes)
+        {
+            int remainingRows = 0;
+
+            foreach (string catalogFile in Directory.GetFiles(tubFolder, "catalog_*.catalog", SearchOption.TopDirectoryOnly))
+            {
+                List<string> filteredLines = new List<string>();
+                int fallbackIndex = 0;
+
+                foreach (string line in File.ReadLines(catalogFile))
+                {
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    int recordIndex = TryReadCatalogIndex(line);
+                    if (recordIndex < 0)
+                    {
+                        recordIndex = fallbackIndex;
+                    }
+
+                    fallbackIndex++;
+
+                    if (excludedIndexes.Contains(recordIndex))
+                    {
+                        continue;
+                    }
+
+                    filteredLines.Add(line);
+                }
+
+                remainingRows += filteredLines.Count;
+                File.WriteAllText(
+                    catalogFile,
+                    string.Join("\n", filteredLines) + (filteredLines.Count > 0 ? "\n" : ""),
+                    new UTF8Encoding(false));
+            }
+
+            return remainingRows;
+        }
+
+        private void CopyDirectoryContents(string sourceFolder, string destinationFolder)
+        {
+            Directory.CreateDirectory(destinationFolder);
+
+            foreach (string directory in Directory.GetDirectories(sourceFolder, "*", SearchOption.AllDirectories))
+            {
+                string relative = Path.GetRelativePath(sourceFolder, directory);
+                Directory.CreateDirectory(Path.Combine(destinationFolder, relative));
+            }
+
+            foreach (string file in Directory.GetFiles(sourceFolder, "*.*", SearchOption.AllDirectories))
+            {
+                string relative = Path.GetRelativePath(sourceFolder, file);
+                string destination = Path.Combine(destinationFolder, relative);
+                string destinationDirectory = Path.GetDirectoryName(destination);
+
+                if (!string.IsNullOrWhiteSpace(destinationDirectory))
+                {
+                    Directory.CreateDirectory(destinationDirectory);
+                }
+
+                File.Copy(file, destination, overwrite: true);
+            }
+        }
+
+        private void DeleteDirectorySafe(string folder)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
+                {
+                    Directory.Delete(folder, recursive: true);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private string TryGetJsonArrayLine(List<string> lines, int preferredIndex)
+        {
+            if (preferredIndex >= 0 && preferredIndex < lines.Count && IsJsonArrayLine(lines[preferredIndex]))
+            {
+                return lines[preferredIndex].Trim();
+            }
+
+            foreach (string line in lines)
+            {
+                if (IsJsonArrayLine(line))
+                {
+                    return line.Trim();
+                }
+            }
+
+            return null;
+        }
+
+        private string TryGetJsonObjectLine(List<string> lines, int preferredIndex)
+        {
+            if (preferredIndex >= 0 && preferredIndex < lines.Count && IsJsonObjectLine(lines[preferredIndex]))
+            {
+                return lines[preferredIndex].Trim();
+            }
+
+            return null;
+        }
+
+        private bool IsJsonArrayLine(string line)
+        {
+            try
+            {
+                return JsonNode.Parse(line) is JsonArray;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool IsJsonObjectLine(string line)
+        {
+            try
+            {
+                return JsonNode.Parse(line) is JsonObject;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private JsonObject FindTubManifestStateObject(List<string> lines)
+        {
+            for (int i = lines.Count - 1; i >= 0; i--)
+            {
+                try
+                {
+                    JsonNode node = JsonNode.Parse(lines[i]);
+                    if (node is JsonObject obj &&
+                        (obj.ContainsKey("paths") ||
+                         obj.ContainsKey("current_index") ||
+                         obj.ContainsKey("max_len") ||
+                         obj.Any(property => IsDeletedIndexesProperty(property.Key))))
+                    {
+                        return obj;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            return null;
+        }
+
+        private string CreateTubSessionLine()
+        {
+            double createdAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+            return "{\"created_at\":" + createdAt.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",\"sessions\":{\"all_full_ids\":[],\"last_id\":0,\"last_full_id\":\"\"}}";
+        }
+
+        private int GetNextCatalogIndex(string folderPath)
+        {
+            int maxIndex = -1;
+
+            foreach (string catalogFile in Directory.GetFiles(folderPath, "catalog_*.catalog", SearchOption.TopDirectoryOnly))
+            {
+                foreach (string line in File.ReadLines(catalogFile))
+                {
+                    int index = TryReadCatalogIndex(line);
+                    if (index > maxIndex)
+                    {
+                        maxIndex = index;
+                    }
+                }
+            }
+
+            return maxIndex + 1;
+        }
+
+        private int TryReadCatalogIndex(string catalogLine)
+        {
+            try
+            {
+                JsonNode node = JsonNode.Parse(catalogLine);
+                if (node is JsonObject obj &&
+                    obj.TryGetPropertyValue("_index", out JsonNode value) &&
+                    value != null &&
+                    int.TryParse(value.ToString(), out int index))
+                {
+                    return index;
+                }
+            }
+            catch
+            {
+            }
+
+            return -1;
+        }
+
+        private int ReadCatalogMaxLen(string folderPath)
+        {
+            int[] starts = Directory.GetFiles(folderPath, "catalog_*.catalog_manifest", SearchOption.TopDirectoryOnly)
+                .Select(ReadCatalogManifestStartIndex)
+                .Where(index => index >= 0)
+                .OrderBy(index => index)
+                .ToArray();
+
+            if (starts.Length >= 2)
+            {
+                return Math.Max(1, starts[1] - starts[0]);
+            }
+
+            string manifestPath = Path.Combine(folderPath, "manifest.json");
+            if (File.Exists(manifestPath))
+            {
+                foreach (string line in File.ReadLines(manifestPath))
+                {
+                    try
+                    {
+                        JsonNode node = JsonNode.Parse(line);
+                        if (node is JsonObject obj &&
+                            obj.TryGetPropertyValue("max_len", out JsonNode value) &&
+                            value != null &&
+                            int.TryParse(value.ToString(), out int maxLen) &&
+                            maxLen > 0)
+                        {
+                            return maxLen;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            return 1000;
+        }
+
+        private int ReadCatalogManifestStartIndex(string manifestPath)
+        {
+            try
+            {
+                JsonNode node = JsonNode.Parse(File.ReadAllText(manifestPath));
+                if (node is JsonObject obj &&
+                    obj.TryGetPropertyValue("start_index", out JsonNode value) &&
+                    value != null &&
+                    int.TryParse(value.ToString(), out int index))
+                {
+                    return index;
+                }
+            }
+            catch
+            {
+            }
+
+            return -1;
+        }
+
+        private int ExtractCatalogNumberFromPath(string path)
+        {
+            string fileName = Path.GetFileNameWithoutExtension(path);
+            int underscoreIndex = fileName.LastIndexOf('_');
+
+            if (underscoreIndex >= 0 &&
+                int.TryParse(fileName.Substring(underscoreIndex + 1), out int number))
+            {
+                return number;
+            }
+
+            return int.MaxValue;
+        }
+
+        private void RemoveDeletedIndexProperties(JsonObject manifestObject)
+        {
+            if (manifestObject == null)
+            {
+                return;
+            }
+
+            string[] names = manifestObject
+                .Select(property => property.Key)
+                .Where(IsDeletedIndexesProperty)
+                .ToArray();
+
+            foreach (string name in names)
+            {
+                manifestObject.Remove(name);
+            }
         }
 
         // =====================================================
-        // TRAIN
+        // 학습 실행과 중단/취소 처리
         // =====================================================
 
         private async void BtnTrain_Click(
@@ -1697,19 +3592,28 @@ namespace DonkeyDataManager
             // 4. 로그를 파일과 상태창에 동시에 남기고, 성공 시 모델 registry에 등록
             TrainerStatus statusForm = null;
             bool trainingCancelled = false;
+            bool trainingStopRequested = false;
             string modelName = "";
             string modelWindowsPath = "";
+            List<string> filteredTrainingTubPaths = new List<string>();
 
             try
             {
-                if (
-                    string.IsNullOrEmpty(
-                        selectedDataPath) ||
-                    !Directory.Exists(
-                        selectedDataPath))
+                List<string> checkedTubFolders = lstTubFolders.CheckedItems
+                    .Cast<object>()
+                    .Select(item => item?.ToString() ?? "")
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .ToList();
+
+                List<string> trainingSourceFolders = checkedTubFolders
+                    .Where(path => IsTubDataFolder(path))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (trainingSourceFolders.Count == 0)
                 {
                     MessageBox.Show(
-                        "먼저 데이터 폴더를 로드하세요.",
+                        "먼저 학습할 tub 데이터 폴더를 체크하세요.",
                         "데이터 없음",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
@@ -1728,6 +3632,20 @@ namespace DonkeyDataManager
                     return;
                 }
 
+                foreach (string tubFolder in trainingSourceFolders)
+                {
+                    if (!EnsureTubV2ManifestForTraining(tubFolder, out string manifestError))
+                    {
+                        MessageBox.Show(
+                            "학습용 manifest.json을 확인하지 못했습니다.\n" + tubFolder + "\n" + manifestError,
+                            "manifest 오류",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+
+                        return;
+                    }
+                }
+
                 if (!IsWslAvailable(out string wslMessage))
                 {
                     MessageBox.Show(
@@ -1744,10 +3662,32 @@ namespace DonkeyDataManager
                 string mycarWslPath =
                     wslMycarPath;
 
-                string selectedTubWslPath =
-                    ResolveTubWslPath(
-                        selectedDataPath,
-                        mycarWslPath);
+                List<string> sourceTubWslPaths = new List<string>();
+                List<string> trainingTubWslPaths = new List<string>();
+
+                foreach (string tubFolder in trainingSourceFolders)
+                {
+                    sourceTubWslPaths.Add(
+                        ResolveTubWslPath(
+                            tubFolder,
+                            mycarWslPath));
+
+                    HashSet<int> indexesExcludedFromTraining =
+                        ReadDeletedIndexesFromTubFolder(tubFolder);
+
+                    string filteredTubPath =
+                        CreateFilteredTrainingTubFolder(
+                            tubFolder,
+                            indexesExcludedFromTraining);
+
+                    filteredTrainingTubPaths.Add(filteredTubPath);
+                    trainingTubWslPaths.Add(
+                        ResolveTubWslPath(
+                            filteredTubPath,
+                            mycarWslPath));
+                }
+
+                string dataPathDisplay = string.Join(";", trainingSourceFolders);
 
                 modelName =
                     "mypilot_" +
@@ -1788,7 +3728,7 @@ namespace DonkeyDataManager
                     psi,
                     BuildTrainCommand(
                         mycarWslPath,
-                        selectedTubWslPath,
+                        trainingTubWslPaths,
                         modelRelativePath));
 
                 btnTrain.Enabled = false;
@@ -1796,6 +3736,7 @@ namespace DonkeyDataManager
 
                 statusForm =
                     new TrainerStatus();
+                trainingProcessWslPid = 0;
 
                 statusForm.CancelRequested +=
                     (cancelSender, cancelArgs) =>
@@ -1805,10 +3746,18 @@ namespace DonkeyDataManager
                             "학습 취소 요청됨. 실행 중인 WSL 학습 프로세스를 종료합니다.");
                         TryTerminateTrainingProcess();
                     };
+                statusForm.StopTrainingRequested +=
+                    (stopSender, stopArgs) =>
+                    {
+                        trainingStopRequested = true;
+                        statusForm.AppendLog(
+                            "학습 중단 요청됨. 현재 학습을 즉시 멈추고 모델 저장을 시도합니다.");
+                        TryRequestTrainingStop(statusForm);
+                    };
 
                 statusForm.SetStatus(
                     "WSL 학습 준비 중",
-                    selectedDataPath,
+                    dataPathDisplay,
                     modelWindowsPath,
                     trainingLogPath);
 
@@ -1824,7 +3773,7 @@ namespace DonkeyDataManager
 
                 statusForm.SetStatus(
                     "WSL 학습 실행 중",
-                    selectedDataPath,
+                    dataPathDisplay,
                     modelWindowsPath,
                     trainingLogPath);
 
@@ -1848,12 +3797,12 @@ namespace DonkeyDataManager
 
                 if (wslProcess.ExitCode != 0)
                 {
-                    CleanupGeneratedModel(
-                        modelName,
-                        modelWindowsPath);
-
                     if (trainingCancelled)
                     {
+                        CleanupGeneratedModel(
+                            modelName,
+                            modelWindowsPath);
+
                         statusForm.AppendLog(
                             "학습이 취소되어 생성 중이던 모델 데이터를 정리했습니다.");
 
@@ -1864,19 +3813,31 @@ namespace DonkeyDataManager
                         return;
                     }
 
-                    statusForm.SetStatus(
-                        "학습 실패",
-                        selectedDataPath,
-                        modelWindowsPath,
-                        trainingLogPath);
+                    if (trainingStopRequested && File.Exists(modelWindowsPath))
+                    {
+                        statusForm.AppendLog(
+                            "학습 중단 후 모델 파일이 생성되어 등록을 계속합니다.");
+                    }
+                    else
+                    {
+                        CleanupGeneratedModel(
+                            modelName,
+                            modelWindowsPath);
 
-                    statusForm.MarkFinished(
-                        "학습 실패");
+                        statusForm.SetStatus(
+                            "학습 실패",
+                            dataPathDisplay,
+                            modelWindowsPath,
+                            trainingLogPath);
 
-                    throw new InvalidOperationException(
-                        "train.py 실행이 실패했습니다.\n\n" +
-                        "자세한 내용은 로그 파일을 확인하세요.\n" +
-                        trainingLogPath);
+                        statusForm.MarkFinished(
+                            "학습 실패");
+
+                        throw new InvalidOperationException(
+                            "train.py 실행이 실패했습니다.\n\n" +
+                            "자세한 내용은 로그 파일을 확인하세요.\n" +
+                            trainingLogPath);
+                    }
                 }
 
                 if (!File.Exists(modelWindowsPath))
@@ -1892,22 +3853,23 @@ namespace DonkeyDataManager
                         Name = modelName,
                         WindowsPath = modelWindowsPath,
                         WslPath = modelWslPath,
-                        SourceTubWindowsPath = selectedDataPath,
-                        SourceTubWslPath = selectedTubWslPath,
+                        SourceTubWindowsPath = dataPathDisplay,
+                        SourceTubWslPath = string.Join(",", sourceTubWslPaths),
                         CreatedAt = DateTime.Now
                     };
 
                 UpsertModelRegistry(model);
+                UpdateDonkeyModelDatabaseTubs(model, sourceTubWslPaths);
                 AddOrUpdateModelList(model);
 
                 statusForm.SetStatus(
-                    "학습 완료",
-                    selectedDataPath,
+                    trainingStopRequested ? "학습 중단 후 모델 생성 완료" : "학습 완료",
+                    dataPathDisplay,
                     modelWindowsPath,
                     trainingLogPath);
 
                 statusForm.MarkFinished(
-                    "학습 완료");
+                    trainingStopRequested ? "학습 중단 후 모델 생성 완료" : "학습 완료");
 
                 if (!statusForm.IsDisposed)
                 {
@@ -1949,6 +3911,11 @@ namespace DonkeyDataManager
             }
             finally
             {
+                foreach (string filteredTrainingTubPath in filteredTrainingTubPaths)
+                {
+                    DeleteDirectorySafe(filteredTrainingTubPath);
+                }
+
                 btnTrain.Enabled = true;
                 btnTrain.Text = "\U0001f9e0 AI 학습 시작";
             }
@@ -1956,9 +3923,33 @@ namespace DonkeyDataManager
 
         private string BuildTrainCommand(
             string mycarWslPath,
-            string selectedTubWslPath,
+            List<string> selectedTubWslPaths,
             string modelRelativePath)
         {
+            string tubArgument = string.Join(",", selectedTubWslPaths);
+            string tubChecks = "";
+
+            foreach (string tubPath in selectedTubWslPaths)
+            {
+                tubChecks +=
+                    "if [ ! -d " +
+                    QuoteForBash(tubPath) +
+                    " ]; then " +
+                    "echo 'Selected tub directory does not exist: " +
+                    EscapeForDoubleQuotedBash(tubPath) +
+                    "' >&2; " +
+                    "exit 23; " +
+                    "fi; " +
+                    "if [ ! -f " +
+                    QuoteForBash(tubPath.TrimEnd('/') + "/manifest.json") +
+                    " ]; then " +
+                    "echo 'Selected folder is not a DonkeyCar tub. manifest.json was not found: " +
+                    EscapeForDoubleQuotedBash(tubPath) +
+                    "' >&2; " +
+                    "exit 24; " +
+                    "fi; ";
+            }
+
             // WSL bash에서 실행할 실제 학습 명령 문자열을 만듭니다.
             // 여기서 manifest.json 존재를 검사하므로, tub 파일명이 바뀌면 학습이 시작되기 전에 실패합니다.
             return
@@ -1973,20 +3964,7 @@ namespace DonkeyDataManager
                 "' >&2; " +
                 "exit 21; " +
                 "fi; " +
-                "if [ ! -d " +
-                QuoteForBash(selectedTubWslPath) +
-                " ]; then " +
-                "echo 'Selected tub directory does not exist: " +
-                EscapeForDoubleQuotedBash(selectedTubWslPath) +
-                "' >&2; " +
-                "exit 23; " +
-                "fi; " +
-                "if [ ! -f " +
-                QuoteForBash(selectedTubWslPath.TrimEnd('/') + "/manifest.json") +
-                " ]; then " +
-                "echo 'Selected folder is not a DonkeyCar tub. manifest.json was not found.' >&2; " +
-                "exit 24; " +
-                "fi; " +
+                tubChecks +
                 "mkdir -p " +
                 QuoteForBash(ModelDirectoryName) +
                 "; " +
@@ -1994,15 +3972,105 @@ namespace DonkeyDataManager
                 "echo 'Using Python after conda activate:'; " +
                 "python -c 'import sys; print(sys.executable)'; " +
                 "echo \"Training tub: " +
-                EscapeForDoubleQuotedBash(selectedTubWslPath) +
+                EscapeForDoubleQuotedBash(tubArgument) +
                 "\"; " +
                 "echo \"Saving model: " +
                 EscapeForDoubleQuotedBash(modelRelativePath) +
                 "\"; " +
-                "python train.py --tubs " +
-                QuoteForBash(selectedTubWslPath) +
+                "setsid python train.py --tubs " +
+                QuoteForBash(tubArgument) +
                 " --model " +
-                QuoteForBash(modelRelativePath);
+                QuoteForBash(modelRelativePath) +
+                " & TRAIN_PID=$!; " +
+                "echo __TRAIN_PID__:$TRAIN_PID; " +
+                "wait $TRAIN_PID";
+        }
+
+        private void TryRequestTrainingStop(TrainerStatus statusForm)
+        {
+            try
+            {
+                if (trainingProcessWslPid <= 0)
+                {
+                    statusForm.AppendLog(
+                        "학습 프로세스 PID를 아직 확인하지 못해 중단 신호를 보내지 못했습니다.");
+                    return;
+                }
+
+                ProcessStartInfo psi =
+                    new ProcessStartInfo
+                    {
+                        FileName = "wsl.exe",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+
+                AddWslArguments(
+                    psi,
+                    BuildStopTrainingCommand(trainingProcessWslPid));
+
+                using (Process proc = Process.Start(psi))
+                {
+                    if (proc == null)
+                    {
+                        statusForm.AppendLog(
+                            "학습 중단 신호 전송 실패: wsl.exe를 시작하지 못했습니다.");
+                        return;
+                    }
+
+                    proc.WaitForExit();
+
+                    if (proc.ExitCode == 0)
+                    {
+                        statusForm.AppendLog(
+                            "학습 프로세스 그룹에 중단 신호를 보냈습니다. 모델 저장을 기다립니다.");
+                    }
+                    else
+                    {
+                        string error =
+                            proc.StandardError
+                                .ReadToEnd()
+                                .Replace("\0", "")
+                                .Trim();
+
+                        statusForm.AppendLog(
+                            "학습 중단 신호 전송 실패: " +
+                            (string.IsNullOrWhiteSpace(error) ? "알 수 없는 오류" : error));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                statusForm.AppendLog(
+                    "학습 중단 신호 전송 오류: " + ex.Message);
+            }
+        }
+
+        private string BuildStopTrainingCommand(int pid)
+        {
+            string pidText = pid.ToString();
+            return
+                "PID=" + pidText + "; " +
+                "PGID=$(ps -o pgid= -p \"$PID\" 2>/dev/null | tr -d ' '); " +
+                "if [ -z \"$PGID\" ]; then PGID=\"$PID\"; fi; " +
+                "CHILDREN=$(pgrep -P \"$PID\" 2>/dev/null || true); " +
+                "echo \"Requesting immediate training stop pid=$PID pgid=$PGID\"; " +
+                "kill -INT -- -\"$PGID\" 2>/dev/null || kill -INT \"$PID\" 2>/dev/null || true; " +
+                "for CHILD in $CHILDREN; do kill -INT \"$CHILD\" 2>/dev/null || true; done; " +
+                "for i in 1 2 3 4 5; do " +
+                "if ! kill -0 \"$PID\" 2>/dev/null; then echo \"Training process stopped after interrupt.\"; exit 0; fi; " +
+                "sleep 1; " +
+                "done; " +
+                "echo \"Training still running after interrupt. Sending terminate signal.\"; " +
+                "kill -TERM -- -\"$PGID\" 2>/dev/null || kill -TERM \"$PID\" 2>/dev/null || true; " +
+                "sleep 1; " +
+                "if kill -0 \"$PID\" 2>/dev/null; then " +
+                "echo \"Training still running. Forcing stop.\"; " +
+                "kill -KILL -- -\"$PGID\" 2>/dev/null || kill -KILL \"$PID\" 2>/dev/null || true; " +
+                "fi; " +
+                "echo \"Stop signal sent. Checking saved model.\"";
         }
 
         private void TryTerminateTrainingProcess()
@@ -2158,6 +4226,208 @@ namespace DonkeyDataManager
                 fileName.StartsWith(
                     modelBaseName + ".",
                     StringComparison.OrdinalIgnoreCase);
+        }
+
+        private List<string> GetRelatedModelFilesFromPath(string modelPath)
+        {
+            ModelRegistryEntry entry =
+                new ModelRegistryEntry
+                {
+                    Name = Path.GetFileName(modelPath),
+                    WindowsPath = modelPath
+                };
+
+            return GetRelatedModelFiles(entry);
+        }
+
+        private void ImportDonkeyModelDatabaseEntry(
+            string sourceModelPath,
+            string destinationModelPath,
+            bool copyWholeDatabaseWhenDestinationEmpty)
+        {
+            string sourceDatabasePath =
+                Path.Combine(
+                    Path.GetDirectoryName(sourceModelPath) ?? "",
+                    "database.json");
+
+            if (!File.Exists(sourceDatabasePath))
+            {
+                return;
+            }
+
+            string destinationModelsPath =
+                Path.GetDirectoryName(destinationModelPath);
+
+            if (string.IsNullOrWhiteSpace(destinationModelsPath))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(destinationModelsPath);
+
+            string destinationDatabasePath =
+                Path.Combine(
+                    destinationModelsPath,
+                    "database.json");
+
+            if (copyWholeDatabaseWhenDestinationEmpty &&
+                !File.Exists(destinationDatabasePath))
+            {
+                File.Copy(sourceDatabasePath, destinationDatabasePath, overwrite: true);
+                return;
+            }
+
+            JsonNode sourceRoot =
+                JsonNode.Parse(File.ReadAllText(sourceDatabasePath));
+
+            if (sourceRoot is not JsonArray sourceArray)
+            {
+                return;
+            }
+
+            string sourceModelName =
+                Path.GetFileName(sourceModelPath);
+
+            string sourceModelBaseName =
+                Path.GetFileNameWithoutExtension(sourceModelPath);
+
+            JsonObject sourceEntry =
+                sourceArray
+                    .OfType<JsonObject>()
+                    .FirstOrDefault(
+                        modelObject =>
+                            IsDonkeyModelDatabaseEntry(
+                                modelObject,
+                                sourceModelBaseName,
+                                sourceModelName));
+
+            if (sourceEntry == null)
+            {
+                return;
+            }
+
+            string destinationModelName =
+                Path.GetFileName(destinationModelPath);
+
+            string destinationModelBaseName =
+                Path.GetFileNameWithoutExtension(destinationModelPath);
+
+            JsonObject importedEntry =
+                JsonNode.Parse(sourceEntry.ToJsonString()) as JsonObject;
+
+            if (importedEntry == null)
+            {
+                return;
+            }
+
+            ReplaceModelNameInJson(
+                importedEntry,
+                sourceModelBaseName,
+                destinationModelBaseName,
+                sourceModelName,
+                destinationModelName);
+
+            JsonArray destinationArray;
+
+            if (File.Exists(destinationDatabasePath))
+            {
+                JsonNode destinationRoot =
+                    JsonNode.Parse(File.ReadAllText(destinationDatabasePath));
+
+                destinationArray =
+                    destinationRoot as JsonArray ??
+                    new JsonArray();
+            }
+            else
+            {
+                destinationArray =
+                    new JsonArray();
+            }
+
+            for (int i = destinationArray.Count - 1; i >= 0; i--)
+            {
+                if (destinationArray[i] is JsonObject modelObject &&
+                    IsDonkeyModelDatabaseEntry(
+                        modelObject,
+                        destinationModelBaseName,
+                        destinationModelName))
+                {
+                    destinationArray.RemoveAt(i);
+                }
+            }
+
+            destinationArray.Add(importedEntry);
+            WriteJsonNode(destinationDatabasePath, destinationArray);
+        }
+
+        private bool HasDonkeyModelDatabaseEntry(
+            string sourceModelPath,
+            out string errorMessage)
+        {
+            errorMessage = "";
+
+            string sourceDatabasePath =
+                Path.Combine(
+                    Path.GetDirectoryName(sourceModelPath) ?? "",
+                    "database.json");
+
+            if (!File.Exists(sourceDatabasePath))
+            {
+                errorMessage =
+                    "원본 모델 폴더에서 database.json 파일을 찾지 못했습니다.\n" +
+                    sourceDatabasePath;
+
+                return false;
+            }
+
+            JsonNode sourceRoot;
+
+            try
+            {
+                sourceRoot =
+                    JsonNode.Parse(File.ReadAllText(sourceDatabasePath));
+            }
+            catch (Exception ex)
+            {
+                errorMessage =
+                    "database.json 파일을 읽는 중 오류가 발생했습니다.\n" +
+                    ex.Message;
+
+                return false;
+            }
+
+            if (sourceRoot is not JsonArray sourceArray)
+            {
+                errorMessage =
+                    "database.json 파일 구조가 올바르지 않습니다.";
+
+                return false;
+            }
+
+            string sourceModelName =
+                Path.GetFileName(sourceModelPath);
+
+            string sourceModelBaseName =
+                Path.GetFileNameWithoutExtension(sourceModelPath);
+
+            bool hasEntry =
+                sourceArray
+                    .OfType<JsonObject>()
+                    .Any(
+                        modelObject =>
+                            IsDonkeyModelDatabaseEntry(
+                                modelObject,
+                                sourceModelBaseName,
+                                sourceModelName));
+
+            if (!hasEntry)
+            {
+                errorMessage =
+                    "database.json 파일에서 선택한 모델 데이터를 찾지 못했습니다.\n" +
+                    sourceModelName;
+            }
+
+            return hasEntry;
         }
 
         private List<(string OldPath, string NewPath)> BuildModelRenamePlan(
@@ -2400,6 +4670,58 @@ namespace DonkeyDataManager
                             entry.Name))
                     {
                         array.RemoveAt(i);
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed)
+            {
+                WriteJsonNode(databasePath, root);
+            }
+        }
+
+        private void UpdateDonkeyModelDatabaseTubs(
+            ModelRegistryEntry entry,
+            List<string> sourceTubWslPaths)
+        {
+            string databasePath =
+                GetDonkeyModelDatabasePath(entry);
+
+            if (!File.Exists(databasePath) || sourceTubWslPaths == null || sourceTubWslPaths.Count == 0)
+            {
+                return;
+            }
+
+            JsonNode root =
+                JsonNode.Parse(File.ReadAllText(databasePath));
+
+            if (root == null)
+            {
+                return;
+            }
+
+            string modelBaseName =
+                Path.GetFileNameWithoutExtension(entry.Name);
+
+            bool changed = false;
+
+            if (root is JsonArray array)
+            {
+                foreach (JsonNode node in array)
+                {
+                    if (node is JsonObject modelObject &&
+                        IsDonkeyModelDatabaseEntry(modelObject, modelBaseName, entry.Name))
+                    {
+                        JsonArray tubs = new JsonArray();
+                        foreach (string tubPath in sourceTubWslPaths
+                            .Where(path => !string.IsNullOrWhiteSpace(path))
+                            .Distinct(StringComparer.OrdinalIgnoreCase))
+                        {
+                            tubs.Add(tubPath);
+                        }
+
+                        modelObject["Tubs"] = tubs;
                         changed = true;
                     }
                 }
@@ -2721,16 +5043,24 @@ namespace DonkeyDataManager
                     {
                         while ((line = reader.ReadLine()) != null)
                         {
+                            string cleanLine =
+                                line.Replace("\0", "");
+
+                            if (TryCaptureTrainingProcessPid(cleanLine, logPath, statusForm))
+                            {
+                                continue;
+                            }
+
                             AppendTrainingLog(
                                 logPath,
-                                line.Replace("\0", ""));
+                                cleanLine);
 
                             if (
                                 statusForm != null &&
                                 !statusForm.IsDisposed)
                             {
                                 statusForm.AppendLog(
-                                    line.Replace("\0", ""));
+                                    cleanLine);
                             }
                         }
                     }
@@ -2745,6 +5075,43 @@ namespace DonkeyDataManager
 
                     }
                 });
+        }
+
+        private bool TryCaptureTrainingProcessPid(
+            string line,
+            string logPath,
+            TrainerStatus? statusForm)
+        {
+            const string prefix = "__TRAIN_PID__:";
+
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string value =
+                line.Substring(prefix.Length).Trim();
+
+            if (int.TryParse(value, out int pid) && pid > 0)
+            {
+                trainingProcessWslPid = pid;
+
+                string message =
+                    "학습 프로세스 PID 확인: " + pid;
+
+                AppendTrainingLog(
+                    logPath,
+                    message);
+
+                if (
+                    statusForm != null &&
+                    !statusForm.IsDisposed)
+                {
+                    statusForm.AppendLog(message);
+                }
+            }
+
+            return true;
         }
 
         private void AppendTrainingLog(
@@ -3178,8 +5545,77 @@ namespace DonkeyDataManager
             }
         }
         // =====================================================
-        // MODEL DELETE
+        // 모델 가져오기, 제외, 복원, 영구 삭제
         // =====================================================
+
+        private void BtnImportModel_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                using OpenFileDialog dialog = new OpenFileDialog();
+                dialog.Title = "가져올 AI 모델 선택";
+                dialog.Filter = "H5 모델 (*.h5)|*.h5";
+                dialog.Multiselect = false;
+
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                RefreshWslPaths();
+
+                string sourceModelPath =
+                    Path.GetFullPath(dialog.FileName);
+
+                string modelName =
+                    Path.GetFileName(sourceModelPath);
+
+                string destinationModelsPath =
+                    Path.Combine(
+                        wslBasePath,
+                        ModelDirectoryName);
+
+                if (string.IsNullOrWhiteSpace(destinationModelsPath))
+                {
+                    MessageBox.Show("모델 저장 폴더를 확인하지 못했습니다.");
+                    return;
+                }
+
+                Directory.CreateDirectory(destinationModelsPath);
+
+                ModelImportResult importResult =
+                    ModelImportService.ImportModelToFolder(
+                        sourceModelPath,
+                        destinationModelsPath);
+
+                string destinationModelPath =
+                    importResult.DestinationModelPath;
+
+                modelName =
+                    importResult.ModelFileName;
+
+                ModelRegistryEntry importedEntry =
+                    new ModelRegistryEntry
+                    {
+                        Name = modelName,
+                        WindowsPath = destinationModelPath,
+                        WslPath = GetModelWslPath(modelName),
+                        CreatedAt = DateTime.Now,
+                        IsDeleted = false
+                    };
+
+                UpsertModelRegistry(importedEntry);
+                LoadModelsToList();
+
+                MessageBox.Show("모델을 가져왔습니다.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "모델 가져오기 중 오류가 발생했습니다.\n" +
+                    ex.Message);
+            }
+        }
 
         private void BtnModelDlt_Click(
             object sender,
@@ -3195,18 +5631,10 @@ namespace DonkeyDataManager
                     return;
                 }
 
-                string selectedModel =
-                    GetSelectedModelName();
+                List<ModelRegistryEntry> selectedEntries =
+                    GetSelectedModelEntries();
 
-                ModelRegistryEntry selectedEntry =
-                    GetSelectedModelEntry();
-
-                string selectedModelPath =
-                    selectedEntry == null
-                        ? ""
-                        : selectedEntry.WindowsPath;
-
-                if (selectedEntry == null)
+                if (selectedEntries.Count == 0)
                 {
                     MessageBox.Show(
                         "선택한 모델의 경로 정보를 확인할 수 없습니다.");
@@ -3214,42 +5642,40 @@ namespace DonkeyDataManager
                     return;
                 }
 
-                DialogResult result =
-                    MessageBox.Show(
-                        selectedModel +
-                        "\n" +
-                        selectedModelPath +
-                        "\n\n선택한 모델을 삭제하시겠습니까?",
-                        "모델 삭제",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Question);
-
-                if (result != DialogResult.Yes)
-                    return;
-
-                DeleteModelFiles(selectedEntry);
-                DeleteDonkeyModelDatabaseEntry(selectedEntry);
-
                 List<ModelRegistryEntry> entries =
                     LoadModelRegistry();
 
-                entries.RemoveAll(
-                    entry =>
-                        !string.IsNullOrWhiteSpace(selectedModelPath)
-                            ? string.Equals(
-                                entry.WindowsPath,
-                                selectedModelPath,
-                                StringComparison.OrdinalIgnoreCase)
-                            : string.Equals(
-                                entry.Name,
-                                selectedModel,
-                                StringComparison.OrdinalIgnoreCase));
+                foreach (ModelRegistryEntry selectedEntry in selectedEntries)
+                {
+                    ModelRegistryEntry existingEntry =
+                        entries.FirstOrDefault(entry =>
+                            IsSameModelRegistryEntry(entry, selectedEntry));
+
+                    if (existingEntry == null)
+                    {
+                        existingEntry =
+                            new ModelRegistryEntry
+                        {
+                            Name = selectedEntry.Name,
+                            WindowsPath = selectedEntry.WindowsPath,
+                            WslPath = string.IsNullOrWhiteSpace(selectedEntry.WslPath)
+                                ? GetModelWslPath(selectedEntry.Name)
+                                : selectedEntry.WslPath,
+                            SourceTubWindowsPath = selectedEntry.SourceTubWindowsPath,
+                            SourceTubWslPath = selectedEntry.SourceTubWslPath,
+                            CreatedAt = selectedEntry.CreatedAt == default
+                                ? DateTime.Now
+                                : selectedEntry.CreatedAt
+                        };
+
+                        entries.Add(existingEntry);
+                    }
+
+                    existingEntry.IsDeleted = true;
+                }
 
                 SaveModelRegistry(entries);
                 LoadModelsToList();
-
-                MessageBox.Show(
-                    "모델 파일과 관련 정보가 삭제되었습니다.");
             }
             catch (Exception ex)
             {
@@ -3257,8 +5683,148 @@ namespace DonkeyDataManager
                     ex.Message);
             }
         }
+
+        private bool IsSameModelRegistryEntry(
+            ModelRegistryEntry left,
+            ModelRegistryEntry right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(left.WindowsPath) &&
+                !string.IsNullOrWhiteSpace(right.WindowsPath))
+            {
+                return string.Equals(
+                    left.WindowsPath,
+                    right.WindowsPath,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            return string.Equals(
+                left.Name,
+                right.Name,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void DeleteModelsPermanently(List<ModelRegistryEntry> selectedEntries)
+        {
+            selectedEntries =
+                (selectedEntries ?? new List<ModelRegistryEntry>())
+                    .Where(entry => entry != null)
+                    .GroupBy(entry => entry.WindowsPath ?? entry.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.First())
+                    .ToList();
+
+            if (selectedEntries.Count == 0)
+            {
+                return;
+            }
+
+            string modelListText =
+                string.Join(
+                    Environment.NewLine,
+                    selectedEntries.Select(entry => entry.Name));
+
+            DialogResult result =
+                MessageBox.Show(
+                    modelListText +
+                    "\n\n선택한 제외 모델 " +
+                    selectedEntries.Count +
+                    "개를 완전히 삭제하시겠습니까?",
+                    "모델 영구 삭제",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+            if (result != DialogResult.Yes)
+            {
+                return;
+            }
+
+            foreach (ModelRegistryEntry selectedEntry in selectedEntries)
+            {
+                DeleteModelFiles(selectedEntry);
+                DeleteDonkeyModelDatabaseEntry(selectedEntry);
+            }
+
+            List<ModelRegistryEntry> entries =
+                LoadModelRegistry();
+
+            foreach (ModelRegistryEntry selectedEntry in selectedEntries)
+            {
+                entries.RemoveAll(
+                    entry =>
+                        !string.IsNullOrWhiteSpace(selectedEntry.WindowsPath)
+                            ? string.Equals(
+                                entry.WindowsPath,
+                                selectedEntry.WindowsPath,
+                                StringComparison.OrdinalIgnoreCase)
+                            : string.Equals(
+                                entry.Name,
+                                selectedEntry.Name,
+                                StringComparison.OrdinalIgnoreCase));
+            }
+
+            SaveModelRegistry(entries);
+            LoadModelsToList();
+
+            MessageBox.Show(
+                "선택한 모델 파일과 관련 정보가 완전히 삭제되었습니다.");
+        }
+
+        private void BtnModelRestore_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                List<ModelRegistryEntry> selectedEntries =
+                    GetSelectedModelEntries()
+                        .Where(entry => entry.IsDeleted)
+                        .ToList();
+
+                if (selectedEntries.Count == 0)
+                {
+                    MessageBox.Show("복원할 제외 모델을 모델 리스트에서 선택하세요.");
+                    return;
+                }
+
+                List<ModelRegistryEntry> entries =
+                    LoadModelRegistry();
+
+                foreach (ModelRegistryEntry entry in entries)
+                {
+                    foreach (ModelRegistryEntry selectedEntry in selectedEntries)
+                    {
+                        bool sameEntry =
+                            !string.IsNullOrWhiteSpace(selectedEntry.WindowsPath)
+                                ? string.Equals(
+                                    entry.WindowsPath,
+                                    selectedEntry.WindowsPath,
+                                    StringComparison.OrdinalIgnoreCase)
+                                : string.Equals(
+                                    entry.Name,
+                                    selectedEntry.Name,
+                                    StringComparison.OrdinalIgnoreCase);
+
+                        if (sameEntry)
+                        {
+                            entry.IsDeleted = false;
+                        }
+                    }
+                }
+
+                SaveModelRegistry(entries);
+                LoadModelsToList();
+
+                MessageBox.Show("선택한 모델을 복원했습니다.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+        }
         // =====================================================
-        // MODEL RENAME
+        // 모델 이름 변경
         // =====================================================
 
         private void BtnNameCh_Click(

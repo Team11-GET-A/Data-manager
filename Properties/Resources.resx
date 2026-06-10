@@ -139,11 +139,23 @@
   <data name="A_upload" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\upload-14970705.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="black_bucket" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\black_bucket.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="BlueFolder" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\폴더 아이콘.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="blue_bucket" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\blue_bucket.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="brown_bucket" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\brown_bucket.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="check_box" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\check-box-12503691.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="circle" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\circle.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="OpenFolder3735291" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\open-folder-3735291.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
@@ -198,5 +210,11 @@
   </data>
   <data name="UTurnArrow12262463" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\u-turn-arrow-12262463.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="white_bucket" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\white_bucket.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="yellow_bucket" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\yellow_bucket.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
 </root>

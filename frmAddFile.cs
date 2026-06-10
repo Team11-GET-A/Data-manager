@@ -1,4 +1,5 @@
-﻿using System;
+#nullable disable
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -43,12 +44,12 @@ namespace Data_Manager
             ".catalog",
             ".catalog_manifest"
         };
-
         private class CopyPlanItem
         {
             public string SourceRoot { get; set; } = "";
             public string SourcePath { get; set; } = "";
             public string RelativePath { get; set; } = "";
+            public bool CopyRootContentsDirectly { get; set; }
         }
 
         public frmAddFile()
@@ -60,7 +61,7 @@ namespace Data_Manager
             IconProperty.SetAutoImageByMargins(
                 btnSelctFile,
                 Data_Manager.Properties.Resources.AddFolder14970929,
-                leftMargin:22,
+                leftMargin: 22,
                 topMargin: 7,
                 rightMargin: 22,
                 bottomMargin: 19
@@ -150,6 +151,18 @@ namespace Data_Manager
         private string GetUploadedFolder()
         {
             string folder = Path.Combine(GetBinFolder(), "UploadedFile");
+
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            return folder;
+        }
+
+        private string GetUploadedDataFolder()
+        {
+            string folder = Path.Combine(GetUploadedFolder(), "data");
 
             if (!Directory.Exists(folder))
             {
@@ -355,7 +368,7 @@ namespace Data_Manager
 
             using (FolderBrowserDialog fbd = new FolderBrowserDialog())
             {
-                fbd.Description = "UploadedFile에 복사할 파일들이 들어있는 폴더를 선택하세요.";
+                fbd.Description = "UploadedFile\\data에 복사할 파일들이 들어있는 폴더를 선택하세요.";
                 fbd.ShowNewFolderButton = false;
 
                 if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
@@ -409,10 +422,7 @@ namespace Data_Manager
 
             try
             {
-                roots.AddRange(
-                    Directory.GetDirectories(selectedFolder)
-                        .Where(IsTubRoot)
-                        .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase));
+                roots.AddRange(FindTubRootsUnderFolder(selectedFolder));
             }
             catch
             {
@@ -425,6 +435,43 @@ namespace Data_Manager
 
             return roots
                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private List<string> FindTubRootsUnderFolder(string selectedFolder)
+        {
+            List<string> roots = new List<string>();
+
+            void Search(string folder)
+            {
+                string folderName = Path.GetFileName(
+                    folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+                if (ShouldSkipDirectory(folderName))
+                {
+                    return;
+                }
+
+                if (IsTubRoot(folder))
+                {
+                    roots.Add(folder);
+                    return;
+                }
+
+                foreach (string child in Directory.GetDirectories(folder))
+                {
+                    Search(child);
+                }
+            }
+
+            foreach (string child in Directory.GetDirectories(selectedFolder))
+            {
+                Search(child);
+            }
+
+            return roots
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
 
@@ -593,9 +640,28 @@ namespace Data_Manager
                 {
                     SourceRoot = root,
                     SourcePath = path,
-                    RelativePath = relativePath
+                    RelativePath = relativePath,
+                    CopyRootContentsDirectly = ShouldCopyRootContentsDirectly(root)
                 });
             }
+        }
+
+        private bool ShouldCopyRootContentsDirectly(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                return false;
+            }
+
+            string rootName = Path.GetFileName(
+                root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+            if (string.Equals(rootName, "data", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return selectedSourceRoots.Count == 1 && IsTubRoot(root);
         }
 
         private async void btnAddFile_Click(object sender, EventArgs e)
@@ -610,11 +676,24 @@ namespace Data_Manager
                 return;
             }
 
-            string targetFolder = GetUploadedFolder();
+            string targetFolder = GetUploadedDataFolder();
+            bool createdTargetFolderForThisCopy = !Directory.Exists(targetFolder);
 
             if (!Directory.Exists(targetFolder))
             {
                 Directory.CreateDirectory(targetFolder);
+            }
+
+            if (Directory.EnumerateFileSystemEntries(targetFolder).Any())
+            {
+                MessageBox.Show("UploadedFile\\data 폴더가 비어 있을 때만 데이터를 추가할 수 있습니다.\r\n기존 데이터를 저장하거나 비운 뒤 다시 추가하세요.");
+                return;
+            }
+
+            if (selectedSourceRoots.Count > 1 && selectedSourceRoots.All(IsTubRoot))
+            {
+                MessageBox.Show("매니저 편집용 UploadedFile\\data에는 한 번에 하나의 tub 데이터만 추가할 수 있습니다.\r\n여러 tub 학습은 트레이너의 학습 tub 목록에서 선택하세요.");
+                return;
             }
 
             List<string> rollbackPaths = new List<string>();
@@ -663,12 +742,19 @@ namespace Data_Manager
                                         Path.DirectorySeparatorChar,
                                         Path.AltDirectorySeparatorChar));
 
-                            destinationRoot =
-                                GetNonConflictingPath(
+                            bool copyRootContentsToUploadData =
+                                plan.CopyRootContentsDirectly;
+
+                            destinationRoot = copyRootContentsToUploadData
+                                ? targetFolder
+                                : GetNonConflictingPath(
                                     Path.Combine(targetFolder, rootName));
 
                             destinationRoots[plan.SourceRoot] = destinationRoot;
-                            rollbackRootFolders.Add(destinationRoot);
+                            if (!copyRootContentsToUploadData)
+                            {
+                                rollbackRootFolders.Add(destinationRoot);
+                            }
                             copiedRootFolders.Add(destinationRoot);
                         }
 
@@ -683,7 +769,7 @@ namespace Data_Manager
                             Directory.CreateDirectory(destinationDirectory);
                         }
 
-                        File.Copy(plan.SourcePath, destinationPath, overwrite: true);
+                        File.Copy(plan.SourcePath, destinationPath, overwrite: false);
                         rollbackPaths.Add(destinationPath);
 
                         int progress = (int)(((double)(i + 1) / copyPlanItems.Count) * 100);
@@ -733,6 +819,24 @@ namespace Data_Manager
                     }
                 }
 
+                if (createdTargetFolderForThisCopy)
+                {
+                    try
+                    {
+                        if (Directory.Exists(targetFolder))
+                        {
+                            Directory.Delete(targetFolder, recursive: true);
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+                else
+                {
+                    DeleteEmptyDirectories(targetFolder);
+                }
+
                 if (!popup.IsDisposed)
                 {
                     popup.Close();
@@ -766,6 +870,29 @@ namespace Data_Manager
                             _mainForm.LoadTrainerDataFolder(copiedRootFolders[0]);
                         }
                     }));
+            }
+        }
+
+        private void DeleteEmptyDirectories(string rootFolder)
+        {
+            if (string.IsNullOrWhiteSpace(rootFolder) || !Directory.Exists(rootFolder))
+            {
+                return;
+            }
+
+            foreach (string directory in Directory.GetDirectories(rootFolder, "*", SearchOption.AllDirectories)
+                .OrderByDescending(path => path.Length))
+            {
+                try
+                {
+                    if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                    {
+                        Directory.Delete(directory);
+                    }
+                }
+                catch
+                {
+                }
             }
         }
 

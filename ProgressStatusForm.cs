@@ -12,8 +12,33 @@ namespace Data_Manager
         public ProgressStatusForm()
         {
             InitializeComponent();
-            btnCancel.Click += (s, e) => CancelRequested?.Invoke();
+            btnCancel.Click += (s, e) => RequestCancelAndClose();
             btnClose.Click += (s, e) => Close();
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Escape)
+            {
+                if (btnCancel.Enabled)
+                {
+                    RequestCancelAndClose();
+                }
+                else
+                {
+                    Close();
+                }
+
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private void RequestCancelAndClose()
+        {
+            CancelRequested?.Invoke();
+            Close();
         }
 
         public void SetTitle(string title)
@@ -91,9 +116,24 @@ namespace Data_Manager
 
         private void SafeInvoke(Action action)
         {
+            if (IsDisposed || Disposing)
+            {
+                return;
+            }
+
             if (InvokeRequired)
             {
-                Invoke(action);
+                try
+                {
+                    Invoke(action);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+
                 return;
             }
 
