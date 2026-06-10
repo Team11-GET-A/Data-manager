@@ -1,7 +1,3 @@
-<div align="center">
-  <img src="https://via.placeholder.com/850x200/239120/FFFFFF?text=Data_Manager+Project+Banner" width="100%" alt="Project Banner"/>
-  <br/><br/>
-
   # 🏎️ Data_Manager
   **자율주행 통합 데이터 관리 플랫폼 (Donkeycar + C# WinForms + WSL)**
 
