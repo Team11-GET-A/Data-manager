@@ -21,7 +21,7 @@
 
 <br/>
 
-## 프로그램 버전 (Environment)
+## 프로그램 구동 및 테스트 환경 (Environment)
 
 ### Windows 호스트 환경
 
