@@ -1,4 +1,4 @@
-  #  Data_Manager
+﻿  #  Data_Manager
   **자율주행 통합 데이터 관리 플랫폼 (Donkeycar + C# WinForms + WSL)**
 
   <br/>
@@ -18,6 +18,60 @@
 * ** 비파괴 편집 보장:** 원본 데이터는 최대한 보존하고, 편집물은 안전하게 별도 분리 저장합니다.
 * ** 다차원 비교 분석:** 동일한 이미지에 대해 실제 사용자의 주행 데이터와 AI 모델의 판단값을 프레임 단위로 1:1 비교합니다.
 * ** 시뮬레이터와 AI학습 프로그램 연동 및 반자동 실행  
+
+<br/>
+
+## 프로그램 버전 (Environment)
+
+### Windows 호스트 환경
+
+| 항목 | 버전 |
+|---|---|
+| **Windows** | Windows 11 Home 25H2 (Build 10.0.26200.8655) |
+| **PowerShell** | 5.1.26100.8655 |
+| **Git (Windows)** | 2.54.0.windows.1 |
+| **Python (Windows)** | 3.14.2 |
+
+### WSL (Windows Subsystem for Linux)
+
+| 항목 | 버전 |
+|---|---|
+| **WSL** | 2.7.3.0 |
+| **WSL 커널** | 6.6.114.1-1 |
+| **WSLg** | 1.0.73 |
+
+### WSL Ubuntu-22.04 (프로젝트 실행 환경)
+
+| 항목 | 버전 |
+|---|---|
+| **Ubuntu** | 22.04.5 LTS (Jammy Jellyfish) |
+| **Python (e2e_env)** | 3.11.15 |
+| **Miniconda** | 24.4.0 |
+
+#### Conda 환경
+
+| 환경명 | 경로 |
+|---|---|
+| base | /home/cheon/miniconda3 |
+| **e2e_env** | /home/cheon/miniconda3/envs/e2e_env |
+
+#### e2e_env 내 주요 패키지
+
+| 패키지 | 버전 |
+|---|---|
+| **Donkeycar** | 5.3.0 |
+| **TensorFlow** | 2.15.1 |
+| **Keras** | 2.15.0 |
+
+### C# / .NET 환경
+
+| 항목 | 버전 |
+|---|---|
+| **Visual Studio** | 18.7.11903.348 |
+| **.NET SDK** | 10.0.301 |
+| **.NET Runtime (NETCore)** | 8.0.8 / 10.0.9 |
+| **.NET Runtime (WindowsDesktop)** | 8.0.8 / 10.0.9 |
+| **.NET Runtime (AspNetCore)** | 10.0.9 |
 
 <br/>
 
