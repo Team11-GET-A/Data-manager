@@ -190,6 +190,10 @@ namespace Data_Manager
             btnImportModel.Click += BtnImportModel_Click;
             lvModelList.SelectedIndexChanged += LvModelList_SelectedIndexChanged;
             lvModelList.SizeChanged += (s, e) => ResizeModelColumns();
+            lvModelList.OwnerDraw = true;
+            lvModelList.DrawColumnHeader += LvModelList_DrawColumnHeader;
+            lvModelList.DrawItem += LvModelList_DrawItem;
+            lvModelList.DrawSubItem += LvModelList_DrawSubItem;
             EnableDoubleBuffering(lvModelList);
 
             btnTubInput.Click += BtnTubInput_Click;
@@ -803,12 +807,24 @@ namespace Data_Manager
 
         private ModelListItem AddModelToList(
             string modelName,
-            string modelPath)
+            string modelPath,
+            bool isDeleted = false,
+            ModelListItem? previous = null)
         {
-            ModelListItem model =
-                new ModelListItem(
-                    modelName,
-                    modelPath);
+            ModelListItem model = new ModelListItem(modelName, modelPath)
+            {
+                IsDeleted = isDeleted
+            };
+
+            if (previous != null)
+            {
+                model.ModelType = previous.ModelType;
+                model.TubPath = previous.TubPath;
+                model.CurrentFrameIndex = previous.CurrentFrameIndex;
+                model.IsLoaded = previous.IsLoaded;
+                model.CardState = previous.CardState;
+                model.Frames = previous.Frames;
+            }
 
             _models.Add(model);
 
@@ -816,6 +832,13 @@ namespace Data_Manager
             item.SubItems.Add(modelName);
             item.SubItems.Add(modelPath);
             item.Tag = model;
+
+            if (isDeleted)
+            {
+                item.ForeColor = Color.FromArgb(190, 52, 52);
+                item.BackColor = Color.FromArgb(255, 244, 244);
+            }
+
             lvModelList.Items.Add(item);
 
             return model;
@@ -919,63 +942,61 @@ namespace Data_Manager
 
             _lastPilotModelSignature = newSignature;
 
-            HashSet<string> sharedPaths =
-                sharedModels
-                    .Select(model => model.WindowsPath)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, ModelListItem> cached =
+                _models.ToDictionary(m => m.Path, StringComparer.OrdinalIgnoreCase);
 
+            string? selectedPath = _selectedModel?.Path;
+
+            bool selectedRemoved =
+                selectedPath != null &&
+                !sharedModels.Any(m =>
+                    string.Equals(m.WindowsPath, selectedPath, StringComparison.OrdinalIgnoreCase));
+
+            if (selectedRemoved)
+            {
+                _selectedModel = null;
+                ClearModelLabels();
+                _frameList.Clear();
+                ConfigureLocationTrackBar();
+                DrawTubRequiredMessage();
+            }
+
+            lvModelList.SelectedIndexChanged -= LvModelList_SelectedIndexChanged;
             lvModelList.BeginUpdate();
             try
             {
-                for (int i = _models.Count - 1; i >= 0; i--)
-                {
-                    if (sharedPaths.Contains(_models[i].Path))
-                    {
-                        continue;
-                    }
-
-                    bool wasSelected =
-                        ReferenceEquals(_selectedModel, _models[i]);
-
-                    _models.RemoveAt(i);
-                    lvModelList.Items.RemoveAt(i);
-
-                    if (wasSelected)
-                    {
-                        _selectedModel = null;
-                        ClearModelLabels();
-                        _frameList.Clear();
-                        ConfigureLocationTrackBar();
-                        DrawTubRequiredMessage();
-                    }
-                }
+                _models.Clear();
+                lvModelList.Items.Clear();
 
                 foreach (SharedModelRegistryEntry sharedModel in sharedModels)
                 {
-                    bool exists =
-                        _models.Any(
-                            model =>
-                                string.Equals(
-                                    model.Path,
-                                    sharedModel.WindowsPath,
-                                    StringComparison.OrdinalIgnoreCase));
-
-                    if (exists)
-                    {
-                        continue;
-                    }
-
+                    cached.TryGetValue(sharedModel.WindowsPath, out ModelListItem? old);
                     AddModelToList(
-                        Path.GetFileNameWithoutExtension(
-                            sharedModel.WindowsPath),
-                        sharedModel.WindowsPath);
+                        Path.GetFileNameWithoutExtension(sharedModel.WindowsPath),
+                        sharedModel.WindowsPath,
+                        sharedModel.IsDeleted,
+                        old);
                 }
 
                 RenumberModelListItems();
+
+                if (selectedPath != null && !selectedRemoved)
+                {
+                    for (int i = 0; i < _models.Count; i++)
+                    {
+                        if (string.Equals(_models[i].Path, selectedPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _selectedModel = _models[i];
+                            lvModelList.Items[i].Selected = true;
+                            break;
+                        }
+                    }
+                }
             }
             finally
             {
                 lvModelList.EndUpdate();
+                lvModelList.SelectedIndexChanged += LvModelList_SelectedIndexChanged;
             }
 
             ResizeModelColumns();
@@ -1010,19 +1031,42 @@ namespace Data_Manager
                         entry.IsDeleted));
         }
 
+        private static string NormalizeWslPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return path;
+            }
+
+            // \\wsl$\ and \\wsl.localhost\ refer to the same WSL filesystem.
+            // Normalize to wsl.localhost so path comparisons are consistent.
+            return System.Text.RegularExpressions.Regex.Replace(
+                path,
+                @"^\\\\wsl\$\\",
+                @"\\wsl.localhost\",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
         private List<SharedModelRegistryEntry> BuildPilotModelEntries(string modelsDirectory)
         {
+            string normalizedDir = NormalizeWslPath(modelsDirectory);
+
             List<SharedModelRegistryEntry> entries =
                 SharedModelRegistry.Load()
                     .Where(entry =>
                         ModelImportService.IsPathInsideDirectory(
-                            entry.WindowsPath,
-                            modelsDirectory))
+                            NormalizeWslPath(entry.WindowsPath),
+                            normalizedDir))
+                    .Select(entry =>
+                    {
+                        entry.WindowsPath = NormalizeWslPath(entry.WindowsPath);
+                        return entry;
+                    })
                     .ToList();
 
             foreach (string modelFile in Directory.GetFiles(modelsDirectory, "*.h5", SearchOption.TopDirectoryOnly))
             {
-                string fullPath = Path.GetFullPath(modelFile);
+                string fullPath = NormalizeWslPath(Path.GetFullPath(modelFile));
 
                 if (entries.Any(entry =>
                     string.Equals(entry.WindowsPath, fullPath, StringComparison.OrdinalIgnoreCase)))
@@ -1040,7 +1084,8 @@ namespace Data_Manager
             }
 
             return entries
-                .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(entry => entry.IsDeleted ? 1 : 0)
+                .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
 
@@ -1531,12 +1576,81 @@ namespace Data_Manager
                     return;
                 }
 
-                await SelectModelAsync(model!);
+                if (model!.IsDeleted)
+                {
+                    lvModelList.SelectedItems[0].Selected = false;
+                    return;
+                }
+
+                await SelectModelAsync(model);
             }
             catch (Exception ex)
             {
                 ReportPilotException(ex);
                 MessageBox.Show(ex.Message, "Pilot", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void LvModelList_DrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
+        {
+            e.DrawDefault = true;
+        }
+
+        private void LvModelList_DrawItem(object? sender, DrawListViewItemEventArgs e)
+        {
+            // DrawSubItem handles individual cell painting; suppress default item draw.
+        }
+
+        private void LvModelList_DrawSubItem(object? sender, DrawListViewSubItemEventArgs e)
+        {
+            ModelListItem? model = e.Item.Tag as ModelListItem;
+            bool isDeleted = model?.IsDeleted ?? false;
+            bool isSelected = e.Item.Selected;
+
+            Color bgColor;
+            Color fgColor;
+            if (isSelected)
+            {
+                bgColor = SystemColors.Highlight;
+                fgColor = SystemColors.HighlightText;
+            }
+            else if (isDeleted)
+            {
+                bgColor = Color.FromArgb(255, 235, 235);
+                fgColor = Color.FromArgb(180, 40, 40);
+            }
+            else
+            {
+                bgColor = Color.White;
+                fgColor = Color.FromArgb(30, 39, 50);
+            }
+
+            using (SolidBrush brush = new SolidBrush(bgColor))
+            {
+                e.Graphics.FillRectangle(brush, e.Bounds);
+            }
+
+            Rectangle textRect = new Rectangle(
+                e.Bounds.X + 3, e.Bounds.Y,
+                e.Bounds.Width - 3, e.Bounds.Height);
+
+            TextRenderer.DrawText(
+                e.Graphics,
+                e.SubItem?.Text ?? string.Empty,
+                e.Item.Font,
+                textRect,
+                fgColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
+                TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+
+            using (Pen gridPen = new Pen(Color.FromArgb(210, 210, 210)))
+            {
+                e.Graphics.DrawLine(gridPen,
+                    e.Bounds.Left, e.Bounds.Bottom - 1,
+                    e.Bounds.Right, e.Bounds.Bottom - 1);
+                e.Graphics.DrawLine(gridPen,
+                    e.Bounds.Right - 1, e.Bounds.Top,
+                    e.Bounds.Right - 1, e.Bounds.Bottom);
             }
         }
 
@@ -2933,6 +3047,7 @@ namespace Data_Manager
             public string TubPath { get; set; } = string.Empty;
             public int CurrentFrameIndex { get; set; }
             public bool IsLoaded { get; set; }
+            public bool IsDeleted { get; set; }
             public DonkeyAsyncWorker.PilotCardState? CardState { get; set; }
             public List<DonkeyAsyncWorker.PilotFrameData> Frames { get; set; } =
                 new List<DonkeyAsyncWorker.PilotFrameData>();

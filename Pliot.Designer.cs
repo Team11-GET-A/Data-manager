@@ -269,7 +269,7 @@
             lblPilotShortcutGuide.Padding = new Padding(8, 4, 8, 4);
             lblPilotShortcutGuide.Size = new Size(388, 88);
             lblPilotShortcutGuide.TabIndex = 3;
-            lblPilotShortcutGuide.Text = "Space 재생/일시정지 | Esc 정지\r\n←/→ 1프레임 | Shift+←/→ 5프레임\r\nEnter 모델 로드 | Ctrl+I 모델 가져오기\r\nCtrl+T 주행데이터 입력 | Ctrl+G 그래프 | Ctrl+J AI 판단";
+            lblPilotShortcutGuide.Text = "Space 재생/일시정지 | Esc 정지\r\n←/→ 1프레임 | Shift+←/→ 5프레임\r\nEnter 모델 로드 | Ctrl+I 모델 가져오기\r\nCtrl+T 데이터 로드 | Ctrl+G 그래프";
             lblPilotShortcutGuide.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // lvModelList
