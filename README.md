@@ -69,9 +69,16 @@
 |---|---|
 | **Visual Studio** | 18.7.11903.348 |
 | **.NET SDK** | 10.0.301 |
-| **.NET Runtime (NETCore)** | 8.0.8 / 10.0.9 |
-| **.NET Runtime (WindowsDesktop)** | 8.0.8 / 10.0.9 |
-| **.NET Runtime (AspNetCore)** | 10.0.9 |
+| **.NET Runtime (NETCore)** | 10.0.9 |
+| **.NET Runtime (WindowsDesktop)** | 10.0.9 |
+
+#### NuGet 패키지
+
+| 패키지 | 버전 |
+|---|---|
+| **MaterialSkin.2** | 2.3.1 |
+| **Newtonsoft.Json** | 13.0.3 |
+| **Microsoft.Web.WebView2** | 1.0.2849.54 |
 
 <br/>
 
