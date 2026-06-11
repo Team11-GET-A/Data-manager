@@ -75,6 +75,8 @@ namespace DonkeyDataManager
         private Process wslProcess = null;
         private Process browserProcess = null;
         private int trainingProcessWslPid;
+        private volatile int completedEpochCount;
+        private System.Threading.Tasks.TaskCompletionSource<bool> firstEpochCompletedTcs;
 
         private System.Windows.Forms.Timer browserMonitorTimer =
             new System.Windows.Forms.Timer();
@@ -3737,6 +3739,10 @@ namespace DonkeyDataManager
                 statusForm =
                     new TrainerStatus();
                 trainingProcessWslPid = 0;
+                completedEpochCount = 0;
+                firstEpochCompletedTcs =
+                    new System.Threading.Tasks.TaskCompletionSource<bool>(
+                        System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
 
                 statusForm.CancelRequested +=
                     (cancelSender, cancelArgs) =>
@@ -3747,12 +3753,12 @@ namespace DonkeyDataManager
                         TryTerminateTrainingProcess();
                     };
                 statusForm.StopTrainingRequested +=
-                    (stopSender, stopArgs) =>
+                    async (stopSender, stopArgs) =>
                     {
                         trainingStopRequested = true;
                         statusForm.AppendLog(
                             "학습 중단 요청됨. 현재 학습을 즉시 멈추고 모델 저장을 시도합니다.");
-                        TryRequestTrainingStop(statusForm);
+                        await TryRequestTrainingStopAsync(statusForm);
                     };
 
                 statusForm.SetStatus(
@@ -3986,15 +3992,72 @@ namespace DonkeyDataManager
                 "wait $TRAIN_PID";
         }
 
-        private void TryRequestTrainingStop(TrainerStatus statusForm)
+        private async System.Threading.Tasks.Task TryRequestTrainingStopAsync(TrainerStatus statusForm)
         {
             try
             {
+                // PID가 아직 캡처되지 않은 경우 최대 8초 대기합니다.
                 if (trainingProcessWslPid <= 0)
                 {
                     statusForm.AppendLog(
-                        "학습 프로세스 PID를 아직 확인하지 못해 중단 신호를 보내지 못했습니다.");
+                        "학습 프로세스 PID 대기 중...");
+
+                    for (int retry = 0; retry < 8; retry++)
+                    {
+                        await System.Threading.Tasks.Task.Delay(1000);
+
+                        if (trainingProcessWslPid > 0)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                if (trainingProcessWslPid <= 0)
+                {
+                    statusForm.AppendLog(
+                        "PID를 확인하지 못했습니다. WSL 프로세스를 직접 종료합니다.");
+                    TryTerminateTrainingProcess();
                     return;
+                }
+
+                // 에포크가 1개 이상 완료될 때까지 대기합니다.
+                // 모델 파일은 첫 번째 에포크 완료 후 ModelCheckpoint가 저장합니다.
+                if (completedEpochCount == 0)
+                {
+                    statusForm.AppendLog(
+                        "아직 에포크가 완료되지 않았습니다. 첫 번째 에포크가 완료되면 중단합니다...");
+
+                    System.Threading.Tasks.Task epochTask =
+                        firstEpochCompletedTcs?.Task
+                        ?? System.Threading.Tasks.Task.CompletedTask;
+
+                    System.Threading.Tasks.Task processExitTask =
+                        wslProcess != null
+                            ? wslProcess.WaitForExitAsync()
+                            : System.Threading.Tasks.Task.CompletedTask;
+
+                    await System.Threading.Tasks.Task.WhenAny(
+                        epochTask,
+                        processExitTask,
+                        System.Threading.Tasks.Task.Delay(TimeSpan.FromMinutes(30)));
+
+                    if (wslProcess != null && wslProcess.HasExited)
+                    {
+                        // 학습이 자연 종료됨 - 따로 중단 불필요
+                        return;
+                    }
+
+                    if (completedEpochCount == 0)
+                    {
+                        statusForm.AppendLog(
+                            "에포크 완료 대기 시간을 초과했습니다. 프로세스를 강제 종료합니다.");
+                        TryTerminateTrainingProcess();
+                        return;
+                    }
+
+                    statusForm.AppendLog(
+                        $"에포크 {completedEpochCount}개 완료. 지금 학습을 중단합니다.");
                 }
 
                 ProcessStartInfo psi =
@@ -4017,10 +4080,11 @@ namespace DonkeyDataManager
                     {
                         statusForm.AppendLog(
                             "학습 중단 신호 전송 실패: wsl.exe를 시작하지 못했습니다.");
+                        TryTerminateTrainingProcess();
                         return;
                     }
 
-                    proc.WaitForExit();
+                    await proc.WaitForExitAsync();
 
                     if (proc.ExitCode == 0)
                     {
@@ -4030,8 +4094,7 @@ namespace DonkeyDataManager
                     else
                     {
                         string error =
-                            proc.StandardError
-                                .ReadToEnd()
+                            (await proc.StandardError.ReadToEndAsync())
                                 .Replace("\0", "")
                                 .Trim();
 
@@ -4040,11 +4103,32 @@ namespace DonkeyDataManager
                             (string.IsNullOrWhiteSpace(error) ? "알 수 없는 오류" : error));
                     }
                 }
+
+                // 신호 전송 후 wslProcess가 종료될 때까지 최대 30초 대기하고,
+                // 응답 없으면 직접 강제 종료합니다.
+                if (wslProcess != null && !wslProcess.HasExited)
+                {
+                    System.Threading.Tasks.Task waitTask =
+                        wslProcess.WaitForExitAsync();
+
+                    System.Threading.Tasks.Task timeoutTask =
+                        System.Threading.Tasks.Task.Delay(30000);
+
+                    await System.Threading.Tasks.Task.WhenAny(waitTask, timeoutTask);
+
+                    if (!wslProcess.HasExited)
+                    {
+                        statusForm.AppendLog(
+                            "학습 프로세스가 응답하지 않아 강제 종료합니다.");
+                        TryTerminateTrainingProcess();
+                    }
+                }
             }
             catch (Exception ex)
             {
                 statusForm.AppendLog(
                     "학습 중단 신호 전송 오류: " + ex.Message);
+                TryTerminateTrainingProcess();
             }
         }
 
@@ -4059,17 +4143,12 @@ namespace DonkeyDataManager
                 "echo \"Requesting immediate training stop pid=$PID pgid=$PGID\"; " +
                 "kill -INT -- -\"$PGID\" 2>/dev/null || kill -INT \"$PID\" 2>/dev/null || true; " +
                 "for CHILD in $CHILDREN; do kill -INT \"$CHILD\" 2>/dev/null || true; done; " +
-                "for i in 1 2 3 4 5; do " +
+                "for i in 1 2; do " +
                 "if ! kill -0 \"$PID\" 2>/dev/null; then echo \"Training process stopped after interrupt.\"; exit 0; fi; " +
                 "sleep 1; " +
                 "done; " +
-                "echo \"Training still running after interrupt. Sending terminate signal.\"; " +
-                "kill -TERM -- -\"$PGID\" 2>/dev/null || kill -TERM \"$PID\" 2>/dev/null || true; " +
-                "sleep 1; " +
-                "if kill -0 \"$PID\" 2>/dev/null; then " +
-                "echo \"Training still running. Forcing stop.\"; " +
+                "echo \"Training still running after interrupt. Forcing stop.\"; " +
                 "kill -KILL -- -\"$PGID\" 2>/dev/null || kill -KILL \"$PID\" 2>/dev/null || true; " +
-                "fi; " +
                 "echo \"Stop signal sent. Checking saved model.\"";
         }
 
@@ -4225,6 +4304,10 @@ namespace DonkeyDataManager
                     StringComparison.OrdinalIgnoreCase) ||
                 fileName.StartsWith(
                     modelBaseName + ".",
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    fileName,
+                    modelBaseName + "_judement.json",
                     StringComparison.OrdinalIgnoreCase);
         }
 
@@ -4490,6 +4573,14 @@ namespace DonkeyDataManager
                         newBaseName +
                         fileName.Substring(oldBaseName.Length);
                 }
+                else if (
+                    string.Equals(
+                        fileName,
+                        oldBaseName + "_judement.json",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    newFileName = newBaseName + "_judement.json";
+                }
                 else
                 {
                     continue;
@@ -4688,15 +4779,7 @@ namespace DonkeyDataManager
             string databasePath =
                 GetDonkeyModelDatabasePath(entry);
 
-            if (!File.Exists(databasePath) || sourceTubWslPaths == null || sourceTubWslPaths.Count == 0)
-            {
-                return;
-            }
-
-            JsonNode root =
-                JsonNode.Parse(File.ReadAllText(databasePath));
-
-            if (root == null)
+            if (sourceTubWslPaths == null || sourceTubWslPaths.Count == 0)
             {
                 return;
             }
@@ -4704,33 +4787,56 @@ namespace DonkeyDataManager
             string modelBaseName =
                 Path.GetFileNameWithoutExtension(entry.Name);
 
-            bool changed = false;
+            JsonArray array;
 
-            if (root is JsonArray array)
+            if (File.Exists(databasePath))
             {
-                foreach (JsonNode node in array)
+                JsonNode root = JsonNode.Parse(File.ReadAllText(databasePath));
+                array = root as JsonArray ?? new JsonArray();
+            }
+            else
+            {
+                string dir = Path.GetDirectoryName(databasePath) ?? "";
+                if (!string.IsNullOrWhiteSpace(dir))
                 {
-                    if (node is JsonObject modelObject &&
-                        IsDonkeyModelDatabaseEntry(modelObject, modelBaseName, entry.Name))
-                    {
-                        JsonArray tubs = new JsonArray();
-                        foreach (string tubPath in sourceTubWslPaths
-                            .Where(path => !string.IsNullOrWhiteSpace(path))
-                            .Distinct(StringComparer.OrdinalIgnoreCase))
-                        {
-                            tubs.Add(tubPath);
-                        }
+                    Directory.CreateDirectory(dir);
+                }
+                array = new JsonArray();
+            }
 
-                        modelObject["Tubs"] = tubs;
-                        changed = true;
-                    }
+            JsonArray tubsArray = new JsonArray();
+            foreach (string tubPath in sourceTubWslPaths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                tubsArray.Add(tubPath);
+            }
+
+            bool found = false;
+            foreach (JsonNode node in array)
+            {
+                if (node is JsonObject modelObject &&
+                    IsDonkeyModelDatabaseEntry(modelObject, modelBaseName, entry.Name))
+                {
+                    modelObject["Tubs"] = tubsArray;
+                    found = true;
                 }
             }
 
-            if (changed)
+            if (!found)
             {
-                WriteJsonNode(databasePath, root);
+                double unixTime = (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds;
+                JsonObject newEntry = new JsonObject
+                {
+                    ["Name"] = JsonValue.Create(modelBaseName),
+                    ["Time"] = JsonValue.Create(unixTime),
+                    ["Type"] = JsonValue.Create("linear"),
+                    ["Tubs"] = tubsArray
+                };
+                array.Add(newEntry);
             }
+
+            WriteJsonNode(databasePath, array);
         }
 
         private bool IsDonkeyModelDatabaseEntry(
@@ -5051,6 +5157,8 @@ namespace DonkeyDataManager
                                 continue;
                             }
 
+                            TryUpdateEpochProgress(cleanLine);
+
                             AppendTrainingLog(
                                 logPath,
                                 cleanLine);
@@ -5112,6 +5220,33 @@ namespace DonkeyDataManager
             }
 
             return true;
+        }
+
+        private void TryUpdateEpochProgress(string line)
+        {
+            System.Text.RegularExpressions.Match match =
+                System.Text.RegularExpressions.Regex.Match(
+                    line,
+                    @"\bEpoch\s+(\d+)\s*/\s*(\d+)\b",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            if (!match.Success)
+            {
+                return;
+            }
+
+            if (!int.TryParse(match.Groups[1].Value, out int current) || current < 2)
+            {
+                return;
+            }
+
+            int newCompleted = current - 1;
+
+            if (newCompleted > completedEpochCount)
+            {
+                completedEpochCount = newCompleted;
+                firstEpochCompletedTcs?.TrySetResult(true);
+            }
         }
 
         private void AppendTrainingLog(

@@ -66,7 +66,6 @@
             pnlImageIndexOverlay = new Panel();
             lblImageIndexOverlay = new Label();
             pnlPilotHeader = new Panel();
-            btnGenerateJudement = new Button();
             btnPilotChart = new Button();
             btnTubInput = new Button();
             lblTubPathValue = new Label();
@@ -270,7 +269,7 @@
             lblPilotShortcutGuide.Padding = new Padding(8, 4, 8, 4);
             lblPilotShortcutGuide.Size = new Size(388, 88);
             lblPilotShortcutGuide.TabIndex = 3;
-            lblPilotShortcutGuide.Text = "Space 재생/일시정지 | Esc 정지\r\n←/→ 1프레임 | Shift+←/→ 5프레임\r\nEnter 모델 로드 | Ctrl+I 모델 가져오기\r\nCtrl+T 주행데이터 입력 | Ctrl+G 그래프 | Ctrl+J AI 판단";
+            lblPilotShortcutGuide.Text = "Space 재생/일시정지 | Esc 정지\r\n←/→ 1프레임 | Shift+←/→ 5프레임\r\nEnter 모델 로드 | Ctrl+I 모델 가져오기\r\nCtrl+T 데이터 로드 | Ctrl+G 그래프";
             lblPilotShortcutGuide.TextAlign = ContentAlignment.MiddleLeft;
             // 
             // lvModelList
@@ -579,7 +578,6 @@
             // pnlPilotHeader
             // 
             pnlPilotHeader.BackColor = Color.White;
-            pnlPilotHeader.Controls.Add(btnGenerateJudement);
             pnlPilotHeader.Controls.Add(btnPilotChart);
             pnlPilotHeader.Controls.Add(btnTubInput);
             pnlPilotHeader.Controls.Add(lblTubPathValue);
@@ -588,21 +586,7 @@
             pnlPilotHeader.Name = "pnlPilotHeader";
             pnlPilotHeader.Size = new Size(1142, 52);
             pnlPilotHeader.TabIndex = 0;
-            // 
-            // btnGenerateJudement
-            // 
-            btnGenerateJudement.Anchor = AnchorStyles.None;
-            btnGenerateJudement.BackColor = Color.FromArgb(255, 168, 72);
-            btnGenerateJudement.FlatAppearance.BorderColor = Color.FromArgb(255, 202, 106);
-            btnGenerateJudement.FlatStyle = FlatStyle.Flat;
-            btnGenerateJudement.ForeColor = Color.FromArgb(34, 20, 6);
-            btnGenerateJudement.Location = new Point(880, 8);
-            btnGenerateJudement.Name = "btnGenerateJudement";
-            btnGenerateJudement.Size = new Size(126, 36);
-            btnGenerateJudement.TabIndex = 3;
-            btnGenerateJudement.Text = "AI 판단 생성";
-            btnGenerateJudement.UseVisualStyleBackColor = false;
-            // 
+            //
             // btnPilotChart
             // 
             btnPilotChart.Anchor = AnchorStyles.None;
@@ -628,7 +612,7 @@
             btnTubInput.Name = "btnTubInput";
             btnTubInput.Size = new Size(126, 36);
             btnTubInput.TabIndex = 2;
-            btnTubInput.Text = "주행데이터 입력";
+            btnTubInput.Text = "데이터 로드";
             btnTubInput.UseVisualStyleBackColor = false;
             // 
             // lblTubPathValue
@@ -712,7 +696,6 @@
         private Panel pnlRight;
         private Panel pnlPilotCard;
         private Panel pnlPilotHeader;
-        private Button btnGenerateJudement;
         private Button btnPilotChart;
         private Button btnTubInput;
         private Label lblTubPathValue;

@@ -135,12 +135,6 @@ namespace Data_Manager
                 return true;
             }
 
-            if (keyData == (Keys.Control | Keys.J))
-            {
-                btnGenerateJudement.PerformClick();
-                return true;
-            }
-
             return base.ProcessCmdKey(ref msg, keyData);
         }
 
@@ -196,10 +190,13 @@ namespace Data_Manager
             btnImportModel.Click += BtnImportModel_Click;
             lvModelList.SelectedIndexChanged += LvModelList_SelectedIndexChanged;
             lvModelList.SizeChanged += (s, e) => ResizeModelColumns();
+            lvModelList.OwnerDraw = true;
+            lvModelList.DrawColumnHeader += LvModelList_DrawColumnHeader;
+            lvModelList.DrawItem += LvModelList_DrawItem;
+            lvModelList.DrawSubItem += LvModelList_DrawSubItem;
             EnableDoubleBuffering(lvModelList);
 
             btnTubInput.Click += BtnTubInput_Click;
-            btnGenerateJudement.Click += BtnGenerateJudement_Click;
             btnPilotChart.Click += BtnPilotChart_Click;
             trbLocation.ValueChanged += trbLocation_ValueChanged;
             trbLocation.MouseDown += TrbLocation_MouseDown;
@@ -386,7 +383,7 @@ namespace Data_Manager
                 "Space 재생/일시정지 | Esc 정지\r\n" +
                 "←/→ 1프레임 | Shift+←/→ 5프레임\r\n" +
                 "Enter 모델 로드 | Ctrl+I 모델 가져오기\r\n" +
-                "Ctrl+T 주행데이터 입력 | Ctrl+G 그래프 | Ctrl+J AI 판단";
+                "Ctrl+T 데이터 로드 | Ctrl+G 그래프";
             lblPilotShortcutGuide.Font = new Font("맑은 고딕", 8.5F, FontStyle.Regular);
             lblPilotShortcutGuide.ForeColor = PilotMutedTextColor;
             lblPilotShortcutGuide.BackColor = PilotPanelColor;
@@ -396,7 +393,6 @@ namespace Data_Manager
             StylePilotButton(btnImportModel, PilotBlueColor, Color.White);
             StylePilotButton(btnTubInput, PilotCyanColor, Color.FromArgb(10, 24, 32));
             StylePilotButton(btnPilotChart, PilotGreenColor, Color.FromArgb(9, 30, 20));
-            StylePilotButton(btnGenerateJudement, PilotOrangeColor, Color.FromArgb(34, 20, 6));
             StylePlaybackButton(btnJumpPrev5);
             StylePlaybackButton(btnPrevImage);
             StylePlaybackButton(btnPlayPause);
@@ -496,7 +492,6 @@ namespace Data_Manager
             btnReversePlay.Anchor = AnchorStyles.None;
             btnNextImage.Anchor = AnchorStyles.None;
             btnJumpNext5.Anchor = AnchorStyles.None;
-            btnGenerateJudement.Anchor = AnchorStyles.None;
             btnPilotChart.Anchor = AnchorStyles.None;
             btnTubInput.Anchor = AnchorStyles.None;
             lblTubPathValue.Anchor = AnchorStyles.None;
@@ -812,12 +807,24 @@ namespace Data_Manager
 
         private ModelListItem AddModelToList(
             string modelName,
-            string modelPath)
+            string modelPath,
+            bool isDeleted = false,
+            ModelListItem? previous = null)
         {
-            ModelListItem model =
-                new ModelListItem(
-                    modelName,
-                    modelPath);
+            ModelListItem model = new ModelListItem(modelName, modelPath)
+            {
+                IsDeleted = isDeleted
+            };
+
+            if (previous != null)
+            {
+                model.ModelType = previous.ModelType;
+                model.TubPath = previous.TubPath;
+                model.CurrentFrameIndex = previous.CurrentFrameIndex;
+                model.IsLoaded = previous.IsLoaded;
+                model.CardState = previous.CardState;
+                model.Frames = previous.Frames;
+            }
 
             _models.Add(model);
 
@@ -825,6 +832,13 @@ namespace Data_Manager
             item.SubItems.Add(modelName);
             item.SubItems.Add(modelPath);
             item.Tag = model;
+
+            if (isDeleted)
+            {
+                item.ForeColor = Color.FromArgb(190, 52, 52);
+                item.BackColor = Color.FromArgb(255, 244, 244);
+            }
+
             lvModelList.Items.Add(item);
 
             return model;
@@ -928,63 +942,61 @@ namespace Data_Manager
 
             _lastPilotModelSignature = newSignature;
 
-            HashSet<string> sharedPaths =
-                sharedModels
-                    .Select(model => model.WindowsPath)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, ModelListItem> cached =
+                _models.ToDictionary(m => m.Path, StringComparer.OrdinalIgnoreCase);
 
+            string? selectedPath = _selectedModel?.Path;
+
+            bool selectedRemoved =
+                selectedPath != null &&
+                !sharedModels.Any(m =>
+                    string.Equals(m.WindowsPath, selectedPath, StringComparison.OrdinalIgnoreCase));
+
+            if (selectedRemoved)
+            {
+                _selectedModel = null;
+                ClearModelLabels();
+                _frameList.Clear();
+                ConfigureLocationTrackBar();
+                DrawTubRequiredMessage();
+            }
+
+            lvModelList.SelectedIndexChanged -= LvModelList_SelectedIndexChanged;
             lvModelList.BeginUpdate();
             try
             {
-                for (int i = _models.Count - 1; i >= 0; i--)
-                {
-                    if (sharedPaths.Contains(_models[i].Path))
-                    {
-                        continue;
-                    }
-
-                    bool wasSelected =
-                        ReferenceEquals(_selectedModel, _models[i]);
-
-                    _models.RemoveAt(i);
-                    lvModelList.Items.RemoveAt(i);
-
-                    if (wasSelected)
-                    {
-                        _selectedModel = null;
-                        ClearModelLabels();
-                        _frameList.Clear();
-                        ConfigureLocationTrackBar();
-                        DrawTubRequiredMessage();
-                    }
-                }
+                _models.Clear();
+                lvModelList.Items.Clear();
 
                 foreach (SharedModelRegistryEntry sharedModel in sharedModels)
                 {
-                    bool exists =
-                        _models.Any(
-                            model =>
-                                string.Equals(
-                                    model.Path,
-                                    sharedModel.WindowsPath,
-                                    StringComparison.OrdinalIgnoreCase));
-
-                    if (exists)
-                    {
-                        continue;
-                    }
-
+                    cached.TryGetValue(sharedModel.WindowsPath, out ModelListItem? old);
                     AddModelToList(
-                        Path.GetFileNameWithoutExtension(
-                            sharedModel.WindowsPath),
-                        sharedModel.WindowsPath);
+                        Path.GetFileNameWithoutExtension(sharedModel.WindowsPath),
+                        sharedModel.WindowsPath,
+                        sharedModel.IsDeleted,
+                        old);
                 }
 
                 RenumberModelListItems();
+
+                if (selectedPath != null && !selectedRemoved)
+                {
+                    for (int i = 0; i < _models.Count; i++)
+                    {
+                        if (string.Equals(_models[i].Path, selectedPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _selectedModel = _models[i];
+                            lvModelList.Items[i].Selected = true;
+                            break;
+                        }
+                    }
+                }
             }
             finally
             {
                 lvModelList.EndUpdate();
+                lvModelList.SelectedIndexChanged += LvModelList_SelectedIndexChanged;
             }
 
             ResizeModelColumns();
@@ -1019,19 +1031,42 @@ namespace Data_Manager
                         entry.IsDeleted));
         }
 
+        private static string NormalizeWslPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return path;
+            }
+
+            // \\wsl$\ and \\wsl.localhost\ refer to the same WSL filesystem.
+            // Normalize to wsl.localhost so path comparisons are consistent.
+            return System.Text.RegularExpressions.Regex.Replace(
+                path,
+                @"^\\\\wsl\$\\",
+                @"\\wsl.localhost\",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
         private List<SharedModelRegistryEntry> BuildPilotModelEntries(string modelsDirectory)
         {
+            string normalizedDir = NormalizeWslPath(modelsDirectory);
+
             List<SharedModelRegistryEntry> entries =
                 SharedModelRegistry.Load()
                     .Where(entry =>
                         ModelImportService.IsPathInsideDirectory(
-                            entry.WindowsPath,
-                            modelsDirectory))
+                            NormalizeWslPath(entry.WindowsPath),
+                            normalizedDir))
+                    .Select(entry =>
+                    {
+                        entry.WindowsPath = NormalizeWslPath(entry.WindowsPath);
+                        return entry;
+                    })
                     .ToList();
 
             foreach (string modelFile in Directory.GetFiles(modelsDirectory, "*.h5", SearchOption.TopDirectoryOnly))
             {
-                string fullPath = Path.GetFullPath(modelFile);
+                string fullPath = NormalizeWslPath(Path.GetFullPath(modelFile));
 
                 if (entries.Any(entry =>
                     string.Equals(entry.WindowsPath, fullPath, StringComparison.OrdinalIgnoreCase)))
@@ -1049,7 +1084,8 @@ namespace Data_Manager
             }
 
             return entries
-                .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(entry => entry.IsDeleted ? 1 : 0)
+                .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
 
@@ -1490,9 +1526,8 @@ namespace Data_Manager
             int gap = Math.Max(4, (int)Math.Round(8 * scaleX));
             int buttonHeight = Math.Max(28, (int)Math.Round(36 * scaleY));
             int chartWidth = Math.Max(72, (int)Math.Round(110 * scaleX));
-            int aiWidth = Math.Max(96, (int)Math.Round(126 * scaleX));
             int tubWidth = Math.Max(118, (int)Math.Round(154 * scaleX));
-            int totalButtonsWidth = chartWidth + aiWidth + tubWidth + gap * 2;
+            int totalButtonsWidth = chartWidth + tubWidth + gap;
 
             int availableWidth = Math.Max(1, pnlPilotHeader.ClientSize.Width - margin * 2);
             if (totalButtonsWidth > availableWidth)
@@ -1501,7 +1536,6 @@ namespace Data_Manager
                     availableWidth /
                     (double)Math.Max(1, totalButtonsWidth);
                 chartWidth = Math.Max(40, (int)Math.Floor(chartWidth * shrink));
-                aiWidth = Math.Max(48, (int)Math.Floor(aiWidth * shrink));
                 tubWidth = Math.Max(58, (int)Math.Floor(tubWidth * shrink));
                 gap = Math.Max(2, (int)Math.Floor(gap * shrink));
             }
@@ -1510,8 +1544,6 @@ namespace Data_Manager
             int x = pnlPilotHeader.ClientSize.Width - margin - tubWidth;
 
             btnTubInput.SetBounds(x, buttonTop, tubWidth, buttonHeight);
-            x -= aiWidth + gap;
-            btnGenerateJudement.SetBounds(x, buttonTop, aiWidth, buttonHeight);
             x -= chartWidth + gap;
             btnPilotChart.SetBounds(x, buttonTop, chartWidth, buttonHeight);
 
@@ -1544,12 +1576,81 @@ namespace Data_Manager
                     return;
                 }
 
-                await SelectModelAsync(model!);
+                if (model!.IsDeleted)
+                {
+                    lvModelList.SelectedItems[0].Selected = false;
+                    return;
+                }
+
+                await SelectModelAsync(model);
             }
             catch (Exception ex)
             {
                 ReportPilotException(ex);
                 MessageBox.Show(ex.Message, "Pilot", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void LvModelList_DrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
+        {
+            e.DrawDefault = true;
+        }
+
+        private void LvModelList_DrawItem(object? sender, DrawListViewItemEventArgs e)
+        {
+            // DrawSubItem handles individual cell painting; suppress default item draw.
+        }
+
+        private void LvModelList_DrawSubItem(object? sender, DrawListViewSubItemEventArgs e)
+        {
+            ModelListItem? model = e.Item.Tag as ModelListItem;
+            bool isDeleted = model?.IsDeleted ?? false;
+            bool isSelected = e.Item.Selected;
+
+            Color bgColor;
+            Color fgColor;
+            if (isSelected)
+            {
+                bgColor = SystemColors.Highlight;
+                fgColor = SystemColors.HighlightText;
+            }
+            else if (isDeleted)
+            {
+                bgColor = Color.FromArgb(255, 235, 235);
+                fgColor = Color.FromArgb(180, 40, 40);
+            }
+            else
+            {
+                bgColor = Color.White;
+                fgColor = Color.FromArgb(30, 39, 50);
+            }
+
+            using (SolidBrush brush = new SolidBrush(bgColor))
+            {
+                e.Graphics.FillRectangle(brush, e.Bounds);
+            }
+
+            Rectangle textRect = new Rectangle(
+                e.Bounds.X + 3, e.Bounds.Y,
+                e.Bounds.Width - 3, e.Bounds.Height);
+
+            TextRenderer.DrawText(
+                e.Graphics,
+                e.SubItem?.Text ?? string.Empty,
+                e.Item.Font,
+                textRect,
+                fgColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
+                TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+
+            using (Pen gridPen = new Pen(Color.FromArgb(210, 210, 210)))
+            {
+                e.Graphics.DrawLine(gridPen,
+                    e.Bounds.Left, e.Bounds.Bottom - 1,
+                    e.Bounds.Right, e.Bounds.Bottom - 1);
+                e.Graphics.DrawLine(gridPen,
+                    e.Bounds.Right - 1, e.Bounds.Top,
+                    e.Bounds.Right - 1, e.Bounds.Bottom);
             }
         }
 
@@ -1749,6 +1850,55 @@ namespace Data_Manager
                 SetTubPathLabels(tubPaths);
                 await LoadTubFramesAsync(tubPaths, progress, token);
                 await LoadAndMergeJudementAsync(progress, token);
+
+                bool hasJudement = _frameList.Any(
+                    f => f.PilotAngle.HasValue || f.PilotThrottle.HasValue);
+
+                if (!hasJudement)
+                {
+                    try
+                    {
+                        progress.Report(new DonkeyAsyncWorker.ProgressReport
+                        {
+                            Step = "AI 판단 데이터 자동 생성 중...",
+                            Log = "AI 판단 데이터가 없어 자동 생성을 시도합니다.",
+                            IsIndeterminate = true
+                        });
+
+                        DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> autoResult =
+                            await DonkeyAsyncWorker.GenerateJudementAsync(
+                                _cardState,
+                                progress,
+                                token);
+
+                        if (autoResult.Success && autoResult.Data != null)
+                        {
+                            _cardState.JudementRecords = autoResult.Data;
+                            MergeJudementRecords(autoResult.Data);
+                        }
+                        else
+                        {
+                            MessageBox.Show(
+                                autoResult.ErrorMessage ?? "AI 판단 데이터를 생성하지 못했습니다.",
+                                "AI 판단 생성",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception judementEx)
+                    {
+                        MessageBox.Show(
+                            "AI 판단 데이터 자동 생성 실패: " + judementEx.Message,
+                            "AI 판단 생성",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+                    }
+                }
+
                 ConfigureLocationTrackBar();
                 MoveToFrame(0);
                 CacheCurrentModelFrames();
@@ -1850,6 +2000,30 @@ namespace Data_Manager
                 await LoadAndMergeJudementAsync(progress, token);
                 ConfigureLocationTrackBar();
                 MoveToFrame(0);
+
+                bool hasJudement = _frameList.Any(f => f.PilotAngle.HasValue || f.PilotThrottle.HasValue);
+                if (!hasJudement)
+                {
+                    progress.Report(new DonkeyAsyncWorker.ProgressReport { Step = "AI 판단 데이터 생성 중..." });
+                    try
+                    {
+                        DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> judResult =
+                            await DonkeyAsyncWorker.GenerateJudementAsync(
+                                _cardState,
+                                progress,
+                                token,
+                                forceRegenerate: false);
+                        if (judResult.Success && judResult.Data != null)
+                        {
+                            _cardState.JudementRecords = judResult.Data;
+                            MergeJudementRecords(judResult.Data);
+                            ShowCurrentFrame();
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch { }
+                }
+
                 CacheCurrentModelFrames();
                 progressForm.MarkCompleted("주행데이터 연결 완료");
             }
@@ -1867,66 +2041,6 @@ namespace Data_Manager
             {
                 ReportPilotException(ex);
                 MessageBox.Show(ex.Message, "Pilot", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private async void BtnGenerateJudement_Click(object? sender, EventArgs e)
-        {
-            // 선택 모델과 tub를 Python 추론 스크립트에 넘겨 judement 결과 JSON을 생성하거나 로드합니다.
-            // 이후 사용자 주행값과 AI 예측값을 같은 프레임 인덱스로 병합합니다.
-            if (_cardState == null || _selectedModel == null)
-            {
-                MessageBox.Show("먼저 모델을 선택해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            if (_cardState.TrainingTubPaths == null || _cardState.TrainingTubPaths.Count == 0)
-            {
-                MessageBox.Show("먼저 주행데이터를 연결해 주세요.", "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            _loadCts?.Cancel();
-            _loadCts = new CancellationTokenSource();
-            CancellationToken token = _loadCts.Token;
-
-            using ProgressStatusForm progressForm = new ProgressStatusForm();
-            progressForm.SetTitle("AI 판단 데이터 생성 중...");
-            progressForm.SetIndeterminate(true);
-            progressForm.CancelRequested += () => _loadCts?.Cancel();
-            progressForm.Show(this);
-
-            IProgress<DonkeyAsyncWorker.ProgressReport> progress = CreateProgress(progressForm);
-
-            try
-            {
-                DonkeyAsyncWorker.OperationResult<List<DonkeyAsyncWorker.JudementRecord>> result =
-                    await DonkeyAsyncWorker.GenerateJudementAsync(
-                        _cardState,
-                        progress,
-                        token);
-
-                if (!result.Success || result.Data == null)
-                {
-                    progressForm.MarkFailed(result.ErrorMessage);
-                    MessageBox.Show(result.ErrorMessage, "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                _cardState.JudementRecords = result.Data;
-                MergeJudementRecords(result.Data);
-                ShowCurrentFrame();
-                CacheCurrentModelFrames();
-                progressForm.MarkCompleted("AI 판단 데이터 생성 완료");
-            }
-            catch (OperationCanceledException)
-            {
-                progressForm.MarkCanceled("AI 판단 데이터 생성이 취소되었습니다.");
-            }
-            catch (Exception ex)
-            {
-                progressForm.MarkFailed($"오류: {ex.Message}");
-                MessageBox.Show(ex.Message, "AI 판단 생성", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -2933,6 +3047,7 @@ namespace Data_Manager
             public string TubPath { get; set; } = string.Empty;
             public int CurrentFrameIndex { get; set; }
             public bool IsLoaded { get; set; }
+            public bool IsDeleted { get; set; }
             public DonkeyAsyncWorker.PilotCardState? CardState { get; set; }
             public List<DonkeyAsyncWorker.PilotFrameData> Frames { get; set; } =
                 new List<DonkeyAsyncWorker.PilotFrameData>();

@@ -1039,7 +1039,6 @@
             Name = "frmMain";
             Padding = new Padding(0);
             StartPosition = FormStartPosition.CenterScreen;
-            Text = "11팀";
             pnlROI.ResumeLayout(false);
             pnlContrastProperty.ResumeLayout(false);
             groupBox1.ResumeLayout(false);
