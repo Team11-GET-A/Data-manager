@@ -69,7 +69,7 @@
             lstTubFolders.FormattingEnabled = true;
             lstTubFolders.Location = new Point(20, 20);
             lstTubFolders.Name = "lstTubFolders";
-            lstTubFolders.Size = new Size(500, 330);
+            lstTubFolders.Size = new Size(500, 328);
             lstTubFolders.TabIndex = 2;
             lstTubFolders.SelectedIndexChanged += LstTubFolders_SelectedIndexChanged;
             // 
@@ -112,7 +112,7 @@
             lstCatalogRows.Location = new Point(20, 430);
             lstCatalogRows.Name = "lstCatalogRows";
             lstCatalogRows.SelectionMode = SelectionMode.MultiExtended;
-            lstCatalogRows.Size = new Size(500, 380);
+            lstCatalogRows.Size = new Size(500, 368);
             lstCatalogRows.TabIndex = 3;
             lstCatalogRows.SelectedIndexChanged += LstCatalogRows_SelectedIndexChanged;
             // 
@@ -363,7 +363,7 @@
             btnModelDlt.Name = "btnModelDlt";
             btnModelDlt.Size = new Size(160, 52);
             btnModelDlt.TabIndex = 11;
-            btnModelDlt.Text = "모델 삭제";
+            btnModelDlt.Text = "모델 제외";
             btnModelDlt.UseVisualStyleBackColor = false;
             // 
             // btnNameCh
