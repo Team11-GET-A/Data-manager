@@ -5363,25 +5363,15 @@ namespace DonkeyDataManager
 
                 RefreshWslPaths();
 
-                ProcessStartInfo psi =
-                    new ProcessStartInfo
-                    {
-                        FileName = "wsl.exe",
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true
-                    };
+                Process driveTerminalProcess =
+                    StartDriveTerminal(
+                        BuildDriveCommand(selectedModel));
 
-                AddWslArguments(
-                    psi,
-                    BuildDriveCommand(selectedModel));
-
-                wslProcess =
-                    Process.Start(psi);
-
-                // WSL 프로세스 출력 모니터링
-                _ = MonitorWslProcessAsync(wslProcess);
+                if (driveTerminalProcess == null)
+                {
+                    throw new InvalidOperationException(
+                        "자율주행 WSL 터미널을 시작하지 못했습니다.");
+                }
 
                 // DriveWebUI 폼 오픈 (브라우저 대신)
                 DriveWebUI driveWebUI = new DriveWebUI();
@@ -5400,20 +5390,31 @@ namespace DonkeyDataManager
 
             try
             {
-                string error = await process.StandardError.ReadToEndAsync();
-                string output = await process.StandardOutput.ReadToEndAsync();
+                System.Threading.Tasks.Task<string> errorTask =
+                    process.StandardError.ReadToEndAsync();
+                System.Threading.Tasks.Task<string> outputTask =
+                    process.StandardOutput.ReadToEndAsync();
 
-                // WSL 프로세스 종료 대기
-                process.WaitForExit();
+                await process.WaitForExitAsync();
                 int exitCode = process.ExitCode;
 
-                if (exitCode != 0 || !string.IsNullOrWhiteSpace(error))
+                string error =
+                    CleanProcessOutputForMessage(await errorTask);
+                string output =
+                    CleanProcessOutputForMessage(await outputTask);
+
+                if (exitCode != 0)
                 {
                     string errorMessage = $"WSL Donkey Car 실행 오류 (종료 코드: {exitCode})\n\n";
 
                     if (!string.IsNullOrWhiteSpace(error))
                     {
                         errorMessage += "에러 메시지:\n" + error + "\n\n";
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(output))
+                    {
+                        errorMessage += "출력 로그:\n" + output + "\n\n";
                     }
 
                     errorMessage += "확인 사항:\n" +
@@ -5432,6 +5433,11 @@ namespace DonkeyDataManager
                 {
                     System.Diagnostics.Debug.WriteLine($"WSL 출력:\n{output}");
                 }
+
+                if (!string.IsNullOrWhiteSpace(error) && exitCode == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"WSL 오류 출력:\n{error}");
+                }
             }
             catch (Exception ex)
             {
@@ -5439,36 +5445,120 @@ namespace DonkeyDataManager
             }
         }
 
+        private string CleanProcessOutputForMessage(string value)
+        {
+            const int maxLength = 4000;
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "";
+            }
+
+            string cleaned =
+                value
+                    .Replace("\0", "")
+                    .Trim();
+
+            if (cleaned.Length <= maxLength)
+            {
+                return cleaned;
+            }
+
+            return
+                "... (이전 로그 생략)\n" +
+                cleaned.Substring(cleaned.Length - maxLength);
+        }
+
+        private Process StartDriveTerminal(string bashCommand)
+        {
+            ProcessStartInfo psi =
+                new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    UseShellExecute = false,
+                    CreateNoWindow = false,
+                    WindowStyle = ProcessWindowStyle.Normal
+                };
+
+            psi.ArgumentList.Add("-NoExit");
+            psi.ArgumentList.Add("-Command");
+            psi.ArgumentList.Add(BuildDrivePowerShellCommand(bashCommand));
+
+            return Process.Start(psi);
+        }
+
+        private string BuildDrivePowerShellCommand(string bashCommand)
+        {
+            StringBuilder builder =
+                new StringBuilder();
+
+            builder.Append("$Host.UI.RawUI.WindowTitle = 'Donkey Car Drive'; ");
+            builder.Append("Write-Host 'Donkey Car WSL 서버를 시작합니다.'; ");
+            builder.Append("Write-Host '종료하려면 이 터미널에서 Ctrl+C를 누르세요.'; ");
+            builder.Append("Write-Host ''; ");
+            builder.Append("& wsl.exe ");
+
+            if (!string.IsNullOrWhiteSpace(wslDistroName))
+            {
+                builder.Append("-d ");
+                builder.Append(QuoteForPowerShell(wslDistroName));
+                builder.Append(" ");
+
+                if (!string.IsNullOrWhiteSpace(wslUsername))
+                {
+                    builder.Append("-u ");
+                    builder.Append(QuoteForPowerShell(wslUsername));
+                    builder.Append(" ");
+                }
+
+                builder.Append("-- ");
+            }
+
+            builder.Append("bash -lc ");
+            builder.Append(QuoteForPowerShell(bashCommand));
+            builder.Append("; ");
+            builder.Append("$driveExitCode = $LASTEXITCODE; ");
+            builder.Append("Write-Host ''; ");
+            builder.Append("Write-Host ('Donkey Car WSL 서버가 종료되었습니다. 종료 코드: ' + $driveExitCode); ");
+            builder.Append("Write-Host '이 창은 로그 확인을 위해 열어둡니다. 닫아도 됩니다.'");
+
+            return builder.ToString();
+        }
+
         private string BuildDriveCommand(string selectedModel)
         {
-            // 더 간단한 버전 - conda 활성화 후 python manage.py drive 실행
-            string configuredUserHome =
-                string.IsNullOrWhiteSpace(wslUsername)
-                    ? ""
-                    : "/home/" + wslUsername;
-
-            List<string> condaShellPaths =
-                BuildCondaShellCandidates(configuredUserHome);
-
-            string condaActivation =
-                BuildCondaShellSourceCommand(condaShellPaths) +
-                "conda activate " + QuoteForBash(TrainingCondaEnvironment) + "; ";
+            string modelRelativePath =
+                "./" +
+                ModelDirectoryName +
+                "/" +
+                selectedModel;
 
             return
                 "set -e; " +
+                "export PYTHONUNBUFFERED=1; " +
+                "export WEB_CONTROL_PORT=8887; " +
                 "cd " + QuoteForBash(wslMycarPath) + "; " +
+                "if [ ! -f manage.py ]; then " +
+                "echo 'manage.py was not found in the resolved mycar folder: " +
+                EscapeForDoubleQuotedBash(wslMycarPath) +
+                "' >&2; " +
+                "exit 21; " +
+                "fi; " +
+                "if [ ! -f " +
+                QuoteForBash(modelRelativePath) +
+                " ]; then " +
+                "echo 'Selected model file was not found: " +
+                EscapeForDoubleQuotedBash(modelRelativePath) +
+                "' >&2; " +
+                "exit 25; " +
+                "fi; " +
                 "echo '=== Donkey Car 드라이브 모드 시작 ==='; " +
-                condaActivation +
-                "echo 'Python 경로:'; " +
-                "which python; " +
-                "echo 'Donkey Car 실행 중...'; " +
-                "python manage.py drive --model " +
-                QuoteForBash(
-                    "./" +
-                    ModelDirectoryName +
-                    "/" +
-                    selectedModel) +
-                " --port 8887";  // 포트 8887에서 웹서버 실행 (시뮬레이터 연결 활성화)
+                BuildPythonResolverCommand() +
+                "echo 'Using Python after conda activate:'; " +
+                "python -c 'import sys; print(sys.executable)'; " +
+                "echo 'Donkey Car 실행 중... port=8887'; " +
+                "exec python manage.py drive --model " +
+                QuoteForBash(modelRelativePath);
         }
 
         // =====================================================
