@@ -76,6 +76,7 @@ namespace DonkeyDataManager
         private Process browserProcess = null;
         private int trainingProcessWslPid;
         private volatile int completedEpochCount;
+        private volatile bool suppressTrainingStreamOutput;
         private System.Threading.Tasks.TaskCompletionSource<bool> firstEpochCompletedTcs;
 
         private System.Windows.Forms.Timer browserMonitorTimer =
@@ -3740,6 +3741,7 @@ namespace DonkeyDataManager
                     new TrainerStatus();
                 trainingProcessWslPid = 0;
                 completedEpochCount = 0;
+                suppressTrainingStreamOutput = false;
                 firstEpochCompletedTcs =
                     new System.Threading.Tasks.TaskCompletionSource<bool>(
                         System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
@@ -3756,8 +3758,9 @@ namespace DonkeyDataManager
                     async (stopSender, stopArgs) =>
                     {
                         trainingStopRequested = true;
+                        suppressTrainingStreamOutput = true;
                         statusForm.AppendLog(
-                            "학습 중단 요청됨. 현재 학습을 즉시 멈추고 모델 저장을 시도합니다.");
+                            "학습 중단 요청됨. 현재 에포크 완료 후 모델을 저장하고 중단합니다.");
                         await TryRequestTrainingStopAsync(statusForm);
                     };
 
@@ -5165,7 +5168,8 @@ namespace DonkeyDataManager
 
                             if (
                                 statusForm != null &&
-                                !statusForm.IsDisposed)
+                                !statusForm.IsDisposed &&
+                                !suppressTrainingStreamOutput)
                             {
                                 statusForm.AppendLog(
                                     cleanLine);
